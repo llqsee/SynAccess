@@ -10,16 +10,21 @@ dependencies:
   - ipython
   - jupyterlab
   - matplotlib
+  - seaborn
   - notebook
   - numpy
   - pandas
   - scikit-learn
+  - umap-learn
   - black
   - flake8
   - isort
   - pip:
     - python-dotenv
     - jupyter-black
+    - plotly
+    #- tsnecuda
+    - vizdataquality
     - awscli
     - mkdocs
     - -e .
