@@ -16,6 +16,7 @@ dependencies:
   - pandas
   - scikit-learn
   - umap-learn
+  - openTSNE
   - black
   - flake8
   - isort

@@ -2,8 +2,8 @@ from typing import Dict, List, Any, Tuple, Union
 import numpy as np
 import pandas as pd
 import time
-from sklearn.manifold import TSNE
 from umap import UMAP
+from openTSNE import TSNE
 from utils.data_preprocessing import preprocess_data
 
 class EmbeddingService:
@@ -72,7 +72,7 @@ class EmbeddingService:
         
         # Sample data
         rng = np.random.default_rng(random_state)
-        real_n = n_real_samples or len(real_processed)
+        real_n = n_real_samples
         synth_n = n_synth_samples or len(synth_processed)
         
         real_idx = rng.choice(len(real_processed), real_n, replace=False)
@@ -132,7 +132,8 @@ class EmbeddingService:
         embedding_real = umap_model.transform(real_data)
         embedding_synth = umap_model.transform(synth_data)
         
-        return embedding_real, embedding_synth
+        return embedding_real, embedding_synth    
+    
     
     def _compute_tsne(
         self,
@@ -142,33 +143,38 @@ class EmbeddingService:
         perplexity: float = 30.0,
         early_exaggeration: float = 12.0,
         random_state: int = None,
+        n_jobs: int = -1,
         **kwargs
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Compute t-SNE embedding using sklearn's TSNE implementation.
-        Fits on combined real and synthetic data, then splits the results.
-        """
-        
+        Compute t-SNE embedding using openTSNE.
+        Fit on real data, then transform both real and synthetic data.
+        """   
         # Make sure both datasets are numeric and cleaned
-        real_sampled = np.nan_to_num(real_data.astype(np.float64))
-        synth_sampled = np.nan_to_num(synth_data.astype(np.float64))
-        
-        # Create TSNE model
+        real_data = np.nan_to_num(real_data.astype(np.float32))
+        synth_data = np.nan_to_num(synth_data.astype(np.float32))
+
+        # Fit on real data only
         tsne = TSNE(
             n_components=n_components,
             perplexity=perplexity,
             early_exaggeration=early_exaggeration,
             metric="euclidean",
             random_state=random_state,
+            n_jobs=n_jobs,
+            verbose=True,
             **kwargs
         )
         
-        # Combine both datasets for fitting
-        combined = np.vstack([real_sampled, synth_sampled])
-        embedding = tsne.fit_transform(combined)
+        # Fit real data
+        tsne_embedding = tsne.fit(real_data)       
         
-        # Split the results back into real and synthetic embeddings
-        embedding_real = embedding[:len(real_sampled)]
-        embedding_synth = embedding[len(real_sampled):]
-        
-        return embedding_real, embedding_synth 
+        # Transform both real synthetic data
+        partial_embedding_real = tsne_embedding.transform(real_data)        
+        embedding_real = np.array(partial_embedding_real)
+
+        partial_embedding_synth = tsne_embedding.transform(synth_data)        
+        embedding_synth = np.array(partial_embedding_synth)
+
+
+        return embedding_real, embedding_synth
