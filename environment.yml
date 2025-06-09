@@ -10,7 +10,7 @@ dependencies:
   - ipython
   - jupyterlab
   - matplotlib
-  - seaborn
+  - seaborn  
   - notebook
   - numpy
   - pandas
@@ -21,9 +21,6 @@ dependencies:
   - isort
   - fastapi
   - uvicorn
-  - websockets
-  - celery
-  - redis
   - pip:
     - python-dotenv
     - jupyter-black
@@ -31,5 +28,4 @@ dependencies:
     #- tsnecuda
     - vizdataquality
     - awscli
-    - mkdocs
-    - -e .
+    - mkdocs 
