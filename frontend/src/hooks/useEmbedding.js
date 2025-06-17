@@ -59,8 +59,16 @@ export const useEmbedding = () => {
       setEmbeddingMetadata({
         ...result.metadata,
         labels,
-        realData: realData.metadata,
-        syntheticData: syntheticData.metadata
+        realData: {
+          data: realData.data,
+          headers: realData.headers,
+          metadata: realData.metadata
+        },
+        syntheticData: {
+          data: syntheticData.data,
+          headers: syntheticData.headers,
+          metadata: syntheticData.metadata
+        }
       });
     } catch (err) {
       setError(`Error computing embedding: ${err.message}`);
