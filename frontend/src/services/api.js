@@ -71,6 +71,73 @@ export const computeEmbedding = async ({
   }
 };
 
+export const generateDistributionPlot = async ({
+  real_data,
+  synthetic_data,
+  column,
+  plot_type,
+  real_headers = null,
+  synthetic_headers = null
+}, signal = null) => {
+  try {
+    // Basic validation
+    if (!Array.isArray(real_data) || !Array.isArray(synthetic_data)) {
+      throw new Error('Input data must be arrays');
+    }
+
+    if (real_data.length === 0 || synthetic_data.length === 0) {
+      throw new Error('Data arrays cannot be empty');
+    }
+
+    if (!column) {
+      throw new Error('Column name is required');
+    }
+
+    if (!plot_type) {
+      throw new Error('Plot type is required');
+    }
+
+    const config = {
+      signal // Add abort signal support
+    };
+
+    const response = await api.post('/distribution', {
+      real_data,
+      synthetic_data,
+      column,
+      plot_type,
+      real_headers,
+      synthetic_headers
+    }, config);
+
+    return response.data;
+  } catch (error) {
+    // Handle abort error
+    if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
+      throw error;
+    }
+    
+    if (error.response) {
+      if (error.response.status === 422) {
+        const detail = error.response.data.detail;
+        if (Array.isArray(detail)) {
+          const errors = detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
+          throw new Error(`Validation error: ${errors}`);
+        }
+        throw new Error(`Validation error: ${JSON.stringify(error.response.data)}`);
+      }
+      throw new Error(
+        error.response.data.detail || 
+        `Server error: ${error.response.status}`
+      );
+    } else if (error.request) {
+      throw new Error('No response from server. Please check if the backend is running.');
+    } else {
+      throw error;
+    }
+  }
+};
+
 export const healthCheck = async () => {
   try {
     const response = await api.get('/health');

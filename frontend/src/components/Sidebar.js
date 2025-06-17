@@ -8,8 +8,17 @@ import {
   Select,
   Slider,
   Typography,
-  CircularProgress
+  CircularProgress,
+  Divider,
+  Paper,
+  Collapse,
+  Fade,
+  Stepper,
+  Step,
+  StepLabel,
+  StepContent
 } from '@mui/material';
+import { CheckCircle, CloudUpload, ArrowForward, Settings, ExpandLess, ExpandMore } from '@mui/icons-material';
 
 const Sidebar = ({
   onRealDataUpload,
@@ -18,7 +27,11 @@ const Sidebar = ({
   loading,
   realDataLoaded,
   syntheticDataLoaded,
-  backendConnected
+  realDataName,
+  syntheticDataName,
+  backendConnected,
+  isCollapsed,
+  onToggleCollapse
 }) => {
   const [method, setMethod] = useState('umap');
   const [nNeighbors, setNNeighbors] = useState(15);
@@ -27,14 +40,20 @@ const Sidebar = ({
   const [earlyExaggeration, setEarlyExaggeration] = useState(12.0);
   const [nRealSamples, setNRealSamples] = useState(1000);
   const [nSynthSamples, setNSynthSamples] = useState(1000);
+  const [parametersConfigured, setParametersConfigured] = useState(false); // Start as false to allow parameter configuration
+  const [parametersExpanded, setParametersExpanded] = useState(true);
 
   const handleFileSelection = async (event, isReal) => {
     const file = event.target.files[0];
     if (file) {
-      if (isReal) {
-        onRealDataUpload(file, null);
-      } else {
-        onSyntheticDataUpload(file, null);
+      try {
+        if (isReal) {
+          await onRealDataUpload(file, null);
+        } else {
+          await onSyntheticDataUpload(file, null);
+        }
+      } catch (error) {
+        console.error(`Error uploading ${isReal ? 'real' : 'synthetic'} file:`, error);
       }
     }
   };
@@ -59,161 +78,470 @@ const Sidebar = ({
     onVisualize(params);
   };
 
+  // Handlers for parameter changes (without auto-confirming)
+  const handleSelectChange = (setter) => (e) => {
+    setter(e.target.value);
+  };
+
+  const handleSliderChange = (setter) => (e, value) => {
+    setter(value);
+  };
+
   const isVisualizationDisabled = loading || !realDataLoaded || !syntheticDataLoaded || !backendConnected;
 
+  // Determine current step
+  const getCurrentStep = () => {
+    if (!realDataLoaded) return 0;
+    if (!syntheticDataLoaded) return 1;
+    if (syntheticDataLoaded && !parametersConfigured) return 2; // Parameter configuration step
+    if (syntheticDataLoaded && parametersConfigured) return 3; // Generate visualization step
+    return 2;
+  };
+
+  const currentStep = getCurrentStep();
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <Typography variant="h6">Data Upload</Typography>
-      
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, height: '100%' }}>
+      {/* Progress Stepper */}
       <Box>
-        <Typography variant="subtitle2" gutterBottom>
-          Real Data {realDataLoaded && '✓'}
+        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CloudUpload />
+          Data Upload Workflow
         </Typography>
-        <Button
-          variant="contained"
-          component="label"
-          fullWidth
-          color={realDataLoaded ? "success" : "primary"}
-        >
-          Upload Real Data
-          <input
-            type="file"
-            hidden
-            accept=".csv,.xlsx,.json"
-            onChange={(e) => handleFileSelection(e, true)}
-          />
-        </Button>
+        
+        <Stepper activeStep={currentStep} orientation="vertical" sx={{ mt: 2 }}>
+          {/* Step 1: Real Data Upload */}
+          <Step>
+            <StepLabel>
+              <Box>
+                <Typography variant="subtitle2">Upload Real Dataset</Typography>
+                {realDataLoaded && currentStep > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      📁 {realDataName || 'Unknown filename'}
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="text"
+                      color="primary"
+                      component="label"
+                      sx={{ minWidth: 'auto', px: 1, py: 0, fontSize: '0.7rem' }}
+                    >
+                      Change
+                      <input
+                        type="file"
+                        hidden
+                        accept=".csv,.xlsx,.json"
+                        onChange={(e) => handleFileSelection(e, true)}
+                        key={`real-change-${Date.now()}`}
+                      />
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+            </StepLabel>
+            <StepContent>
+              <Paper sx={{ 
+                p: 2, 
+                bgcolor: realDataLoaded ? 'success.50' : 'primary.50',
+                border: currentStep === 0 ? '2px solid' : '1px solid',
+                borderColor: currentStep === 0 ? 'primary.main' : 'divider'
+              }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Start by uploading your real dataset to establish the baseline for comparison.
+                </Typography>
+                <Button
+                  variant="contained"
+                  component="label"
+                  fullWidth
+                  size="medium"
+                  color={realDataLoaded ? "success" : "primary"}
+                  startIcon={realDataLoaded ? <CheckCircle /> : <CloudUpload />}
+                  sx={{ mb: realDataName ? 0.5 : 1 }}
+                >
+                  {realDataLoaded ? 'Real Data Uploaded ✓' : 'Choose Real Dataset'}
+                  <input
+                    type="file"
+                    hidden
+                    accept=".csv,.xlsx,.json"
+                    onChange={(e) => handleFileSelection(e, true)}
+                    key={realDataLoaded ? 'real-uploaded' : 'real-empty'}
+                  />
+                </Button>
+                {realDataLoaded && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontStyle: 'italic' }}>
+                    📁 {realDataName || 'Unknown filename'}
+                  </Typography>
+                )}
+                {realDataLoaded && (
+                  <Fade in={realDataLoaded}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                      <CheckCircle sx={{ fontSize: 16, color: 'success.main' }} />
+                      <Typography variant="caption" color="success.main">
+                        Ready to proceed to synthetic data
+                      </Typography>
+                      <ArrowForward sx={{ fontSize: 16, color: 'success.main' }} />
+                    </Box>
+                  </Fade>
+                )}
+              </Paper>
+            </StepContent>
+          </Step>
+
+          {/* Step 2: Synthetic Data Upload */}
+          <Step>
+            <StepLabel>
+              <Box>
+                <Typography variant="subtitle2">Upload Synthetic Dataset</Typography>
+                {syntheticDataLoaded && currentStep > 1 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      📁 {syntheticDataName || 'Unknown filename'}
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="text"
+                      color="primary"
+                      component="label"
+                      sx={{ minWidth: 'auto', px: 1, py: 0, fontSize: '0.7rem' }}
+                    >
+                      Change
+                      <input
+                        type="file"
+                        hidden
+                        accept=".csv,.xlsx,.json"
+                        onChange={(e) => handleFileSelection(e, false)}
+                        key={`synthetic-change-${Date.now()}`}
+                      />
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+            </StepLabel>
+            <StepContent>
+              <Collapse in={realDataLoaded}>
+                <Paper sx={{ 
+                  p: 2, 
+                  bgcolor: syntheticDataLoaded ? 'success.50' : realDataLoaded ? 'primary.50' : 'grey.100',
+                  border: currentStep === 1 ? '2px solid' : '1px solid',
+                  borderColor: currentStep === 1 ? 'primary.main' : 'divider',
+                  opacity: realDataLoaded ? 1 : 0.6
+                }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Now upload your synthetic dataset to compare against the real data.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    component="label"
+                    fullWidth
+                    size="medium"
+                    color={syntheticDataLoaded ? "success" : "primary"}
+                    startIcon={syntheticDataLoaded ? <CheckCircle /> : <CloudUpload />}
+                    disabled={!realDataLoaded}
+                    sx={{ mb: syntheticDataName ? 0.5 : 1 }}
+                  >
+                    {syntheticDataLoaded ? 'Synthetic Data Uploaded ✓' : 
+                     realDataLoaded ? 'Choose Synthetic Dataset' : 'Upload Real Data First'}
+                    <input
+                      type="file"
+                      hidden
+                      accept=".csv,.xlsx,.json"
+                      onChange={(e) => handleFileSelection(e, false)}
+                      disabled={!realDataLoaded}
+                      key={syntheticDataLoaded ? 'synthetic-uploaded' : 'synthetic-empty'}
+                    />
+                  </Button>
+                  {syntheticDataLoaded && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontStyle: 'italic' }}>
+                      📁 {syntheticDataName || 'Unknown filename'}
+                    </Typography>
+                  )}
+                  {syntheticDataLoaded && (
+                    <Fade in={syntheticDataLoaded}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                        <CheckCircle sx={{ fontSize: 16, color: 'success.main' }} />
+                        <Typography variant="caption" color="success.main">
+                          Ready to configure parameters
+                        </Typography>
+                        <ArrowForward sx={{ fontSize: 16, color: 'success.main' }} />
+                      </Box>
+                    </Fade>
+                  )}
+                </Paper>
+              </Collapse>
+            </StepContent>
+          </Step>
+
+          {/* Step 3: Configure Parameters */}
+          <Step>
+            <StepLabel>
+              <Typography variant="subtitle2">Configure Parameters</Typography>
+            </StepLabel>
+            <StepContent>
+              <Collapse in={syntheticDataLoaded}>
+                <Paper sx={{ 
+                  p: 2, 
+                  bgcolor: currentStep >= 2 ? 'primary.50' : 'grey.100',
+                  border: currentStep === 2 ? '2px solid' : '1px solid',
+                  borderColor: currentStep === 2 ? 'primary.main' : 'divider'
+                }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Configure your embedding parameters before generating the visualization.
+                    </Typography>
+                    <Button
+                      size="small"
+                      onClick={() => setParametersExpanded(!parametersExpanded)}
+                      endIcon={parametersExpanded ? <ExpandLess /> : <ExpandMore />}
+                      sx={{ minWidth: 'auto', px: 1 }}
+                    >
+                      {parametersExpanded ? 'Hide' : 'Show'} Parameters
+                    </Button>
+                  </Box>
+                  
+                  {/* Collapsible Embedding Parameters */}
+                  <Collapse in={parametersExpanded}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 2 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Method</InputLabel>
+                      <Select
+                        value={method}
+                        label="Method"
+                        onChange={handleSelectChange(setMethod)}
+                        disabled={!syntheticDataLoaded}
+                      >
+                        <MenuItem value="umap">UMAP</MenuItem>
+                        <MenuItem value="tsne">t-SNE</MenuItem>
+                      </Select>
+                    </FormControl>
+
+                    {method === 'umap' ? (
+                      <>
+                        <Box>
+                          <Typography variant="body2" gutterBottom>
+                            Neighbors: {nNeighbors}
+                          </Typography>
+                          <Slider
+                            value={nNeighbors}
+                            onChange={handleSliderChange(setNNeighbors)}
+                            min={2}
+                            max={100}
+                            size="small"
+                            disabled={!syntheticDataLoaded}
+                          />
+                        </Box>
+                        <Box>
+                          <Typography variant="body2" gutterBottom>
+                            Min Distance: {minDist}
+                          </Typography>
+                          <Slider
+                            value={minDist}
+                            onChange={handleSliderChange(setMinDist)}
+                            min={0.0}
+                            max={1.0}
+                            step={0.01}
+                            size="small"
+                            disabled={!syntheticDataLoaded}
+                          />
+                        </Box>
+                      </>
+                    ) : (
+                      <>
+                        <Box>
+                          <Typography variant="body2" gutterBottom>
+                            Perplexity: {perplexity}
+                          </Typography>
+                          <Slider
+                            value={perplexity}
+                            onChange={handleSliderChange(setPerplexity)}
+                            min={5}
+                            max={50}
+                            size="small"
+                            disabled={!syntheticDataLoaded}
+                          />
+                        </Box>
+                        <Box>
+                          <Typography variant="body2" gutterBottom>
+                            Early Exaggeration: {earlyExaggeration}
+                          </Typography>
+                          <Slider
+                            value={earlyExaggeration}
+                            onChange={handleSliderChange(setEarlyExaggeration)}
+                            min={1}
+                            max={50}
+                            size="small"
+                            disabled={!syntheticDataLoaded}
+                          />
+                        </Box>
+                      </>
+                    )}
+
+                    <Box>
+                      <Typography variant="body2" gutterBottom>
+                        Real Samples: {nRealSamples}
+                      </Typography>
+                      <Slider
+                        value={nRealSamples}
+                        onChange={handleSliderChange(setNRealSamples)}
+                        min={100}
+                        max={5000}
+                        step={100}
+                        size="small"
+                        disabled={!syntheticDataLoaded}
+                      />
+                    </Box>
+
+                    <Box>
+                      <Typography variant="body2" gutterBottom>
+                        Synthetic Samples: {nSynthSamples}
+                      </Typography>
+                      <Slider
+                        value={nSynthSamples}
+                        onChange={handleSliderChange(setNSynthSamples)}
+                        min={100}
+                        max={5000}
+                        step={100}
+                        size="small"
+                        disabled={!syntheticDataLoaded}
+                      />
+                    </Box>
+                                       </Box>
+                   </Collapse>
+
+                  <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    {!parametersExpanded && (
+                      <Typography variant="caption" color="text.secondary">
+                        {method.toUpperCase()} | {method === 'umap' ? `${nNeighbors} neighbors` : `${perplexity} perplexity`} | {nRealSamples}/{nSynthSamples} samples
+                      </Typography>
+                    )}
+                    
+                    {parametersExpanded && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          setParametersConfigured(true);
+                          setParametersExpanded(false);
+                        }}
+                        startIcon={<CheckCircle />}
+                        sx={{ ml: 'auto' }}
+                      >
+                        Confirm Parameters
+                      </Button>
+                    )}
+                  </Box>
+
+                  {parametersConfigured && !parametersExpanded && (
+                    <Fade in={parametersConfigured && !parametersExpanded}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, p: 1, bgcolor: 'success.50', borderRadius: 1 }}>
+                        <CheckCircle sx={{ fontSize: 16, color: 'success.main' }} />
+                        <Typography variant="caption" color="success.main" sx={{ flex: 1 }}>
+                          Parameters confirmed - Ready to generate visualization
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => {
+                            setParametersExpanded(true);
+                            setParametersConfigured(false);
+                          }}
+                          sx={{ 
+                            minWidth: 'auto', 
+                            px: 1, 
+                            py: 0.5,
+                            fontSize: '0.75rem',
+                            borderColor: 'success.main',
+                            color: 'success.main',
+                            '&:hover': {
+                              borderColor: 'success.dark',
+                              bgcolor: 'success.100'
+                            }
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <ArrowForward sx={{ fontSize: 16, color: 'success.main' }} />
+                      </Box>
+                    </Fade>
+                  )}
+                </Paper>
+              </Collapse>
+            </StepContent>
+          </Step>
+
+          {/* Step 4: Generate Visualization */}
+          <Step>
+            <StepLabel>
+              <Typography variant="subtitle2">Generate Visualization</Typography>
+            </StepLabel>
+            <StepContent>
+              <Collapse in={parametersConfigured && syntheticDataLoaded}>
+                <Paper sx={{ 
+                  p: 2, 
+                  bgcolor: parametersConfigured ? 'success.50' : 'grey.100',
+                  border: currentStep === 3 ? '2px solid' : '1px solid',
+                  borderColor: currentStep === 3 ? 'primary.main' : 'divider'
+                }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    All set! Click below to start the embedding computation and visualization generation.
+                  </Typography>
+                  
+                  {/* Current Parameters Summary */}
+                  <Box sx={{ mb: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      <strong>Current Parameters:</strong>
+                    </Typography>
+                    <Typography variant="caption" color="text.primary">
+                      {method.toUpperCase()} • {method === 'umap' ? `${nNeighbors} neighbors, ${minDist} min distance` : `${perplexity} perplexity, ${earlyExaggeration} early exaggeration`} • {nRealSamples}/{nSynthSamples} samples
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="text"
+                      onClick={() => {
+                        setParametersExpanded(true);
+                        setParametersConfigured(false);
+                      }}
+                      sx={{ 
+                        mt: 0.5,
+                        minWidth: 'auto', 
+                        p: 0.5,
+                        fontSize: '0.7rem',
+                        textTransform: 'none'
+                      }}
+                    >
+                      Edit Parameters
+                    </Button>
+                  </Box>
+                  
+                  <Button
+                    variant="contained"
+                    onClick={handleVisualize}
+                    disabled={isVisualizationDisabled}
+                    fullWidth
+                    size="large"
+                    startIcon={loading ? <CircularProgress size={16} /> : <Settings />}
+                    sx={{ py: 1.5 }}
+                  >
+                    {loading ? 'Generating Visualization...' : 'Generate Visualization'}
+                  </Button>
+                </Paper>
+              </Collapse>
+            </StepContent>
+          </Step>
+        </Stepper>
       </Box>
 
-      <Box>
-        <Typography variant="subtitle2" gutterBottom>
-          Synthetic Data {syntheticDataLoaded && '✓'}
-        </Typography>
-        <Button
-          variant="contained"
-          component="label"
-          fullWidth
-          color={syntheticDataLoaded ? "success" : "primary"}
-        >
-          Upload Synthetic Data
-          <input
-            type="file"
-            hidden
-            accept=".csv,.xlsx,.json"
-            onChange={(e) => handleFileSelection(e, false)}
-          />
-        </Button>
-      </Box>
 
-      <Typography variant="h6" sx={{ mt: 2 }}>Parameters</Typography>
 
-      <FormControl fullWidth>
-        <InputLabel>Method</InputLabel>
-        <Select
-          value={method}
-          label="Method"
-          onChange={(e) => setMethod(e.target.value)}
-        >
-          <MenuItem value="umap">UMAP</MenuItem>
-          <MenuItem value="tsne">t-SNE</MenuItem>
-        </Select>
-      </FormControl>
-
-      <Box>
-        <Typography gutterBottom>Real Data Samples</Typography>
-        <Slider
-          value={nRealSamples}
-          onChange={(e, v) => setNRealSamples(v)}
-          min={100}
-          max={10000}
-          step={100}
-          valueLabelDisplay="auto"
-          marks={[
-            { value: 100, label: '100' },
-            { value: 10000, label: '10k' }
-          ]}
-        />
-      </Box>
-
-      <Box>
-        <Typography gutterBottom>Synthetic Data Samples</Typography>
-        <Slider
-          value={nSynthSamples}
-          onChange={(e, v) => setNSynthSamples(v)}
-          min={100}
-          max={10000}
-          step={100}
-          valueLabelDisplay="auto"
-          marks={[
-            { value: 100, label: '100' },
-            { value: 10000, label: '10k' }
-          ]}
-        />
-      </Box>
-
-      {method === 'umap' ? (
-        <>
-          <Box>
-            <Typography gutterBottom>n_neighbors</Typography>
-            <Slider
-              value={nNeighbors}
-              onChange={(e, v) => setNNeighbors(v)}
-              min={2}
-              max={100}
-              valueLabelDisplay="auto"
-            />
-          </Box>
-
-          <Box>
-            <Typography gutterBottom>min_dist</Typography>
-            <Slider
-              value={minDist}
-              onChange={(e, v) => setMinDist(v)}
-              min={0.0}
-              max={0.99}
-              step={0.01}
-              valueLabelDisplay="auto"
-            />
-          </Box>
-        </>
-      ) : (
-        <>
-          <Box>
-            <Typography gutterBottom>Perplexity</Typography>
-            <Slider
-              value={perplexity}
-              onChange={(e, v) => setPerplexity(v)}
-              min={5}
-              max={50}
-              valueLabelDisplay="auto"
-            />
-          </Box>
-
-          <Box>
-            <Typography gutterBottom>Early Exaggeration</Typography>
-            <Slider
-              value={earlyExaggeration}
-              onChange={(e, v) => setEarlyExaggeration(v)}
-              min={1}
-              max={20}
-              valueLabelDisplay="auto"
-            />
-          </Box>
-        </>
+      {/* Help Text */}
+      {!syntheticDataLoaded && (
+        <Box sx={{ mt: 'auto', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            💡 <strong>Tip:</strong> Follow the steps above in order. Each step unlocks the next one, 
+            guiding you through the complete workflow.
+          </Typography>
+        </Box>
       )}
-
-      <Button
-        variant="contained"
-        onClick={handleVisualize}
-        disabled={isVisualizationDisabled}
-        sx={{ mt: 2 }}
-      >
-        {loading ? (
-          <CircularProgress size={24} color="inherit" />
-        ) : (
-          'Visualise'
-        )}
-      </Button>
     </Box>
   );
 };

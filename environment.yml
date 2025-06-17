@@ -12,20 +12,28 @@ dependencies:
   - matplotlib
   - seaborn  
   - notebook
+  # Core data science libraries
   - numpy
   - pandas
   - scikit-learn
+  - scipy  # Required for statistical tests in distribution analysis
+  # Dimensionality reduction
   - umap-learn
   - openTSNE
+  # Code quality
   - black
   - flake8
   - isort
+  # Web framework
   - fastapi
   - uvicorn
+  # Additional statistical packages for distribution analysis
+  - statsmodels
   - pip:
     - python-dotenv
-    - jupyter-black
     - plotly
+    - jupyter-black
+    - pydantic  # For FastAPI request/response models
     #- tsnecuda
     - vizdataquality
     - awscli

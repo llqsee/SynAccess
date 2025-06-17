@@ -60,12 +60,18 @@ class EmbeddingService:
         n_synth_samples = params.pop('n_synth_samples', None)
         random_state = params.get('random_state', None)
         
+        # Ensure we have valid sample sizes (use all data if not specified)
+        if n_real_samples is None:
+            n_real_samples = len(real_processed)
+        if n_synth_samples is None:
+            n_synth_samples = len(synth_processed)
+        
         # Validate sample sizes
-        if n_real_samples is not None and n_real_samples > len(real_processed):
+        if n_real_samples > len(real_processed):
             raise ValueError(
                 f"Requested {n_real_samples} real samples, but only {len(real_processed)} available."
             )
-        if n_synth_samples is not None and n_synth_samples > len(synth_processed):
+        if n_synth_samples > len(synth_processed):
             raise ValueError(
                 f"Requested {n_synth_samples} synthetic samples, but only {len(synth_processed)} available."
             )
@@ -73,12 +79,20 @@ class EmbeddingService:
         # Sample data
         rng = np.random.default_rng(random_state)
         real_n = n_real_samples
-        synth_n = n_synth_samples or len(synth_processed)
+        synth_n = n_synth_samples
         
-        real_idx = rng.choice(len(real_processed), real_n, replace=False)
-        synth_idx = rng.choice(len(synth_processed), synth_n, replace=False)
-        real_sampled = real_processed[real_idx]
-        synth_sampled = synth_processed[synth_idx]
+        # Only sample if we need fewer samples than available
+        if real_n < len(real_processed):
+            real_idx = rng.choice(len(real_processed), real_n, replace=False)
+            real_sampled = real_processed[real_idx]
+        else:
+            real_sampled = real_processed
+            
+        if synth_n < len(synth_processed):
+            synth_idx = rng.choice(len(synth_processed), synth_n, replace=False)
+            synth_sampled = synth_processed[synth_idx]
+        else:
+            synth_sampled = synth_processed
         
         # Compute embeddings using the method
         embedding_real, embedding_synth = self.methods[method](
@@ -143,7 +157,7 @@ class EmbeddingService:
         perplexity: float = 30.0,
         early_exaggeration: float = 12.0,
         random_state: int = None,
-        n_jobs: int = -1,
+        n_jobs: int = 1,
         **kwargs
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
