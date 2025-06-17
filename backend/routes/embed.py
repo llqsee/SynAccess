@@ -4,8 +4,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from services.embedding import EmbeddingService
-# from utils.validation import  validate_embedding_params, validate_data_dimensions
-from utils.validation import  validate_embedding_params
+from utils.validation import validate_embedding_params
 
 router = APIRouter()
 embedding_service = EmbeddingService()
@@ -39,7 +38,6 @@ async def compute_embedding(request: EmbeddingRequest):
     """
     try:
         # Validate input
-        # validate_data_dimensions(request.real_data, request.synthetic_data)
         validate_embedding_params(request.method, request.params)
         
         # Pass raw data to embedding service for preprocessing

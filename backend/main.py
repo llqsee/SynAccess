@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from routes.embed import router as embed_router
+from routes.distribution import router as distribution_router
 
 app = FastAPI(title="MAVIS API")
 
@@ -29,6 +30,7 @@ async def health_check():
 
 # Include all routers
 api_router.include_router(embed_router)
+api_router.include_router(distribution_router)
 app.include_router(api_router)
 
 if __name__ == "__main__":
