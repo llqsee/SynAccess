@@ -1,8 +1,25 @@
-# MAVIS - Data Visualization and Analysis Tool
+# MAVIS - Scalable Visualization and Explainability of Synthetic Datasets
 
-A full-stack web application for visualizing and comparing real and synthetic datasets using dimensionality reduction techniques.
+A full-stack web application for visualizing and comparing real and synthetic datasets using advanced dimensionality reduction techniques. MAVIS provides an intuitive interface for data scientists and researchers to analyze synthetic data quality through interactive visualizations and statistical comparisons.
 
-## Project Structure
+## 🚀 Features
+
+- **Interactive Data Upload**: Support for CSV, Excel, and JSON file formats
+- **Advanced Dimensionality Reduction**: UMAP and t-SNE implementations with configurable parameters
+- **Interactive Visualizations**: 
+  - Zoomable and pannable scatter plots with D3.js
+  - Real-time point selection and filtering
+  - Collapsible distribution sidebar with responsive legend positioning
+- **Statistical Analysis**: 
+  - Distribution comparisons between real and synthetic data
+  - Histogram and violin plot visualizations
+  - Categorical and continuous variable analysis
+- **Modern UI/UX**: 
+  - Material-UI components with responsive design
+  - Clean, professional interface optimized for data exploration
+  - Full-screen visualization capabilities
+
+## 📁 Project Structure
 
 ```
 .
@@ -12,24 +29,45 @@ A full-stack web application for visualizing and comparing real and synthetic da
 │   ├── services/          # Business logic services
 │   │   └── embedding.py   # Embedding computation service
 │   ├── routes/            # API route handlers
+│   │   ├── embed.py       # Embedding endpoints
+│   │   └── distribution.py # Distribution analysis endpoints
 │   └── utils/             # Utility functions and data processing
+│       ├── data_preprocessing.py
+│       └── validation.py
 ├── frontend/               # React frontend application
 │   ├── public/            # Static files
 │   ├── src/               # Source code
 │   │   ├── components/    # React components
+│   │   │   ├── EmbeddingPlot.js    # Main visualization component
+│   │   │   ├── DistributionPlot.js # Distribution analysis
+│   │   │   ├── Header.js           # Navigation header
+│   │   │   ├── LandingPage.js      # Welcome page
+│   │   │   ├── Login.js            # Authentication
+│   │   │   ├── ResultsPane.js      # Results display
+│   │   │   └── Sidebar.js          # Navigation sidebar
 │   │   ├── services/     # API communication
+│   │   │   └── api.js
 │   │   ├── hooks/        # Custom React hooks
+│   │   │   ├── useDataUpload.js
+│   │   │   └── useEmbedding.js
+│   │   ├── contexts/     # React contexts
+│   │   │   └── AuthContext.js
 │   │   └── utils/        # Frontend utilities
+│   │       ├── dataUtils.js
+│   │       ├── fileReader.js
+│   │       └── security.js
 │   └── package.json      # Node.js dependencies
+├── notebooks/             # Jupyter notebooks for development
+├── reports/               # Generated reports and figures
 ├── environment.yml        # Conda environment specification
 └── README.md             # Project documentation
 ```
 
-## Setup
+## 🛠️ Setup
 
 ### Prerequisites
 - [Anaconda](https://www.anaconda.com/products/distribution) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
-- [Node.js](https://nodejs.org/) - JavaScript runtime
+- [Node.js](https://nodejs.org/) (v16 or higher)
 
 ### Backend Setup
 
@@ -58,7 +96,7 @@ source venv/bin/activate
 
 2. Install dependencies:
 ```bash
-pip install fastapi uvicorn numpy pandas scikit-learn matplotlib seaborn opentsne umap-learn python-dotenv plotly
+pip install fastapi uvicorn numpy pandas scikit-learn matplotlib seaborn openTSNE umap-learn python-dotenv plotly pydantic statsmodels
 ```
 
 3. Run the backend server:
@@ -68,91 +106,6 @@ python main.py
 ```
 
 The backend will be available at http://localhost:8000
-
-## Production Deployment
-
-### Using uvicorn directly:
-```bash
-# From project root
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
-
-# With gunicorn (recommended for production)
-gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
-```
-
-### Frontend Production Deployment:
-
-#### Option 1: Static File Server (nginx)
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    
-    location / {
-        root /path/to/frontend/build;
-        try_files $uri $uri/ /index.html;
-    }
-    
-    location /api {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-```
-
-#### Option 2: Node.js Server
-```javascript
-// server.js
-const express = require('express');
-const path = require('path');
-const app = express();
-
-app.use(express.static(path.join(__dirname, 'build')));
-
-app.get('/*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'build', 'index.html'));
-});
-
-app.listen(3000);
-```
-
-#### Option 3: Docker Full-Stack
-```dockerfile
-# Backend
-FROM python:3.10-slim as backend
-WORKDIR /app
-COPY environment.yml .
-RUN pip install conda && conda env create -f environment.yml
-COPY backend/ ./backend/
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
-# Frontend
-FROM node:18-alpine as frontend
-WORKDIR /app
-COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ .
-RUN npm run build
-
-# Production
-FROM nginx:alpine
-COPY --from=frontend /app/build /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-EXPOSE 80
-```
-
-#### Option 4: CDN Deployment (Netlify/Vercel)
-```bash
-# Build and deploy to Netlify
-cd frontend
-npm run build
-netlify deploy --prod --dir=build
-
-# Or Vercel
-cd frontend
-vercel --prod
-```
 
 ### Frontend Setup
 
@@ -179,50 +132,86 @@ npm run build
 
 2. The optimized static files will be in `frontend/build/` directory
 
-## Features
+## 📊 Usage
 
-- Upload and compare real and synthetic datasets
-- Visualize data using UMAP or t-SNE dimensionality reduction
-- Interactive scatter plots with zoom and pan capabilities
-- Statistical analysis of datasets
-- Real-time computation of embeddings
-- Configurable visualization parameters
+1. **Upload Data**: Navigate to the Data Upload tab and select your real and synthetic datasets
+2. **Configure Parameters**: Choose embedding method (UMAP/t-SNE) and adjust parameters
+3. **Generate Embeddings**: Click "Generate Embeddings" to create visualizations
+4. **Explore Results**: 
+   - Use the interactive scatter plot to explore data distribution
+   - Toggle the distribution sidebar to view statistical comparisons
+   - Select points to analyze specific data subsets
+5. **Export Results**: Save visualizations and analysis reports
 
-## Development
+## 🔧 API Documentation
 
-### Backend Development
+Once the backend is running, visit http://localhost:8000/docs for the interactive API documentation powered by FastAPI's automatic OpenAPI generation.
 
-The backend is built with FastAPI and provides:
-- REST API endpoints for data processing
-- Embedding computation using UMAP and t-SNE
-- Data validation and error handling
-- CORS support for frontend communication
+## 🚀 Production Deployment
 
-### Frontend Development
+### Backend Deployment
 
-The frontend is built with React and features:
-- Modern Material-UI components
-- D3.js for interactive visualizations
-- Axios for API communication
-- File processing utilities
-- Responsive layout
+#### Using uvicorn:
+```bash
+# From project root
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
 
-## API Documentation
+#### Using gunicorn (recommended):
+```bash
+gunicorn backend.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+```
 
-Once the backend is running, visit http://localhost:8000/docs for the interactive API documentation.
+### Frontend Deployment
 
-## Contributing
+#### Static File Server (nginx):
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    location / {
+        root /path/to/frontend/build;
+        try_files $uri $uri/ /index.html;
+    }
+    
+    location /api {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+#### Docker Deployment:
+```dockerfile
+# Multi-stage build
+FROM python:3.10-slim as backend
+WORKDIR /app
+COPY environment.yml .
+RUN pip install conda && conda env create -f environment.yml
+COPY backend/ ./backend/
+EXPOSE 8000
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-## Development
+FROM node:18-alpine as frontend
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm ci --only=production
+COPY frontend/ .
+RUN npm run build
 
-### Code Formatting and Linting
+FROM nginx:alpine
+COPY --from=frontend /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+EXPOSE 80
+```
 
+## 🧪 Development
+
+### Code Quality
 Make sure the conda environment is activated (`conda activate mavis`), then run:
 
 ```bash
@@ -234,15 +223,49 @@ isort .
 flake8 .
 ```
 
-### Environment Management
-
-The project uses conda for dependency management. Make sure to activate the environment before development:
-
+### Testing
 ```bash
-conda activate mavis
+# Backend tests
+cd backend
+python -m pytest
+
+# Frontend tests
+cd frontend
+npm test
 ```
 
-## License
+### Project Maintenance
+Use the cleanup script to manage redundant files and keep the project lean:
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+```bash
+# Run the cleanup script
+python scripts/cleanup.py
+```
+
+This script will:
+- Remove Python cache directories (`__pycache__`)
+- Clean Jupyter notebook checkpoints (`.ipynb_checkpoints`)
+- Clear outputs from Jupyter notebooks to reduce size
+- Clean up large generated report files (keeping samples)
+- Remove `node_modules` if present
+- Show project size analysis
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built with [FastAPI](https://fastapi.tiangolo.com/) and [React](https://reactjs.org/)
+- Visualization powered by [D3.js](https://d3js.org/) and [Plotly](https://plotly.com/)
+- Dimensionality reduction using [UMAP](https://umap-learn.readthedocs.io/) and [openTSNE](https://opentsne.readthedocs.io/)
+- UI components from [Material-UI](https://mui.com/)
 
