@@ -4,7 +4,7 @@ import { Box, Typography, Paper, Chip, IconButton, Tooltip, FormControl, InputLa
 import { Clear, SelectAll, BarChart, CropFree, UnfoldMore, UnfoldLess } from '@mui/icons-material';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
-import { classifyColumnType, getAvailablePlotTypes } from '../utils/dataUtils';
+import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
 
 const EmbeddingPlot = ({ 
   data, 
@@ -222,7 +222,7 @@ const EmbeddingPlot = ({
       const columnDataType = classifyColumnType(histogramColumn, originalData);
       
       // Check if current plot type is compatible with new data type (same logic as DistributionPlot.js)
-      const numericPlotTypes = ['histogram', 'violin', 'histogram_comparison'];
+      const numericPlotTypes = ['histogram', 'violin'];
       const categoricalPlotTypes = ['bar'];
       
       const isCurrentPlotCompatible = 
@@ -242,57 +242,76 @@ const EmbeddingPlot = ({
     if (!plotData) return null;
     
     switch (plotData.plot_type) {
-      case 'histogram':
-        return (
-          <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
-            <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
-              <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
-                Real Data
-              </Typography>
-              <Plot
-                data={[{
-                  x: plotData.real_values,
-                  type: 'histogram',
-                  name: 'Real',
-                  marker: { color: '#2563eb' },
-                  opacity: 0.7
-                }]}
-                layout={{
-                  margin: { l: 40, r: 20, t: 20, b: 40 },
-                  showlegend: false,
-                  xaxis: { title: '' },
-                  yaxis: { title: 'Count' }
-                }}
-                style={{ width: '100%', height: '100%' }}
-                config={{ displayModeBar: false }}
-              />
-            </Box>
-            <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
-              <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
-                Synthetic Data
-              </Typography>
-              <Plot
-                data={[{
-                  x: plotData.synthetic_values,
-                  type: 'histogram',
-                  name: 'Synthetic',
-                  marker: { color: '#dc2626' },
-                  opacity: 0.7
-                }]}
-                layout={{
-                  margin: { l: 40, r: 20, t: 20, b: 40 },
-                  showlegend: false,
-                  xaxis: { title: '' },
-                  yaxis: { title: 'Count' }
-                }}
-                style={{ width: '100%', height: '100%' }}
-                config={{ displayModeBar: false }}
-              />
-            </Box>
-          </Box>
-        );
-
-      case 'histogram_comparison':
+      case 'histogram': {
+        // Check if this is a discrete variable
+        const originalData = getOriginalData();
+        const isDiscrete = originalData ? isDiscreteVariable(histogramColumn, originalData) : false;
+        
+                 if (isDiscrete) {
+           // Render discrete histogram with gaps - separate side by side plots
+           return (
+             <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
+               <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
+                 <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
+                   Real Data
+                 </Typography>
+                 <Plot
+                   data={[
+                     {
+                       x: plotData.real_values,
+                       type: 'histogram',
+                       name: 'Real',
+                       marker: { color: '#2563eb' },
+                       opacity: 0.7
+                     }
+                   ]}
+                   layout={{
+                     margin: { l: 40, r: 20, t: 20, b: 40 },
+                     showlegend: false,
+                     xaxis: { 
+                       title: '',
+                       type: 'category'  // Treat as categories to add gaps
+                     },
+                     yaxis: { title: 'Count' },
+                     bargap: 0.1  // Add gaps between bars
+                   }}
+                   style={{ width: '100%', height: '260px' }}
+                   config={{ displayModeBar: false }}
+                 />
+               </Box>
+               <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
+                 <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
+                   Synthetic Data
+                 </Typography>
+                 <Plot
+                   data={[
+                     {
+                       x: plotData.synthetic_values,
+                       type: 'histogram',
+                       name: 'Synthetic',
+                       marker: { color: '#dc2626' },
+                       opacity: 0.7
+                     }
+                   ]}
+                   layout={{
+                     margin: { l: 40, r: 20, t: 20, b: 40 },
+                     showlegend: false,
+                     xaxis: { 
+                       title: '',
+                       type: 'category'  // Treat as categories to add gaps
+                     },
+                     yaxis: { title: 'Count' },
+                     bargap: 0.1  // Add gaps between bars
+                   }}
+                   style={{ width: '100%', height: '260px' }}
+                   config={{ displayModeBar: false }}
+                 />
+               </Box>
+             </Box>
+           );
+         }
+        
+        // Regular continuous histogram with overlay
         return (
           <Plot
             data={[
@@ -302,7 +321,8 @@ const EmbeddingPlot = ({
                 name: 'Real',
                 marker: { color: '#2563eb' },
                 opacity: 0.5,
-                histnorm: 'probability density'
+                histnorm: 'probability density',
+                nbinsx: 30
               },
               {
                 x: plotData.synthetic_values,
@@ -310,7 +330,8 @@ const EmbeddingPlot = ({
                 name: 'Synthetic',
                 marker: { color: '#dc2626' },
                 opacity: 0.5,
-                histnorm: 'probability density' 
+                histnorm: 'probability density',
+                nbinsx: 30
               }
             ]}
             layout={{
@@ -324,6 +345,9 @@ const EmbeddingPlot = ({
             config={{ displayModeBar: false }}
           />
         );
+      }
+
+
 
       case 'violin':
         return (
@@ -921,12 +945,12 @@ const EmbeddingPlot = ({
         // Auto-set appropriate plot type if current type doesn't match data
         const currentDataType = classifyColumnType(histogramColumn, originalData);
         const isValidCombination = 
-          (currentDataType === 'numeric' && ['histogram', 'violin', 'histogram_comparison'].includes(histogramPlotType)) ||
+          (currentDataType === 'numeric' && ['histogram', 'violin'].includes(histogramPlotType)) ||
           (currentDataType === 'categorical' && histogramPlotType === 'bar');
         
         if (!isValidCombination) {
           // Auto-set appropriate plot type - choose the most informative
-          const defaultPlotType = currentDataType === 'numeric' ? 'histogram_comparison' : 'bar';
+          const defaultPlotType = currentDataType === 'numeric' ? 'histogram' : 'bar';
           setHistogramPlotType(defaultPlotType);
           // The plot will be generated when histogramPlotType updates
           return;
@@ -968,7 +992,7 @@ const EmbeddingPlot = ({
       const firstColumnDataType = classifyColumnType(0, originalData);
       
       // Check if current plot type is compatible with first column
-      const numericPlotTypes = ['histogram', 'violin', 'histogram_comparison'];
+      const numericPlotTypes = ['histogram', 'violin'];
       const categoricalPlotTypes = ['bar'];
       
       const isCurrentPlotCompatible = 
@@ -977,7 +1001,7 @@ const EmbeddingPlot = ({
       
       // Only update if current plot type is not compatible
       if (!isCurrentPlotCompatible) {
-        const defaultPlotType = firstColumnDataType === 'numeric' ? 'histogram_comparison' : 'bar';
+        const defaultPlotType = firstColumnDataType === 'numeric' ? 'histogram' : 'bar';
         setHistogramPlotType(defaultPlotType);
       }
     }
