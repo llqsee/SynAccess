@@ -12,13 +12,12 @@ import {
 } from '@mui/material';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
-import { classifyColumnType, getAvailablePlotTypes } from '../utils/dataUtils';
+import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
 
 const plotTypeTooltips = {
-  histogram: 'Compare frequency distributions using histograms',
+  histogram: 'Compare frequency distributions using overlaid histograms',
   violin: 'Compare distributions showing density and quartiles',
-  bar: 'Compare categorical data using bar charts',
-  histogram_comparison: 'Compare histograms overlaid on the same plot'
+  bar: 'Compare categorical data using bar charts'
 };
 
 
@@ -74,7 +73,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
       setColumnDataType(dataType);
       
       // Check if current plot type is compatible with new data type
-      const numericPlotTypes = ['histogram', 'violin', 'histogram_comparison'];
+      const numericPlotTypes = ['histogram', 'violin'];
       const categoricalPlotTypes = ['bar'];
       
       const isCurrentPlotCompatible = 
@@ -94,7 +93,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
       // Validate that plot type is appropriate for the column data type
       const currentDataType = determineColumnType(selectedColumn);
       const isValidCombination = 
-        (currentDataType === 'numeric' && ['histogram', 'violin', 'histogram_comparison'].includes(plotType)) ||
+        (currentDataType === 'numeric' && ['histogram', 'violin'].includes(plotType)) ||
         (currentDataType === 'categorical' && plotType === 'bar');
       
       if (!isValidCombination) {
@@ -137,63 +136,123 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
     if (!plotData) return null;
     
     switch (plotData.plot_type) {
-      case 'histogram':
+      case 'histogram': {
+        // Check if this is a discrete variable
+        const originalData = {
+          data: [...realData, ...syntheticData],
+          labels: [
+            ...Array(realData.length).fill('Real'),
+            ...Array(syntheticData.length).fill('Synthetic')
+          ],
+          headers: realHeaders
+        };
+        
+        const isDiscrete = isDiscreteVariable(null, originalData, selectedColumn);
+        
+        if (isDiscrete) {
+          // Render discrete histogram with gaps (like bar plot style) - side by side
+          return (
+            <Box sx={{ display: 'flex', gap: 2, height: '100%' }}>
+              <Box sx={{ flex: 1, minHeight: '400px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
+                <Typography variant="subtitle2" sx={{ mb: 1, textAlign: 'center', color: '#2563eb' }}>
+                  Real Data
+                </Typography>
+                <Plot
+                  data={[
+                    {
+                      x: plotData.real_values,
+                      type: 'histogram',
+                      name: 'Real',
+                      marker: { color: '#2563eb' },
+                      opacity: 0.7
+                    }
+                  ]}
+                  layout={{ 
+                    xaxis: { 
+                      title: 'Value',
+                      type: 'category'  // Treat as categories to add gaps
+                    }, 
+                    yaxis: { title: 'Count' },
+                    showlegend: false,
+                    margin: { t: 20, b: 40, l: 40, r: 20 },
+                    autosize: true,
+                    bargap: 0.1  // Add gaps between bars
+                  }}
+                  config={{ responsive: true, displayModeBar: false, displaylogo: false }}
+                  style={{ width: '100%', height: '350px' }}
+                  useResizeHandler={true}
+                />
+              </Box>
+              <Box sx={{ flex: 1, minHeight: '400px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
+                <Typography variant="subtitle2" sx={{ mb: 1, textAlign: 'center', color: '#dc2626' }}>
+                  Synthetic Data
+                </Typography>
+                <Plot
+                  data={[
+                    {
+                      x: plotData.synthetic_values,
+                      type: 'histogram',
+                      name: 'Synthetic',
+                      marker: { color: '#dc2626' },
+                      opacity: 0.7
+                    }
+                  ]}
+                  layout={{ 
+                    xaxis: { 
+                      title: 'Value',
+                      type: 'category'  // Treat as categories to add gaps
+                    }, 
+                    yaxis: { title: 'Count' },
+                    showlegend: false,
+                    margin: { t: 20, b: 40, l: 40, r: 20 },
+                    autosize: true,
+                    bargap: 0.1  // Add gaps between bars
+                  }}
+                  config={{ responsive: true, displayModeBar: false, displaylogo: false }}
+                  style={{ width: '100%', height: '350px' }}
+                  useResizeHandler={true}
+                />
+              </Box>
+            </Box>
+          );
+        }
+        
+        // Regular continuous histogram with overlay
         return (
-          <Box sx={{ display: 'flex', gap: 2, height: '100%' }}>
-            <Box sx={{ flex: 1, minHeight: '400px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
-              <Typography variant="subtitle2" sx={{ mb: 1, textAlign: 'center', color: '#2563eb' }}>
-                Real Data
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    x: plotData.real_values,
-                    type: 'histogram',
-                    name: 'Real',
-                    marker: { color: '#2563eb' },
-                    opacity: 0.7
-                  }
-                ]}
-                layout={{ 
-                  xaxis: { title: 'Value' }, 
-                  yaxis: { title: 'Count' },
-                  showlegend: false,
-                  margin: { t: 20, b: 40, l: 40, r: 20 },
-                  autosize: true
-                }}
-                config={{ responsive: true, displayModeBar: false, displaylogo: false }}
-                style={{ width: '100%', height: '350px' }}
-                useResizeHandler={true}
-              />
-            </Box>
-            <Box sx={{ flex: 1, minHeight: '400px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
-              <Typography variant="subtitle2" sx={{ mb: 1, textAlign: 'center', color: '#dc2626' }}>
-                Synthetic Data
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    x: plotData.synthetic_values,
-                    type: 'histogram',
-                    name: 'Synthetic',
-                    marker: { color: '#dc2626' },
-                    opacity: 0.7
-                  }
-                ]}
-                layout={{ 
-                  xaxis: { title: 'Value' }, 
-                  yaxis: { title: 'Count' },
-                  showlegend: false,
-                  margin: { t: 20, b: 40, l: 40, r: 20 },
-                  autosize: true
-                }}
-                config={{ responsive: true, displayModeBar: false, displaylogo: false }}
-                style={{ width: '100%', height: '350px' }}
-                useResizeHandler={true}
-              />
-            </Box>
-          </Box>
+          <Plot
+            data={[
+              {
+                x: plotData.real_values,
+                type: 'histogram',
+                name: 'Real',
+                marker: { color: '#2563eb' },
+                opacity: 0.5,
+                histnorm: 'probability density',
+                nbinsx: 30
+              },
+              {
+                x: plotData.synthetic_values,
+                type: 'histogram',
+                name: 'Synthetic',
+                marker: { color: '#dc2626' },
+                opacity: 0.5, 
+                histnorm: 'probability density',
+                nbinsx: 30
+              }
+            ]}
+            layout={{ 
+              xaxis: { title: 'Value' }, 
+              yaxis: { title: 'Probability Density' },
+              barmode: 'overlay',        
+              showlegend: true,
+              margin: { t: 20, b: 40, l: 60, r: 20 },
+              autosize: true
+            }}
+            config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+            style={{ width: '100%', height: '100%' }}
+          />
         );
+      }
         
       case 'violin':
 
@@ -347,39 +406,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
           </Box>
         );
         
-        case 'histogram_comparison':
-          return (
-            <Plot
-              data={[
-                {
-                  x: plotData.real_values,
-                  type: 'histogram',
-                  name: 'Real',
-                  marker: { color: '#2563eb' },
-                  opacity: 0.5,
-                  histnorm: 'probability density' 
-                },
-                {
-                  x: plotData.synthetic_values,
-                  type: 'histogram',
-                  name: 'Synthetic',
-                  marker: { color: '#dc2626' },
-                  opacity: 0.5, 
-                  histnorm: 'probability density' 
-                }
-              ]}
-              layout={{ 
-                xaxis: { title: 'Value' }, 
-                yaxis: { title: 'Probability Density' },
-                barmode: 'overlay',        
-                showlegend: true,
-                margin: { t: 20, b: 40, l: 60, r: 20 },
-                autosize: true
-              }}
-              config={{ responsive: true, displayModeBar: true, displaylogo: false }}
-              style={{ width: '100%', height: '100%' }}
-            />
-          );
+
         
         
       default:
