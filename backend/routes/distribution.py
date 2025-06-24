@@ -49,8 +49,7 @@ def classify_column_type(real_data: List[List[Any]], synthetic_data: List[List[A
     real_na_ratio = real_numeric.isna().sum() / len(real_df)
     synthetic_na_ratio = synthetic_numeric.isna().sum() / len(synthetic_df)
     
-    is_numeric = real_na_ratio <= 0.5    
-   
+    is_numeric = real_na_ratio <= 0.5 and synthetic_na_ratio <= 0.5
     
     if is_numeric:
         # Return cleaned numeric values (same as preprocessing)
