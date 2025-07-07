@@ -14,7 +14,6 @@ export const computeEmbedding = async ({
   synthetic_data,
   method = 'umap',
   params = {},
-  n_samples = null,
   real_headers = null,
   synthetic_headers = null
 }) => {
@@ -37,15 +36,15 @@ export const computeEmbedding = async ({
       synthetic_data,
       method,
       params,
-      n_samples,
       real_headers,
       synthetic_headers
     });
 
+    // The simplified endpoint returns embeddings and metadata directly
     const { embeddings, metadata } = response.data;
     
     if (!embeddings?.real || !embeddings?.synthetic || !metadata) {
-      throw new Error('Invalid response from server');
+      throw new Error('Invalid response from server: missing embeddings or metadata');
     }
 
     return { embeddings, metadata };
@@ -144,5 +143,71 @@ export const healthCheck = async () => {
     return response.data;
   } catch (error) {
     throw new Error('Backend server is not responding');
+  }
+};
+
+// History-related API functions
+export const getJobHistory = async ({ page = 1, limit = 20, status = null, method = null, favorites_only = false } = {}) => {
+  try {
+    const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
+    if (status) params.append('status', status);
+    if (method) params.append('method', method);
+    if (favorites_only) params.append('favorites_only', 'true');
+    
+    const response = await api.get(`/history?${params.toString()}`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch job history:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to fetch job history');
+  }
+};
+
+export const getJobDetail = async (jobId) => {
+  try {
+    const response = await api.get(`/jobs/${jobId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch job details:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to fetch job details');
+  }
+};
+
+export const loadJobEmbeddings = async (jobId) => {
+  try {
+    const response = await api.post(`/jobs/${jobId}/load`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to load job embeddings:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to load embeddings');
+  }
+};
+
+export const toggleJobFavorite = async (jobId) => {
+  try {
+    const response = await api.post(`/jobs/${jobId}/favorite`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to toggle job favorite:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to toggle favorite');
+  }
+};
+
+export const deleteJob = async (jobId) => {
+  try {
+    const response = await api.delete(`/jobs/${jobId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to delete job:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to delete job');
+  }
+};
+
+export const getJobStats = async () => {
+  try {
+    const response = await api.get('/stats');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch job stats:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to fetch job statistics');
   }
 }; 

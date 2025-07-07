@@ -26,7 +26,8 @@ import {
   CheckCircle,
   Error as ErrorIcon,
   AutorenewRounded,
-  Menu
+  Menu,
+  History as HistoryIcon
 } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
@@ -35,6 +36,7 @@ import Sidebar from './components/Sidebar';
 import EmbeddingPlot from './components/EmbeddingPlot';
 import DistributionPlot from './components/DistributionPlot';
 import ResultsPane from './components/ResultsPane';
+import History from './components/History';
 import { useDataUpload } from './hooks/useDataUpload';
 import { useEmbedding } from './hooks/useEmbedding';
 import { healthCheck } from './services/api';
@@ -114,8 +116,10 @@ function AppContent() {
     embeddingMetadata,
     loading,
     error: embeddingError,
+    processingStatus,
     setError: setEmbeddingError,
-    handleVisualize
+    handleVisualize,
+    loadFromHistory
   } = useEmbedding();
 
   const error = uploadError || embeddingError;
@@ -151,11 +155,14 @@ function AppContent() {
     setActiveTab(newValue);
   };
 
+  const handleLoadFromHistory = useCallback((embeddings, metadata) => {
+    loadFromHistory(embeddings, metadata);
+    setActiveTab(1); // Switch to embeddings tab
+  }, [loadFromHistory]);
+
   // Determine which tabs should be enabled
   const dataUploaded = realData && syntheticData;
   const embeddingGenerated = embeddingData && embeddingMetadata;
-  
-
   
   // Smart tab enabling logic
   const tabsEnabled = {
@@ -163,6 +170,7 @@ function AppContent() {
     embeddings: dataUploaded, // Enabled when data is uploaded
     distributions: dataUploaded, // Enabled when data is uploaded
     summary: dataUploaded, // Enabled when data is uploaded
+    history: true, // Always enabled - users can view history anytime
   };
 
   return (
@@ -208,7 +216,7 @@ function AppContent() {
                 }} 
               />
               <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                Processing data and computing embeddings... This may take a few moments.
+                {processingStatus || 'Processing data and computing embeddings... This may take a few moments.'}
               </Typography>
             </Box>
           )}
@@ -257,6 +265,12 @@ function AppContent() {
                   label="Summary" 
                   iconPosition="start"
                   disabled={!tabsEnabled.summary}
+                />
+                <Tab 
+                  icon={<HistoryIcon />} 
+                  label="History" 
+                  iconPosition="start"
+                  disabled={!tabsEnabled.history}
                 />
               </Tabs>
             </Box>
@@ -515,6 +529,13 @@ function AppContent() {
                       </Box>
                     </Paper>
                   )}
+                </Box>
+              </TabPanel>
+
+              {/* History Tab */}
+              <TabPanel value={activeTab} index={4}>
+                <Box sx={{ p: 2, height: '100%' }}>
+                  <History onLoadEmbedding={handleLoadFromHistory} />
                 </Box>
               </TabPanel>
             </Box>
