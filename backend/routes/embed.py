@@ -2,8 +2,10 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, List, Any, Optional
 import numpy as np
 from pydantic import BaseModel
+import uuid
 
 from services.embedding import EmbeddingService
+from services.job_service import JobService
 from utils.validation import validate_embedding_params
 
 router = APIRouter()
@@ -40,6 +42,20 @@ async def compute_embedding(request: EmbeddingRequest):
         # Validate input
         validate_embedding_params(request.method, request.params)
         
+        # Create job for history tracking
+        job_name = f"{request.method.upper()} Embedding - {len(request.real_data)}R + {len(request.synthetic_data)}S samples"
+        job_result = JobService.create_job(
+            name=job_name,
+            method=request.method,
+            parameters=request.params or {},
+            real_data=request.real_data,
+            synthetic_data=request.synthetic_data,
+            real_headers=request.real_headers,
+            synthetic_headers=request.synthetic_headers,
+            description="Direct embedding computation"
+        )
+        job_id = job_result["job_id"]
+        
         # Pass raw data to embedding service for preprocessing
         # The service will handle mixed data types and convert to proper format
         embeddings, metadata = embedding_service.compute_embedding(
@@ -52,14 +68,31 @@ async def compute_embedding(request: EmbeddingRequest):
             synthetic_headers=request.synthetic_headers
         )
         
-        # The embeddings are already in the correct format (dict with 'real' and 'synthetic' keys)
-        # and already converted to lists for JSON serialization
+        # Save results to job for history
+        JobService.update_job_results(
+            job_id,
+            embeddings["real"],
+            embeddings["synthetic"],
+            metadata["runtime"],
+            metadata
+        )
+        
+        # Return the embeddings and metadata in the expected format (same as before)
         return {
             "embeddings": embeddings,
-            "metadata": metadata
+            "metadata": {
+                **metadata,
+                "job_id": job_id  # Include job_id for potential future use
+            }
         }
         
     except ValueError as e:
+        # Mark job as failed if it was created
+        if 'job_id' in locals():
+            JobService.mark_job_failed(job_id, str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        # Mark job as failed if it was created
+        if 'job_id' in locals():
+            JobService.mark_job_failed(job_id, str(e))
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") 

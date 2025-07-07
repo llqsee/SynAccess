@@ -191,4 +191,4 @@ class EmbeddingService:
         embedding_synth = np.array(partial_embedding_synth)
 
 
-        return embedding_real, embedding_synth
+        return embedding_real, embedding_synth 
