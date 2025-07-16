@@ -263,7 +263,7 @@ UMAP (Uniform Manifold Approximation and Projection) is a powerful dimensionalit
 | **min_dist** | 0.0-0.99 | 0.1 | Minimum distance between points in low-dimensional space | • **Low (0.0-0.1)**: Tight clusters, detailed structure<br/>• **High (0.5-0.99)**: Spread out points, overview perspective |
 | **n_components** | 2-3 | 2 | Target dimensionality for visualization | • **2D**: Standard scatter plots, easier interpretation<br/>• **3D**: Enhanced cluster separation, spatial relationships |
 | **metric** | Various | euclidean | Distance metric for high-dimensional space | • **euclidean**: Continuous numerical data<br/>• **manhattan**: Sparse or categorical data<br/>• **cosine**: Text or high-dimensional sparse data |
-| **random_state** | Any integer | 42 | Seed for reproducible results | Ensures consistent embeddings across runs |
+
 
 ### UMAP Functionality Features
 
@@ -314,8 +314,7 @@ MAVIS automatically selects appropriate chart types based on your data:
 #### 📊 **Histogram Comparisons**
 - **Overlapping Histograms**: Direct visual comparison of real vs synthetic distributions
 - **Customizable Binning**: 
-  - Automatic optimal bin selection using Sturges' rule
-  - Manual bin count adjustment (5-100 bins)
+  - Automatic optimal bin selection using Sturges' rule  
   - Adaptive binning for different data ranges
 - **Statistical Overlays**:
   - Mean and median lines with confidence intervals
