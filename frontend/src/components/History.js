@@ -52,6 +52,7 @@ import {
   deleteJob,
   getJobStats 
 } from '../services/api';
+// Removed date utilities - using simple display
 
 const History = ({ onLoadEmbedding }) => {
   const [jobs, setJobs] = useState([]);
@@ -64,8 +65,8 @@ const History = ({ onLoadEmbedding }) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
   const [stats, setStats] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('completed');
-  const [methodFilter, setMethodFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [methodFilter, setMethodFilter] = useState('all');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
 
@@ -81,8 +82,8 @@ const History = ({ onLoadEmbedding }) => {
     try {
       const response = await getJobHistory({
         page, limit,
-        status: statusFilter || null,
-        method: methodFilter || null,
+        status: statusFilter === 'all' ? null : statusFilter,
+        method: methodFilter === 'all' ? null : methodFilter,
         favorites_only: favoritesOnly
       });
       setJobs(response.jobs);
@@ -114,7 +115,7 @@ const History = ({ onLoadEmbedding }) => {
       setLoading(true);
       const result = await loadJobEmbeddings(jobId);
       if (onLoadEmbedding) {
-        onLoadEmbedding(result.embeddings, result.metadata);
+        onLoadEmbedding(result.embeddings, result.metadata, result.session_state);
       }
       showNotification('Embedding loaded successfully!', 'success');
     } catch (err) {
@@ -159,7 +160,27 @@ const History = ({ onLoadEmbedding }) => {
   };
 
   const formatDate = (dateString) => {
-    return dateString ? new Date(dateString).toLocaleString() : 'N/A';
+    if (!dateString) return 'N/A';
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString; // Return original if invalid
+      
+      // Simple, readable format: "14/07/2025, 16:08:48 UTC"
+      const formatted = date.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: '2-digit', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      
+      return `${formatted} UTC`;
+    } catch (error) {
+      return dateString; // Return original if any error
+    }
   };
 
   const formatRuntime = (seconds) => {
@@ -175,6 +196,38 @@ const History = ({ onLoadEmbedding }) => {
   };
 
   const totalPages = Math.ceil(total / limit);
+
+  // Helper function to generate correct job name based on user-selected samples
+  const getDisplayJobName = useCallback((job) => {
+    // First priority: Extract sample counts from the parameters (what user selected)
+    let realSamples = job.parameters?.n_real_samples;
+    let synthSamples = job.parameters?.n_synth_samples;
+    
+    // Second priority: Use processed samples (for completed jobs)
+    if ((realSamples === null || realSamples === undefined) && job.real_processed_samples !== null && job.real_processed_samples !== undefined) {
+      realSamples = job.real_processed_samples;
+    }
+    if ((synthSamples === null || synthSamples === undefined) && job.synthetic_processed_samples !== null && job.synthetic_processed_samples !== undefined) {
+      synthSamples = job.synthetic_processed_samples;
+    }
+    
+    // Third priority: Fall back to original data shape 
+    if ((realSamples === null || realSamples === undefined) && job.real_data_shape?.[0]) {
+      realSamples = job.real_data_shape[0];
+    }
+    if ((synthSamples === null || synthSamples === undefined) && job.synthetic_data_shape?.[0]) {
+      synthSamples = job.synthetic_data_shape[0];
+    }
+    
+    // If we have sample counts from any source, use them to generate the correct name
+    if (realSamples !== null && realSamples !== undefined &&
+        synthSamples !== null && synthSamples !== undefined) {
+      return `${job.method.toUpperCase()} Embedding - ${realSamples}R + ${synthSamples}S samples`;
+    }
+    
+    // Fall back to stored name if no sample information available
+    return job.name;
+  }, []);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -241,7 +294,7 @@ const History = ({ onLoadEmbedding }) => {
               onChange={(e) => setStatusFilter(e.target.value)}
               label="Status"
             >
-              <MenuItem value="">All</MenuItem>
+              <MenuItem value="all">All</MenuItem>
               <MenuItem value="completed">Completed</MenuItem>
               <MenuItem value="failed">Failed</MenuItem>
               <MenuItem value="running">Running</MenuItem>
@@ -255,7 +308,7 @@ const History = ({ onLoadEmbedding }) => {
               onChange={(e) => setMethodFilter(e.target.value)}
               label="Method"
             >
-              <MenuItem value="">All</MenuItem>
+              <MenuItem value="all">All</MenuItem>
               <MenuItem value="umap">UMAP</MenuItem>
               <MenuItem value="tsne">t-SNE</MenuItem>
             </Select>
@@ -314,7 +367,7 @@ const History = ({ onLoadEmbedding }) => {
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                            {job.name}
+                            {getDisplayJobName(job)}
                           </Typography>
                           {job.is_favorite && (
                             <Favorite sx={{ fontSize: 16, color: 'error.main' }} />
@@ -355,7 +408,7 @@ const History = ({ onLoadEmbedding }) => {
                                 onClick={() => handleLoadJob(job.job_id)}
                                 color="primary"
                               >
-                                <PlayArrow />
+                                <PlayArrow data-testid="load-job-icon" />
                               </IconButton>
                             </Tooltip>
                           )}
@@ -365,7 +418,7 @@ const History = ({ onLoadEmbedding }) => {
                               size="small"
                               onClick={() => handleViewDetails(job)}
                             >
-                              <Visibility />
+                              <Visibility data-testid="view-details-icon" />
                             </IconButton>
                           </Tooltip>
                           
@@ -375,7 +428,7 @@ const History = ({ onLoadEmbedding }) => {
                               onClick={() => handleToggleFavorite(job.job_id)}
                               color={job.is_favorite ? "error" : "default"}
                             >
-                              {job.is_favorite ? <Favorite /> : <FavoriteBorder />}
+                              {job.is_favorite ? <Favorite data-testid="favorite-icon" /> : <FavoriteBorder data-testid="favorite-border-icon" />}
                             </IconButton>
                           </Tooltip>
                           
@@ -388,7 +441,7 @@ const History = ({ onLoadEmbedding }) => {
                               }}
                               color="error"
                             >
-                              <Delete />
+                              <Delete data-testid="delete-job-icon" />
                             </IconButton>
                           </Tooltip>
                         </Box>
@@ -469,6 +522,46 @@ const History = ({ onLoadEmbedding }) => {
                     fullWidth
                     disabled
                     size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Processed Real Samples"
+                    value={selectedJob.job.real_processed_samples || selectedJob.job.real_data_shape?.[0] || 'N/A'}
+                    fullWidth
+                    disabled
+                    size="small"
+                    helperText="Samples actually used for visualization"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Processed Synthetic Samples"
+                    value={selectedJob.job.synthetic_processed_samples || selectedJob.job.synthetic_data_shape?.[0] || 'N/A'}
+                    fullWidth
+                    disabled
+                    size="small"
+                    helperText="Samples actually used for visualization"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Total Real Dataset Size"
+                    value={selectedJob.job.real_data_shape?.[0] || 'N/A'}
+                    fullWidth
+                    disabled
+                    size="small"
+                    helperText="Original dataset size"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Total Synthetic Dataset Size"
+                    value={selectedJob.job.synthetic_data_shape?.[0] || 'N/A'}
+                    fullWidth
+                    disabled
+                    size="small"
+                    helperText="Original dataset size"
                   />
                 </Grid>
                 <Grid item xs={12}>

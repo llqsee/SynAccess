@@ -151,6 +151,35 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
         
         if (isDiscrete) {
           // Render discrete histogram with gaps (like bar plot style) - side by side
+          // Convert to percentages for discrete variables
+          const realValueCounts = {};
+          plotData.real_values.forEach(val => {
+            realValueCounts[val] = (realValueCounts[val] || 0) + 1;
+          });
+          
+          const syntheticValueCounts = {};
+          plotData.synthetic_values.forEach(val => {
+            syntheticValueCounts[val] = (syntheticValueCounts[val] || 0) + 1;
+          });
+          
+          const realTotal = plotData.real_values.length;
+          const syntheticTotal = plotData.synthetic_values.length;
+          
+          // Convert counts to percentages
+          const realValuesWithPercentages = [];
+          const realPercentages = [];
+          Object.entries(realValueCounts).forEach(([value, count]) => {
+            realValuesWithPercentages.push(value);
+            realPercentages.push((count / realTotal) * 100);
+          });
+          
+          const syntheticValuesWithPercentages = [];
+          const syntheticPercentages = [];
+          Object.entries(syntheticValueCounts).forEach(([value, count]) => {
+            syntheticValuesWithPercentages.push(value);
+            syntheticPercentages.push((count / syntheticTotal) * 100);
+          });
+          
           return (
             <Box sx={{ display: 'flex', gap: 2, height: '100%' }}>
               <Box sx={{ flex: 1, minHeight: '400px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
@@ -160,8 +189,9 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                 <Plot
                   data={[
                     {
-                      x: plotData.real_values,
-                      type: 'histogram',
+                      x: realValuesWithPercentages,
+                      y: realPercentages,
+                      type: 'bar',
                       name: 'Real',
                       marker: { color: '#2563eb' },
                       opacity: 0.7
@@ -172,7 +202,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                       title: 'Value',
                       type: 'category'  // Treat as categories to add gaps
                     }, 
-                    yaxis: { title: 'Count' },
+                    yaxis: { title: 'Percentage (%)' },
                     showlegend: false,
                     margin: { t: 20, b: 40, l: 40, r: 20 },
                     autosize: true,
@@ -183,6 +213,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                   useResizeHandler={true}
                 />
               </Box>
+              
               <Box sx={{ flex: 1, minHeight: '400px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
                 <Typography variant="subtitle2" sx={{ mb: 1, textAlign: 'center', color: '#dc2626' }}>
                   Synthetic Data
@@ -190,8 +221,9 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                 <Plot
                   data={[
                     {
-                      x: plotData.synthetic_values,
-                      type: 'histogram',
+                      x: syntheticValuesWithPercentages,
+                      y: syntheticPercentages,
+                      type: 'bar',
                       name: 'Synthetic',
                       marker: { color: '#dc2626' },
                       opacity: 0.7
@@ -202,7 +234,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                       title: 'Value',
                       type: 'category'  // Treat as categories to add gaps
                     }, 
-                    yaxis: { title: 'Count' },
+                    yaxis: { title: 'Percentage (%)' },
                     showlegend: false,
                     margin: { t: 20, b: 40, l: 40, r: 20 },
                     autosize: true,
@@ -218,6 +250,80 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
         }
         
         // Regular continuous histogram with overlay
+        // Calculate shared bins and range for proper overlay comparison
+        const combinedValues = [...plotData.real_values, ...plotData.synthetic_values];
+        
+        // Handle edge cases
+        if (combinedValues.length === 0) {
+          return <Typography>No data available for histogram</Typography>;
+        }
+        
+        const minValue = Math.min(...combinedValues);
+        const maxValue = Math.max(...combinedValues);
+        const range = maxValue - minValue;
+        
+        // Handle case where all values are identical
+        if (range === 0) {
+          const singleValue = minValue;
+          const sharedXBins = {
+            start: singleValue - 0.5,
+            end: singleValue + 0.5,
+            size: 1
+          };
+          
+          return (
+            <Plot
+              data={[
+                {
+                  x: plotData.real_values,
+                  type: 'histogram',
+                  name: 'Real',
+                  marker: { color: '#2563eb' },
+                  opacity: 0.5,
+                  histnorm: 'count',
+                  xbins: sharedXBins
+                },
+                {
+                  x: plotData.synthetic_values,
+                  type: 'histogram',
+                  name: 'Synthetic',
+                  marker: { color: '#dc2626' },
+                  opacity: 0.5,
+                  histnorm: 'count',
+                  xbins: sharedXBins
+                }
+              ]}
+              layout={{ 
+                xaxis: { 
+                  title: 'Value',
+                  range: [singleValue - 1, singleValue + 1]
+                }, 
+                yaxis: { title: 'Count' },
+                barmode: 'overlay',        
+                showlegend: true,
+                margin: { t: 20, b: 40, l: 60, r: 20 },
+                autosize: true
+              }}
+              config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+              style={{ width: '100%', height: '100%' }}
+            />
+          );
+        }
+        
+        const binSize = range / 30; // 30 bins total
+        
+        // Create shared bin edges
+        const binEdges = [];
+        for (let i = 0; i <= 30; i++) {
+          binEdges.push(minValue + i * binSize);
+        }
+        
+        const sharedXBins = {
+          start: minValue,
+          end: maxValue,
+          size: binSize
+        };
+        
         return (
           <Plot
             data={[
@@ -228,7 +334,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                 marker: { color: '#2563eb' },
                 opacity: 0.5,
                 histnorm: 'probability density',
-                nbinsx: 30
+                xbins: sharedXBins
               },
               {
                 x: plotData.synthetic_values,
@@ -237,11 +343,14 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                 marker: { color: '#dc2626' },
                 opacity: 0.5, 
                 histnorm: 'probability density',
-                nbinsx: 30
+                xbins: sharedXBins
               }
             ]}
             layout={{ 
-              xaxis: { title: 'Value' }, 
+              xaxis: { 
+                title: 'Value',
+                range: [minValue - range * 0.05, maxValue + range * 0.05] // Add 5% padding
+              }, 
               yaxis: { title: 'Probability Density' },
               barmode: 'overlay',        
               showlegend: true,
@@ -345,6 +454,18 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
           return <div>Error: Missing bar plot data</div>;
         }
         
+        // Convert counts to percentages
+        const realTotal = plotData.real_counts.reduce((sum, count) => sum + count, 0);
+        const syntheticTotal = plotData.synthetic_counts.reduce((sum, count) => sum + count, 0);
+        
+        const realPercentages = realTotal > 0 
+          ? plotData.real_counts.map(count => (count / realTotal) * 100)
+          : plotData.real_counts.map(() => 0);
+          
+        const syntheticPercentages = syntheticTotal > 0
+          ? plotData.synthetic_counts.map(count => (count / syntheticTotal) * 100)
+          : plotData.synthetic_counts.map(() => 0);
+        
         return (
           <Box sx={{ display: 'flex', gap: 2, height: '100%' }}>
             <Box sx={{ flex: 1, minHeight: '400px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
@@ -355,7 +476,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                 data={[
                   {
                     x: plotData.categories,
-                    y: plotData.real_counts,
+                    y: realPercentages,
                     type: 'bar',
                     name: 'Real',
                     marker: { color: '#2563eb' }
@@ -363,7 +484,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                 ]}
                 layout={{ 
                   xaxis: { title: 'Category' }, 
-                  yaxis: { title: 'Count' },
+                  yaxis: { title: 'Percentage (%)' },
                   showlegend: false,
                   margin: { t: 20, b: 40, l: 40, r: 20 },
                   autosize: true
@@ -383,7 +504,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                 data={[
                   {
                     x: plotData.categories,
-                    y: plotData.synthetic_counts,
+                    y: syntheticPercentages,
                     type: 'bar',
                     name: 'Synthetic',
                     marker: { color: '#dc2626' }
@@ -391,7 +512,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
                 ]}
                 layout={{ 
                   xaxis: { title: 'Category' }, 
-                  yaxis: { title: 'Count' },
+                  yaxis: { title: 'Percentage (%)' },
                   showlegend: false,
                   margin: { t: 20, b: 40, l: 40, r: 20 },
                   autosize: true

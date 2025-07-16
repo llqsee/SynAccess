@@ -59,20 +59,20 @@ const PerformanceDashboard = () => {
 
   // Prepare chart data
   const renderTimeData = metrics.renderTimes.map(rt => ({
-    time: new Date(rt.timestamp).toLocaleTimeString(),
+    time: String(rt.timestamp),
     duration: rt.duration,
     component: rt.component
   }));
 
   const apiCallData = metrics.apiCalls.map(call => ({
-    time: new Date(call.timestamp).toLocaleTimeString(),
+    time: String(call.timestamp),
     duration: call.duration,
     endpoint: call.endpoint,
     status: call.status
   }));
 
   const memoryData = metrics.memoryUsage.map(mem => ({
-    time: new Date(mem.timestamp).toLocaleTimeString(),
+    time: String(mem.timestamp),
     used: (mem.used / 1024 / 1024).toFixed(2), // MB
     total: (mem.total / 1024 / 1024).toFixed(2), // MB
     percentage: ((mem.used / mem.total) * 100).toFixed(1)
@@ -337,7 +337,7 @@ const PerformanceDashboard = () => {
                 {metrics.userInteractions.slice(-10).reverse().map((interaction, index) => (
                   <div key={index} className="interaction-item">
                     <span className="interaction-time">
-                      {new Date(interaction.timestamp).toLocaleTimeString()}
+                      {String(interaction.timestamp)}
                     </span>
                     <span className="interaction-action">{interaction.action}</span>
                     {interaction.details && Object.keys(interaction.details).length > 0 && (

@@ -49,33 +49,96 @@ const EmbeddingPlot = ({
 
   // Check if this embedding is loaded from history (no original data available)
   const isFromHistory = useMemo(() => {
-    return metadata && !metadata.realData?.data && !metadata.syntheticData?.data;
+    // The key question is: do we have the original data to generate distribution plots?
+    // This is now mainly for internal tracking since both fresh and history embeddings work
+    if (!metadata) return true;
+    
+    // Check if we have original data structure for distribution plots in metadata
+    const hasOriginalDataInMetadata = metadata.realData?.data && 
+                                    metadata.syntheticData?.data &&
+                                    Array.isArray(metadata.realData.data) &&
+                                    Array.isArray(metadata.syntheticData.data) &&
+                                    metadata.realData.data.length > 0 &&
+                                    metadata.syntheticData.data.length > 0;
+    
+    // Check if we have original data structure in session state
+    let hasOriginalDataInSession = false;
+    try {
+      const sessionRealData = window.sessionStorage.getItem('realData');
+      const sessionSyntheticData = window.sessionStorage.getItem('syntheticData');
+      
+      if (sessionRealData && sessionSyntheticData) {
+        const realData = JSON.parse(sessionRealData);
+        const syntheticData = JSON.parse(sessionSyntheticData);
+        
+        hasOriginalDataInSession = realData.data && syntheticData.data && 
+                                 Array.isArray(realData.data) && Array.isArray(syntheticData.data) &&
+                                 realData.data.length > 0 && syntheticData.data.length > 0;
+      }
+    } catch (error) {
+      console.warn('Failed to check session state data:', error);
+    }
+    
+    // If we have original data in either place, we can generate plots
+    return !(hasOriginalDataInMetadata || hasOriginalDataInSession);
   }, [metadata]);
 
   // Get original data for histogram generation
   const getOriginalData = useCallback(() => {
-    if (!metadata?.realData?.data || !metadata?.syntheticData?.data) return null;
+    // Try to get data from metadata first (for history embeddings)
+    if (metadata?.realData?.data && metadata?.syntheticData?.data) {
+      const realData = metadata.realData.data;
+      const syntheticData = metadata.syntheticData.data;
+      
+      // Validate that data arrays contain valid arrays
+      if (!Array.isArray(realData) || !Array.isArray(syntheticData)) return null;
+      
+      // Filter out invalid data rows
+      const validRealData = realData.filter(row => row && Array.isArray(row) && row.length > 0);
+      const validSyntheticData = syntheticData.filter(row => row && Array.isArray(row) && row.length > 0);
+      
+      if (validRealData.length === 0 && validSyntheticData.length === 0) return null;
+      
+      const realLabels = Array(validRealData.length).fill('Real');
+      const syntheticLabels = Array(validSyntheticData.length).fill('Synthetic');
+      
+      return {
+        data: [...validRealData, ...validSyntheticData],
+        labels: [...realLabels, ...syntheticLabels],
+        headers: metadata.realData.headers || []
+      };
+    }
     
-    const realData = metadata.realData.data;
-    const syntheticData = metadata.syntheticData.data;
+    // If metadata doesn't have original data, try to access session state data
+    // This is the same pattern used in App.js for DistributionPlot
+    try {
+      // Access session state data directly (same as DistributionPlot component)
+      const sessionRealData = window.sessionStorage.getItem('realData');
+      const sessionSyntheticData = window.sessionStorage.getItem('syntheticData');
+      
+      if (sessionRealData && sessionSyntheticData) {
+        const realData = JSON.parse(sessionRealData);
+        const syntheticData = JSON.parse(sessionSyntheticData);
+        
+        if (realData.data && syntheticData.data && 
+            Array.isArray(realData.data) && Array.isArray(syntheticData.data) &&
+            realData.data.length > 0 && syntheticData.data.length > 0) {
+          
+          const realLabels = Array(realData.data.length).fill('Real');
+          const syntheticLabels = Array(syntheticData.data.length).fill('Synthetic');
+          
+          return {
+            data: [...realData.data, ...syntheticData.data],
+            labels: [...realLabels, ...syntheticLabels],
+            headers: realData.headers || []
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to access session state data:', error);
+    }
     
-    // Validate that data arrays contain valid arrays
-    if (!Array.isArray(realData) || !Array.isArray(syntheticData)) return null;
-    
-    // Filter out invalid data rows
-    const validRealData = realData.filter(row => row && Array.isArray(row) && row.length > 0);
-    const validSyntheticData = syntheticData.filter(row => row && Array.isArray(row) && row.length > 0);
-    
-    if (validRealData.length === 0 && validSyntheticData.length === 0) return null;
-    
-    const realLabels = Array(validRealData.length).fill('Real');
-    const syntheticLabels = Array(validSyntheticData.length).fill('Synthetic');
-    
-    return {
-      data: [...validRealData, ...validSyntheticData],
-      labels: [...realLabels, ...syntheticLabels],
-      headers: metadata.realData.headers || []
-    };
+    return null;
   }, [metadata]);
 
   // Calculate optimal plot dimensions based on screen characteristics
@@ -186,22 +249,46 @@ const EmbeddingPlot = ({
     if (!originalData || histogramColumn >= originalData.headers.length) return null;
 
     const selectedData = selectedPoints
-      .filter(index => {
-        // More permissive validation with debugging
-        const isValidIndex = index >= 0 && index < originalData.data.length;
-        const hasData = originalData.data[index];
-        const isDataArray = hasData && Array.isArray(originalData.data[index]);
-        const hasEnoughColumns = isDataArray && originalData.data[index].length > histogramColumn;
-        const hasLabel = originalData.labels[index];
-        
-        const isValid = isValidIndex && hasData && isDataArray && hasEnoughColumns && hasLabel;
-        return isValid;
+      .filter(embeddingIndex => {
+        // Validate embedding index
+        const isValidEmbeddingIndex = embeddingIndex >= 0 && embeddingIndex < data.length;
+        const hasEmbeddingLabel = metadata.labels[embeddingIndex];
+        return isValidEmbeddingIndex && hasEmbeddingLabel;
       })
-      .map(index => ({
-        value: originalData.data[index][histogramColumn],
-        label: originalData.labels[index],
-        index: index
-      }));
+      .map(embeddingIndex => {
+        const pointLabel = metadata.labels[embeddingIndex];
+        
+        // Try direct mapping first
+        if (embeddingIndex >= 0 && embeddingIndex < originalData.data.length && 
+            originalData.labels[embeddingIndex] === pointLabel) {
+          
+          const originalDataPoint = originalData.data[embeddingIndex];
+          if (originalDataPoint && Array.isArray(originalDataPoint) && originalDataPoint.length > histogramColumn) {
+            return {
+              value: originalDataPoint[histogramColumn],
+              label: pointLabel,
+              index: embeddingIndex
+            };
+          }
+        }
+        
+        // Fallback: find matching data in original dataset
+        for (let i = 0; i < originalData.data.length; i++) {
+          if (originalData.labels[i] === pointLabel && 
+              originalData.data[i] && 
+              Array.isArray(originalData.data[i]) && 
+              originalData.data[i].length > histogramColumn) {
+            return {
+              value: originalData.data[i][histogramColumn],
+              label: pointLabel,
+              index: i
+            };
+          }
+        }
+        
+        return null; // Invalid data point
+      })
+      .filter(item => item !== null); // Remove invalid entries
     
     const realValues = selectedData.filter(d => d.label === 'Real').map(d => d.value);
     const syntheticValues = selectedData.filter(d => d.label === 'Synthetic').map(d => d.value);
@@ -220,7 +307,7 @@ const EmbeddingPlot = ({
       dataType,
       availablePlotTypes
     };
-  }, [selectedPoints, histogramColumn, getOriginalData]);
+  }, [selectedPoints, histogramColumn, getOriginalData, data, metadata]);
 
   // Clear selection
   const clearSelection = useCallback(() => {
@@ -251,17 +338,59 @@ const EmbeddingPlot = ({
     const selectedRealData = [];
     const selectedSyntheticData = [];
 
-    selectedPoints.forEach(index => {
-      const isValidIndex = index >= 0 && index < originalData.data.length;
-      const hasData = originalData.data[index];
-      const isDataArray = hasData && Array.isArray(originalData.data[index]);
-      const hasLabel = originalData.labels[index];
+    // FIXED: Map embedding indices to original data indices correctly
+    selectedPoints.forEach(embeddingIndex => {
+      // Check if this is a valid embedding index
+      if (embeddingIndex < 0 || embeddingIndex >= data.length || !metadata.labels[embeddingIndex]) {
+        return;
+      }
+
+      // Get the label for this embedding point
+      const pointLabel = metadata.labels[embeddingIndex];
       
-      if (isValidIndex && hasData && isDataArray && hasLabel) {
-        if (originalData.labels[index] === 'Real') {
-          selectedRealData.push(originalData.data[index]);
-        } else {
-          selectedSyntheticData.push(originalData.data[index]);
+      // Get the coordinates for this embedding point
+      const embeddingCoords = data[embeddingIndex];
+      if (!embeddingCoords || !Array.isArray(embeddingCoords)) {
+        return;
+      }
+
+      // Now we need to find this point in the original data
+      // Since embedding coordinates correspond to original data points,
+      // we need to map back to the original data structure
+      
+      // The embedding data should maintain the same order as the combined original data
+      // But let's be more robust and find the corresponding original data point
+      
+      // For now, use the embedding index directly but validate it exists in original data
+      if (embeddingIndex >= 0 && embeddingIndex < originalData.data.length && 
+          originalData.labels[embeddingIndex] === pointLabel) {
+        
+        const originalDataPoint = originalData.data[embeddingIndex];
+        if (originalDataPoint && Array.isArray(originalDataPoint)) {
+          if (pointLabel === 'Real') {
+            selectedRealData.push(originalDataPoint);
+          } else if (pointLabel === 'Synthetic') {
+            selectedSyntheticData.push(originalDataPoint);
+          }
+        }
+      } else {
+        // If direct mapping fails, we need to find the correct original data point
+        // This happens when there's a mismatch between embedding and original data ordering
+        console.warn(`Index mismatch detected for embedding point ${embeddingIndex} with label ${pointLabel}`);
+        
+        // As a fallback, try to find matching data in the original dataset
+        // This is less efficient but more robust
+        let foundInOriginal = false;
+        for (let i = 0; i < originalData.data.length && !foundInOriginal; i++) {
+          if (originalData.labels[i] === pointLabel && originalData.data[i] && Array.isArray(originalData.data[i])) {
+            // Additional validation could go here if needed
+            if (pointLabel === 'Real') {
+              selectedRealData.push(originalData.data[i]);
+            } else if (pointLabel === 'Synthetic') {
+              selectedSyntheticData.push(originalData.data[i]);
+            }
+            foundInOriginal = true;
+          }
         }
       }
     });
@@ -269,10 +398,18 @@ const EmbeddingPlot = ({
     // Check if we have any data to send
     if (selectedRealData.length === 0 && selectedSyntheticData.length === 0) {
       console.error('No valid data to send to API');
+      console.log('Debug info:', {
+        selectedPointsCount: selectedPoints.length,
+        originalDataLength: originalData.data.length,
+        embeddingDataLength: data.length,
+        labelsLength: metadata.labels.length
+      });
       setPlotError('No valid data points found for the selected column');
       setPlotLoading(false);
       return;
     }
+
+    console.log(`Selected data: ${selectedRealData.length} real, ${selectedSyntheticData.length} synthetic`);
 
     // Use the same API as DistributionPlot.js
     const requestData = {
@@ -327,7 +464,7 @@ const EmbeddingPlot = ({
         setPlotLoading(false);
       }
     }
-  }, [selectedPoints, histogramColumn, histogramPlotType, generateHistogramData, getOriginalData]);
+  }, [selectedPoints, histogramColumn, histogramPlotType, generateHistogramData, getOriginalData, data, metadata]);
 
   // Auto-set plot type when column changes (using same logic as DistributionPlot.js)
   useEffect(() => {
@@ -361,71 +498,170 @@ const EmbeddingPlot = ({
         const originalData = getOriginalData();
         const isDiscrete = originalData ? isDiscreteVariable(histogramColumn, originalData) : false;
         
-                 if (isDiscrete) {
-           // Render discrete histogram with gaps - separate side by side plots
-           return (
-             <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
-               <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
-                 <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
-                   Real Data
-                 </Typography>
-                 <Plot
-                   data={[
-                     {
-                       x: plotData.real_values,
-                       type: 'histogram',
-                       name: 'Real',
-                       marker: { color: '#2563eb' },
-                       opacity: 0.7
-                     }
-                   ]}
-                   layout={{
-                     margin: { l: 40, r: 20, t: 20, b: 40 },
-                     showlegend: false,
-                     xaxis: { 
-                       title: '',
-                       type: 'category'  // Treat as categories to add gaps
-                     },
-                     yaxis: { title: 'Count' },
-                     bargap: 0.1  // Add gaps between bars
-                   }}
-                   style={{ width: '100%', height: '260px' }}
-                   config={{ displayModeBar: false }}
-                 />
-               </Box>
-               <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
-                 <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
-                   Synthetic Data
-                 </Typography>
-                 <Plot
-                   data={[
-                     {
-                       x: plotData.synthetic_values,
-                       type: 'histogram',
-                       name: 'Synthetic',
-                       marker: { color: '#dc2626' },
-                       opacity: 0.7
-                     }
-                   ]}
-                   layout={{
-                     margin: { l: 40, r: 20, t: 20, b: 40 },
-                     showlegend: false,
-                     xaxis: { 
-                       title: '',
-                       type: 'category'  // Treat as categories to add gaps
-                     },
-                     yaxis: { title: 'Count' },
-                     bargap: 0.1  // Add gaps between bars
-                   }}
-                   style={{ width: '100%', height: '260px' }}
-                   config={{ displayModeBar: false }}
-                 />
-               </Box>
-             </Box>
-           );
-         }
+        if (isDiscrete) {
+          // Render discrete histogram with gaps - separate side by side plots
+          // Convert to percentages for discrete variables
+          const realValueCounts = {};
+          plotData.real_values.forEach(val => {
+            realValueCounts[val] = (realValueCounts[val] || 0) + 1;
+          });
+          
+          const syntheticValueCounts = {};
+          plotData.synthetic_values.forEach(val => {
+            syntheticValueCounts[val] = (syntheticValueCounts[val] || 0) + 1;
+          });
+          
+          const realTotal = plotData.real_values.length;
+          const syntheticTotal = plotData.synthetic_values.length;
+          
+          // Convert counts to percentages
+          const realValuesWithPercentages = [];
+          const realPercentages = [];
+          Object.entries(realValueCounts).forEach(([value, count]) => {
+            realValuesWithPercentages.push(value);
+            realPercentages.push((count / realTotal) * 100);
+          });
+          
+          const syntheticValuesWithPercentages = [];
+          const syntheticPercentages = [];
+          Object.entries(syntheticValueCounts).forEach(([value, count]) => {
+            syntheticValuesWithPercentages.push(value);
+            syntheticPercentages.push((count / syntheticTotal) * 100);
+          });
+          
+          return (
+            <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
+              <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
+                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
+                  Real Data
+                </Typography>
+                <Plot
+                  data={[
+                    {
+                      x: realValuesWithPercentages,
+                      y: realPercentages,
+                      type: 'bar',
+                      name: 'Real',
+                      marker: { color: '#2563eb' },
+                      opacity: 0.7
+                    }
+                  ]}
+                  layout={{
+                    margin: { l: 40, r: 20, t: 20, b: 40 },
+                    showlegend: false,
+                    xaxis: { 
+                      title: '',
+                      type: 'category'  // Treat as categories to add gaps
+                    },
+                    yaxis: { title: 'Percentage (%)' },
+                    bargap: 0.1  // Add gaps between bars
+                  }}
+                  style={{ width: '100%', height: '260px' }}
+                  config={{ displayModeBar: false }}
+                />
+              </Box>
+              
+              <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
+                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
+                  Synthetic Data
+                </Typography>
+                <Plot
+                  data={[
+                    {
+                      x: syntheticValuesWithPercentages,
+                      y: syntheticPercentages,
+                      type: 'bar',
+                      name: 'Synthetic',
+                      marker: { color: '#dc2626' },
+                      opacity: 0.7
+                    }
+                  ]}
+                  layout={{
+                    margin: { l: 40, r: 20, t: 20, b: 40 },
+                    showlegend: false,
+                    xaxis: { 
+                      title: '',
+                      type: 'category'  // Treat as categories to add gaps
+                    },
+                    yaxis: { title: 'Percentage (%)' },
+                    bargap: 0.1  // Add gaps between bars
+                  }}
+                  style={{ width: '100%', height: '260px' }}
+                  config={{ displayModeBar: false }}
+                />
+              </Box>
+            </Box>
+          );
+        }
         
         // Regular continuous histogram with overlay
+        // Calculate shared bins and range for proper overlay comparison
+        const combinedValues = [...plotData.real_values, ...plotData.synthetic_values];
+        
+        // Handle edge cases
+        if (combinedValues.length === 0) {
+          return <Typography>No data available for histogram</Typography>;
+        }
+        
+        const minValue = Math.min(...combinedValues);
+        const maxValue = Math.max(...combinedValues);
+        const range = maxValue - minValue;
+        
+        // Handle case where all values are identical
+        if (range === 0) {
+          const singleValue = minValue;
+          const sharedXBins = {
+            start: singleValue - 0.5,
+            end: singleValue + 0.5,
+            size: 1
+          };
+          
+          return (
+            <Plot
+              data={[
+                {
+                  x: plotData.real_values,
+                  type: 'histogram',
+                  name: 'Real',
+                  marker: { color: '#2563eb' },
+                  opacity: 0.5,
+                  histnorm: 'count',
+                  xbins: sharedXBins
+                },
+                {
+                  x: plotData.synthetic_values,
+                  type: 'histogram',
+                  name: 'Synthetic',
+                  marker: { color: '#dc2626' },
+                  opacity: 0.5,
+                  histnorm: 'count',
+                  xbins: sharedXBins
+                }
+              ]}
+              layout={{
+                margin: { l: 60, r: 20, t: 20, b: 40 },
+                barmode: 'overlay',
+                xaxis: { 
+                  title: '',
+                  range: [singleValue - 1, singleValue + 1]
+                },
+                yaxis: { title: 'Count' },
+                legend: { x: 0.7, y: 0.9 }
+              }}
+              style={{ width: '100%', height: '300px' }}
+              config={{ displayModeBar: false }}
+            />
+          );
+        }
+        
+        const binSize = range / 30; // 30 bins total
+        
+        const sharedXBins = {
+          start: minValue,
+          end: maxValue,
+          size: binSize
+        };
+        
         return (
           <Plot
             data={[
@@ -436,7 +672,7 @@ const EmbeddingPlot = ({
                 marker: { color: '#2563eb' },
                 opacity: 0.5,
                 histnorm: 'probability density',
-                nbinsx: 30
+                xbins: sharedXBins
               },
               {
                 x: plotData.synthetic_values,
@@ -445,13 +681,16 @@ const EmbeddingPlot = ({
                 marker: { color: '#dc2626' },
                 opacity: 0.5,
                 histnorm: 'probability density',
-                nbinsx: 30
+                xbins: sharedXBins
               }
             ]}
             layout={{
               margin: { l: 60, r: 20, t: 20, b: 40 },
               barmode: 'overlay',
-              xaxis: { title: '' },
+              xaxis: { 
+                title: '',
+                range: [minValue - range * 0.05, maxValue + range * 0.05] // Add 5% padding
+              },
               yaxis: { title: 'Probability Density' },
               legend: { x: 0.7, y: 0.9 }
             }}
@@ -498,12 +737,24 @@ const EmbeddingPlot = ({
         );
 
       case 'bar':
+        // Convert counts to percentages
+        const realTotal = plotData.real_counts.reduce((sum, count) => sum + count, 0);
+        const syntheticTotal = plotData.synthetic_counts.reduce((sum, count) => sum + count, 0);
+        
+        const realPercentages = realTotal > 0 
+          ? plotData.real_counts.map(count => (count / realTotal) * 100)
+          : plotData.real_counts.map(() => 0);
+          
+        const syntheticPercentages = syntheticTotal > 0
+          ? plotData.synthetic_counts.map(count => (count / syntheticTotal) * 100)
+          : plotData.synthetic_counts.map(() => 0);
+          
         return (
           <Plot
             data={[
               {
                 x: plotData.categories,
-                y: plotData.real_counts,
+                y: realPercentages,
                 type: 'bar',
                 name: 'Real',
                 marker: { color: '#2563eb' },
@@ -511,7 +762,7 @@ const EmbeddingPlot = ({
               },
               {
                 x: plotData.categories,
-                y: plotData.synthetic_counts,
+                y: syntheticPercentages,
                 type: 'bar',
                 name: 'Synthetic',
                 marker: { color: '#dc2626' },
@@ -522,7 +773,7 @@ const EmbeddingPlot = ({
               margin: { l: 40, r: 20, t: 20, b: 40 },
               barmode: 'group',
               xaxis: { title: '' },
-              yaxis: { title: 'Count' },
+              yaxis: { title: 'Percentage (%)' },
               legend: { x: 0.7, y: 0.9 }
             }}
             style={{ width: '100%', height: '300px' }}
@@ -649,6 +900,10 @@ const EmbeddingPlot = ({
     const adjustedOpacity = baseOpacity * opacityFactor;
 
     // Clear previous plot
+    if (!svgRef.current) {
+      console.warn('SVG ref is null, skipping D3 visualization');
+      return;
+    }
     d3.select(svgRef.current).selectAll("*").remove();
 
     // Create SVG with enhanced sharpness configuration
@@ -1422,6 +1677,7 @@ const EmbeddingPlot = ({
             <span>
               <IconButton 
                 size="small" 
+                aria-label="Clear selection"
                 onClick={clearSelection}
                 disabled={selectedPoints.length === 0}
                 sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
@@ -1434,6 +1690,7 @@ const EmbeddingPlot = ({
           <Tooltip title="Select All">
             <IconButton 
               size="small" 
+              aria-label="Select all"
               onClick={selectAllPoints}
               sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
             >
@@ -1461,30 +1718,7 @@ const EmbeddingPlot = ({
               fontSize: '11px'
             }}
           />
-          <Chip
-            label={(() => {
-              const vw = window.innerWidth;
-              const vh = window.innerHeight;
-              const ratio = vw / vh;
-              
-              if (vw < 768) {
-                return ratio < 0.75 ? '📱 Tall' : '📱 Mobile';
-              } else if (vw < 1024) {
-                return ratio > 1.3 ? '📱 Tablet-L' : '📱 Tablet-P';
-              } else if (vw < 1440) {
-                return ratio > 1.7 ? '🖥️ Wide' : ratio > 1.4 ? '🖥️ Desktop' : '🖥️ Tall';
-              } else {
-                return ratio > 2.0 ? '🖥️ Ultra-wide' : ratio > 1.6 ? '🖥️ Large' : '🖥️ Pro';
-              }
-            })()}
-            size="small"
-            variant="outlined"
-            color="primary"
-            sx={{ 
-              bgcolor: 'rgba(255, 255, 255, 0.9)',
-              fontSize: '11px'
-            }}
-          />
+          {/* Removed aspect ratio display chip - keeping logic for background calculations */}
         </Box>
 
         {/* Removed aspect ratio controls - now fully automatic */}
@@ -1638,39 +1872,10 @@ const EmbeddingPlot = ({
             </Box>
           </Box>
 
-          {/* History Data Message */}
-          {isFromHistory && selectedPoints.length > 0 && (
-            <Alert severity="info" sx={{ mt: 1 }}>
-              <Typography variant="body2" component="div">
-                <strong>Loaded from History</strong>
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5 }}>
-                Distribution plots are not available for embeddings loaded from history. 
-                To analyze distributions, please generate a new embedding with your data.
-              </Typography>
-              <Typography variant="caption" sx={{ mt: 1, display: 'block', fontStyle: 'italic' }}>
-                ✨ You can still select points to explore the embedding structure!
-              </Typography>
-            </Alert>
-          )}
-
-          {/* Alternative message for history data when no points selected */}
-          {isFromHistory && selectedPoints.length === 0 && (
-            <Alert severity="info" sx={{ mt: 1 }}>
-              <Typography variant="body2" component="div">
-                <strong>Viewing Historical Embedding</strong>
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5 }}>
-                This embedding was loaded from history. Select points to see selection statistics, 
-                or generate a new embedding to access distribution analysis features.
-              </Typography>
-            </Alert>
-          )}
-
           <Divider />
 
-          {/* Distribution Controls - Only show for fresh embeddings */}
-          {!isFromHistory && (
+          {/* Distribution Controls - Show when we have original data available */}
+          {originalData && originalData.headers && originalData.headers.length > 0 ? (
             <>
               {/* Column Selection */}
               <FormControl fullWidth size="small">
@@ -1815,6 +2020,24 @@ const EmbeddingPlot = ({
                 )}
               </Box>
             </>
+          ) : (
+            /* Simple message when no data available for distribution plots */
+            selectedPoints.length > 0 && (
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                minHeight: '100px',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                bgcolor: 'grey.50'
+              }}>
+                <Typography variant="body2" color="text.secondary">
+                  Distribution analysis not available for this embedding
+                </Typography>
+              </Box>
+            )
           )}
 
           {/* Legend */}

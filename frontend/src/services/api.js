@@ -9,7 +9,8 @@ const api = axios.create({
   },
 });
 
-export const computeEmbedding = async ({
+// Submit embedding job for asynchronous processing
+export const submitEmbeddingJob = async ({
   real_data,
   synthetic_data,
   method = 'umap',
@@ -40,14 +41,8 @@ export const computeEmbedding = async ({
       synthetic_headers
     });
 
-    // The simplified endpoint returns embeddings and metadata directly
-    const { embeddings, metadata } = response.data;
-    
-    if (!embeddings?.real || !embeddings?.synthetic || !metadata) {
-      throw new Error('Invalid response from server: missing embeddings or metadata');
-    }
-
-    return { embeddings, metadata };
+    // Return job submission details
+    return response.data;
   } catch (error) {
     if (error.response) {
       if (error.response.status === 422) {
@@ -67,6 +62,82 @@ export const computeEmbedding = async ({
     } else {
       throw error;
     }
+  }
+};
+
+// Get job status by job ID
+export const getJobStatus = async (jobId) => {
+  try {
+    const response = await api.get(`/jobs/${jobId}/status`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to get job status:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to get job status');
+  }
+};
+
+// Get completed job results (embeddings and metadata)
+export const getJobResults = async (jobId) => {
+  try {
+    const response = await api.post(`/jobs/${jobId}/load`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to get job results:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to get job results');
+  }
+};
+
+// Get queue status
+export const getQueueStatus = async () => {
+  try {
+    const response = await api.get('/queue/status');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to get queue status:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to get queue status');
+  }
+};
+
+// Cancel a job
+export const cancelJob = async (jobId) => {
+  try {
+    const response = await api.post(`/jobs/${jobId}/cancel`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to cancel job:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to cancel job');
+  }
+};
+
+// Legacy function for backward compatibility - now wraps async flow
+export const computeEmbedding = async (params) => {
+  try {
+    // Submit the job
+    const jobSubmission = await submitEmbeddingJob(params);
+    
+    // Poll for completion
+    const maxWaitTime = 300000; // 5 minutes max wait
+    const pollInterval = 1000; // Poll every 1 second
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < maxWaitTime) {
+      const status = await getJobStatus(jobSubmission.job_id);
+      
+      if (status.status === 'completed') {
+        // Get the results
+        const results = await getJobResults(jobSubmission.job_id);
+        return results; // This should have embeddings and metadata format
+      } else if (status.status === 'failed') {
+        throw new Error(status.error_message || 'Job failed');
+      }
+      
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+    
+    throw new Error('Job timed out waiting for completion');
+  } catch (error) {
+    throw error;
   }
 };
 
