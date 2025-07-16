@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     
     # Embedding Configuration
     max_data_points: int = Field(default=999999999, env="MAX_DATA_POINTS")
-    embedding_timeout: int = Field(default=600, env="EMBEDDING_TIMEOUT")  # 10 minutes
+    embedding_timeout: int = Field(default=240, env="EMBEDDING_TIMEOUT")  # 4 minutes - reduced from 10 minutes
     enable_gpu: bool = Field(default=False, env="ENABLE_GPU")
     
     class Config:

@@ -1,100 +1,222 @@
 """API routes for embedding job history management."""
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel
+from datetime import datetime, timedelta
+import json
 
 from services.job_service import JobService
+from utils.logging_config import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
-class JobHistoryResponse(BaseModel):
-    jobs: List[Dict[str, Any]]
-    total: int
-    page: int
-    limit: int
-
-class JobDetailResponse(BaseModel):
-    job: Dict[str, Any]
-    tags: List[str]
-
-class CreateJobRequest(BaseModel):
-    name: str
-    description: Optional[str] = None
-
-class AddTagRequest(BaseModel):
-    tag: str
-
-@router.get("/history", response_model=JobHistoryResponse)
+@router.get("/history")
 async def get_job_history(
-    page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    status: Optional[str] = Query(None, description="Filter by status"),
-    method: Optional[str] = Query(None, description="Filter by method"),
-    favorites_only: bool = Query(False, description="Show only favorites")
+    limit: int = 50,
+    offset: int = 0,
+    status: Optional[str] = None,
+    method: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
 ):
-    """Get paginated job history with optional filters."""
-    
+    """Get job history with optional filtering."""
     try:
-        offset = (page - 1) * limit
-        jobs, total = JobService.get_job_history(
+        # Parse date filters
+        date_from_dt = None
+        date_to_dt = None
+        
+        if date_from:
+            try:
+                date_from_dt = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date_from format. Use ISO format.")
+                
+        if date_to:
+            try:
+                date_to_dt = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date_to format. Use ISO format.")
+        
+        # Get jobs from database
+        jobs = JobService.get_jobs(
             limit=limit,
             offset=offset,
-            status_filter=status,
-            method_filter=method,
-            favorites_only=favorites_only
+            status=status,
+            method=method,
+            date_from=date_from_dt,
+            date_to=date_to_dt
         )
         
-        return JobHistoryResponse(
-            jobs=jobs,  # jobs are already dictionaries
-            total=total,
-            page=page,
-            limit=limit
+        # Format response
+        formatted_jobs = []
+        for job in jobs:
+            job_dict = {
+                "job_id": job.job_id,
+                "name": job.name,
+                "method": job.method,
+                "status": job.status,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "started_at": job.started_at.isoformat() if job.started_at else None,
+                "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+                "runtime_seconds": job.runtime_seconds,
+                "error_message": job.error_message,
+                "parameters": job.parameters if isinstance(job.parameters, dict) else json.loads(job.parameters) if job.parameters else {},
+                "has_results": job.has_results,
+                "has_compressed_data": job.has_compressed_data
+            }
+            
+            # Get processed samples from JobResult if available
+            if job.has_results:
+                try:
+                    results = JobService.get_job_results(job.job_id)
+                    if results:
+                        job_dict["actual_processed_samples"] = {
+                            "real_samples": results.get("real_processed_samples"),
+                            "synthetic_samples": results.get("synthetic_processed_samples")
+                        }
+                except Exception as e:
+                    logger.warning(f"Could not get processed samples for job {job.job_id}: {e}")
+                    job_dict["actual_processed_samples"] = None
+            else:
+                job_dict["actual_processed_samples"] = None
+            
+            formatted_jobs.append(job_dict)
+        
+        # Get total count for pagination
+        total_count = JobService.get_job_count(
+            status=status,
+            method=method,
+            date_from=date_from_dt,
+            date_to=date_to_dt
         )
+        
+        return {
+            "jobs": formatted_jobs,
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + limit) < total_count
+        }
         
     except Exception as e:
+        logger.error(f"Error getting job history: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get job history: {str(e)}")
 
-@router.get("/jobs/{job_id}", response_model=JobDetailResponse)
-async def get_job_detail(job_id: str):
-    """Get detailed job information including embeddings."""
-    
+@router.get("/history/{job_id}")
+async def get_job_details(job_id: str):
+    """Get detailed information about a specific job."""
     try:
-        job = JobService.get_job_by_id(job_id, include_embeddings=True)
+        job = JobService.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         
-        tags = JobService.get_job_tags(job_id)
+        # Get job results if available
+        results = None
+        if job.has_results:
+            results = JobService.get_job_results(job_id)
         
-        return JobDetailResponse(
-            job=job,  # job is already a dictionary with embeddings
-            tags=tags
-        )
+        # Get compressed data if available
+        compressed_data = None
+        if job.has_compressed_data:
+            compressed_data = JobService.get_compressed_data(job_id)
+        
+        job_dict = {
+            "job_id": job.job_id,
+            "name": job.name,
+            "method": job.method,
+            "status": job.status,
+            "created_at": job.created_at.isoformat() if job.created_at else None,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+            "runtime_seconds": job.runtime_seconds,
+            "error_message": job.error_message,
+            "parameters": job.parameters if isinstance(job.parameters, dict) else json.loads(job.parameters) if job.parameters else {},
+            "has_results": job.has_results,
+            "has_compressed_data": job.has_compressed_data,
+            "results": results,
+            "compressed_data": compressed_data
+        }
+        
+        # Get processed samples from JobResult if available
+        if job.has_results and results:
+            job_dict["actual_processed_samples"] = {
+                "real_samples": results.get("real_processed_samples"),
+                "synthetic_samples": results.get("synthetic_processed_samples")
+            }
+        else:
+            job_dict["actual_processed_samples"] = None
+        
+        return job_dict
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get job detail: {str(e)}")
+        logger.error(f"Error getting job details for {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get job details: {str(e)}")
 
-@router.post("/jobs/{job_id}/favorite")
-async def toggle_job_favorite(job_id: str):
-    """Toggle favorite status of a job."""
-    
+@router.post("/jobs/{job_id}/load")
+async def load_job_embeddings(job_id: str):
+    """Load embeddings from a completed job with compressed data for distribution plots."""
     try:
-        success = JobService.toggle_favorite(job_id)
-        if not success:
+        job = JobService.get_job(job_id)
+        if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         
-        return {"message": "Favorite status toggled successfully"}
+        if job.status != "completed":
+            raise HTTPException(status_code=400, detail="Job is not completed")
+        
+        # Get job results
+        results = JobService.get_job_results(job_id)
+        if not results:
+            raise HTTPException(status_code=400, detail="Job has no embedding data")
+        
+        # Get compressed data for distribution plots
+        compressed_data = JobService.get_compressed_data(job_id)
+        
+        # Prepare session state with compressed data if available
+        session_state = {}
+        if compressed_data:
+            session_state = {
+                "realData": {
+                    "data": compressed_data["real_data"],
+                    "headers": compressed_data["real_headers"]
+                },
+                "syntheticData": {
+                    "data": compressed_data["synthetic_data"],
+                    "headers": compressed_data["synthetic_headers"]
+                }
+            }
+        
+        # Return the same format as the embedding computation endpoint
+        return {
+            "embeddings": {
+                "real": results["embedding_real"],
+                "synthetic": results["embedding_synthetic"]
+            },
+            "metadata": {
+                "runtime": job.runtime_seconds,
+                "method": job.method,
+                "params": job.parameters if isinstance(job.parameters, dict) else json.loads(job.parameters) if job.parameters else {},
+                "real_samples": results.get("real_processed_samples"),
+                "synthetic_samples": results.get("synthetic_processed_samples"),
+                "preprocessing": results.get("preprocessing_info"),
+                "job_id": job.job_id,
+                "job_name": job.name,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "has_compressed_data": job.has_compressed_data
+            },
+            "session_state": session_state
+        }
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to toggle favorite: {str(e)}")
+        logger.error(f"Error loading job embeddings for {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load job embeddings: {str(e)}")
 
-@router.delete("/jobs/{job_id}")
+@router.delete("/history/{job_id}")
 async def delete_job(job_id: str):
     """Delete a job and its associated data."""
-    
     try:
         success = JobService.delete_job(job_id)
         if not success:
@@ -105,92 +227,27 @@ async def delete_job(job_id: str):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Error deleting job {job_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete job: {str(e)}")
 
-@router.post("/jobs/{job_id}/tags")
-async def add_job_tag(job_id: str, request: AddTagRequest):
-    """Add a tag to a job."""
-    
-    try:
-        success = JobService.add_job_tag(job_id, request.tag)
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to add tag or tag already exists")
-        
-        return {"message": "Tag added successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to add tag: {str(e)}")
-
-@router.get("/jobs/{job_id}/tags")
-async def get_job_tags(job_id: str):
-    """Get all tags for a job."""
-    
-    try:
-        tags = JobService.get_job_tags(job_id)
-        return {"tags": tags}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get job tags: {str(e)}")
-
-@router.post("/jobs/{job_id}/load")
-async def load_job_embeddings(job_id: str):
-    """Load embeddings from a completed job."""
-    
-    try:
-        job = JobService.get_job_by_id(job_id, include_embeddings=True)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        
-        if job["status"] != "completed":
-            raise HTTPException(status_code=400, detail="Job is not completed")
-        
-        if not job.get("embedding_real") or not job.get("embedding_synthetic"):
-            raise HTTPException(status_code=400, detail="Job has no embedding data")
-        
-        # Return the same format as the embedding computation endpoint
-        return {
-            "embeddings": {
-                "real": job["embedding_real"],
-                "synthetic": job["embedding_synthetic"]
-            },
-            "metadata": {
-                "runtime": job["runtime_seconds"],
-                "method": job["method"],
-                "params": job["parameters"],
-                "real_samples": job["real_data_shape"][0] if job["real_data_shape"] else 0,
-                "synthetic_samples": job["synthetic_data_shape"][0] if job["synthetic_data_shape"] else 0,
-                "preprocessing": job["preprocessing_info"],
-                "job_id": job["job_id"],
-                "job_name": job["name"],
-                "created_at": job["created_at"].isoformat() if job["created_at"] else None
-            }
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load job embeddings: {str(e)}")
-
 @router.get("/stats")
-async def get_job_stats():
-    """Get overall job statistics."""
-    
+async def get_stats():
+    """Get job statistics."""
     try:
-        stats = JobService.get_job_stats()
+        stats = JobService.get_job_statistics()
         return stats
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get job stats: {str(e)}")
+        logger.error(f"Error getting stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
 
-@router.post("/cleanup")
-async def cleanup_stuck_jobs():
-    """Clean up jobs that have been stuck in 'running' status for too long."""
-    
+@router.get("/history/stats")
+async def get_history_stats():
+    """Get statistics about job history."""
     try:
-        count = JobService.cleanup_stuck_jobs()
-        return {"message": f"Cleaned up {count} stuck jobs"}
+        stats = JobService.get_job_statistics()
+        return stats
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to cleanup stuck jobs: {str(e)}") 
+        logger.error(f"Error getting history stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get history statistics: {str(e)}") 

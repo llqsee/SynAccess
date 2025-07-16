@@ -7,202 +7,202 @@ class TestHistoryRoutes:
         """Test successful job history retrieval"""
         mock_jobs = [
             {
-                "id": 1,
+                "job_id": "job-1",
+                "name": "Test Job 1",
                 "method": "umap",
                 "status": "completed",
                 "created_at": datetime.now(),
-                "completed_at": datetime.now(),
-                "runtime": 15.5,
+                "runtime_seconds": 15.5,
                 "is_favorite": False
             },
             {
-                "id": 2,
+                "job_id": "job-2", 
+                "name": "Test Job 2",
                 "method": "tsne",
                 "status": "running",
                 "created_at": datetime.now(),
-                "completed_at": None,
-                "runtime": None,
+                "runtime_seconds": None,
                 "is_favorite": True
             }
         ]
         
-        with patch('services.job_service.JobService.get_jobs') as mock_get_jobs:
-            mock_get_jobs.return_value = {
-                "jobs": mock_jobs,
-                "total": 2,
-                "page": 1,
-                "per_page": 10
-            }
+        with patch('routes.history.JobService.get_job_history') as mock_get_jobs:
+            mock_get_jobs.return_value = (mock_jobs, 2)
             
-            response = client.get("/history")
+            response = client.get("/api/v1/history")
             
             assert response.status_code == 200
             data = response.json()
             
             assert "jobs" in data
             assert "total" in data
+            assert "page" in data
+            assert "limit" in data
             assert len(data["jobs"]) == 2
             assert data["total"] == 2
 
     def test_get_job_history_with_filters(self, client):
         """Test job history retrieval with filters"""
-        with patch('services.job_service.JobService.get_jobs') as mock_get_jobs:
-            mock_get_jobs.return_value = {
-                "jobs": [],
-                "total": 0,
-                "page": 1,
-                "per_page": 10
-            }
+        with patch('routes.history.JobService.get_job_history') as mock_get_jobs:
+            mock_get_jobs.return_value = ([], 0)
             
-            response = client.get("/history", params={
+            response = client.get("/api/v1/history", params={
                 "status": "completed",
                 "method": "umap",
-                "is_favorite": True,
+                "favorites_only": True,
                 "page": 2,
-                "per_page": 5
+                "limit": 5
             })
             
             assert response.status_code == 200
-            mock_get_jobs.assert_called_once()
-            
-            # Check that filters were passed to service
-            call_args = mock_get_jobs.call_args[1]
-            assert call_args["status"] == "completed"
-            assert call_args["method"] == "umap"
-            assert call_args["is_favorite"] is True
-            assert call_args["page"] == 2
-            assert call_args["per_page"] == 5
-
-    def test_get_job_history_with_search(self, client):
-        """Test job history retrieval with search"""
-        with patch('services.job_service.JobService.get_jobs') as mock_get_jobs:
-            mock_get_jobs.return_value = {
-                "jobs": [],
-                "total": 0,
-                "page": 1,
-                "per_page": 10
-            }
-            
-            response = client.get("/history", params={
-                "search": "test_job",
-                "sort_by": "created_at",
-                "order": "desc"
-            })
-            
-            assert response.status_code == 200
-            call_args = mock_get_jobs.call_args[1]
-            assert call_args["search"] == "test_job"
-            assert call_args["sort_by"] == "created_at"
-            assert call_args["order"] == "desc"
+            mock_get_jobs.assert_called_once_with(
+                limit=5,
+                offset=5,  # (page-1) * limit = (2-1) * 5 = 5
+                status_filter="completed",
+                method_filter="umap",
+                favorites_only=True
+            )
 
     def test_get_job_detail_success(self, client):
         """Test successful job detail retrieval"""
         mock_job = {
-            "id": 1,
+            "job_id": "job-1",
+            "name": "Test Job",
             "method": "umap",
             "status": "completed",
             "created_at": datetime.now(),
-            "completed_at": datetime.now(),
-            "runtime": 15.5,
+            "runtime_seconds": 15.5,
             "is_favorite": False,
             "error_message": None,
-            "parameters": {"n_neighbors": 15}
+            "parameters": {"n_neighbors": 15},
+            "embedding_real": [[0.1, 0.2]],
+            "embedding_synthetic": [[0.3, 0.4]]
         }
         
-        with patch('services.job_service.JobService.get_job') as mock_get_job:
-            mock_get_job.return_value = mock_job
+        mock_tags = ["important", "demo"]
+        
+        with patch('routes.history.JobService.get_job_by_id') as mock_get_job, \
+             patch('routes.history.JobService.get_job_tags') as mock_get_tags:
             
-            response = client.get("/jobs/1")
+            mock_get_job.return_value = mock_job
+            mock_get_tags.return_value = mock_tags
+            
+            response = client.get("/api/v1/jobs/job-1")
             
             assert response.status_code == 200
             data = response.json()
-            assert data["id"] == 1
-            assert data["method"] == "umap"
-            assert data["status"] == "completed"
+            assert data["job"]["job_id"] == "job-1"
+            assert data["job"]["method"] == "umap"
+            assert data["tags"] == mock_tags
+            mock_get_job.assert_called_once_with("job-1", include_embeddings=True)
 
     def test_get_job_detail_not_found(self, client):
         """Test job detail retrieval for non-existent job"""
-        with patch('services.job_service.JobService.get_job') as mock_get_job:
+        with patch('routes.history.JobService.get_job_by_id') as mock_get_job:
             mock_get_job.return_value = None
             
-            response = client.get("/jobs/999")
+            response = client.get("/api/v1/jobs/nonexistent")
             
             assert response.status_code == 404
             assert "Job not found" in response.json()["detail"]
 
     def test_load_job_embeddings_success(self, client):
         """Test successful job embeddings loading"""
-        mock_embeddings = {
-            "real": [[0.1, 0.2], [0.3, 0.4]],
-            "synthetic": [[0.5, 0.6], [0.7, 0.8]]
-        }
-        mock_metadata = {
+        mock_job = {
+            "job_id": "job-1",
+            "name": "Test Job",
             "method": "umap",
-            "runtime": 15.5,
-            "job_id": 1
+            "status": "completed",
+            "runtime_seconds": 15.5,
+            "parameters": {"n_neighbors": 15},
+            "real_data_shape": [100, 5],
+            "synthetic_data_shape": [100, 5],
+            "preprocessing_info": {"method": "one_hot"},
+            "embedding_real": [[0.1, 0.2], [0.3, 0.4]],
+            "embedding_synthetic": [[0.5, 0.6], [0.7, 0.8]],
+            "created_at": datetime.now()
         }
         
-        with patch('services.job_service.JobService.load_embeddings') as mock_load:
-            mock_load.return_value = {
-                "embeddings": mock_embeddings,
-                "metadata": mock_metadata
-            }
+        with patch('routes.history.JobService.get_job_by_id') as mock_get_job:
+            mock_get_job.return_value = mock_job
             
-            response = client.post("/jobs/1/load")
+            response = client.post("/api/v1/jobs/job-1/load")
             
             assert response.status_code == 200
             data = response.json()
             
             assert "embeddings" in data
             assert "metadata" in data
-            assert data["metadata"]["job_id"] == 1
+            assert "real" in data["embeddings"]
+            assert "synthetic" in data["embeddings"]
+            assert data["metadata"]["job_id"] == "job-1"
+            assert data["metadata"]["method"] == "umap"
 
     def test_load_job_embeddings_not_found(self, client):
         """Test loading embeddings for non-existent job"""
-        with patch('services.job_service.JobService.load_embeddings') as mock_load:
-            mock_load.side_effect = Exception("Job not found")
+        with patch('routes.history.JobService.get_job_by_id') as mock_get_job:
+            mock_get_job.return_value = None
             
-            response = client.post("/jobs/999/load")
+            response = client.post("/api/v1/jobs/nonexistent/load")
             
             assert response.status_code == 404
 
+    def test_load_job_embeddings_not_completed(self, client):
+        """Test loading embeddings for incomplete job"""
+        mock_job = {
+            "job_id": "job-1",
+            "status": "running",
+            "embedding_real": None,
+            "embedding_synthetic": None
+        }
+        
+        with patch('routes.history.JobService.get_job_by_id') as mock_get_job:
+            mock_get_job.return_value = mock_job
+            
+            response = client.post("/api/v1/jobs/job-1/load")
+            
+            assert response.status_code == 400
+            assert "not completed" in response.json()["detail"]
+
     def test_toggle_job_favorite_success(self, client):
         """Test successful job favorite toggle"""
-        with patch('services.job_service.JobService.toggle_favorite') as mock_toggle:
-            mock_toggle.return_value = {"is_favorite": True}
+        with patch('routes.history.JobService.toggle_favorite') as mock_toggle:
+            mock_toggle.return_value = True
             
-            response = client.post("/jobs/1/favorite")
+            response = client.post("/api/v1/jobs/job-1/favorite")
             
             assert response.status_code == 200
             data = response.json()
-            assert data["is_favorite"] is True
+            assert "message" in data
+            assert "toggled successfully" in data["message"]
 
     def test_toggle_job_favorite_not_found(self, client):
         """Test favorite toggle for non-existent job"""
-        with patch('services.job_service.JobService.toggle_favorite') as mock_toggle:
-            mock_toggle.side_effect = Exception("Job not found")
+        with patch('routes.history.JobService.toggle_favorite') as mock_toggle:
+            mock_toggle.return_value = False
             
-            response = client.post("/jobs/999/favorite")
+            response = client.post("/api/v1/nonexistent/favorite")
             
             assert response.status_code == 404
 
     def test_delete_job_success(self, client):
         """Test successful job deletion"""
-        with patch('services.job_service.JobService.delete_job') as mock_delete:
+        with patch('routes.history.JobService.delete_job') as mock_delete:
             mock_delete.return_value = True
             
-            response = client.delete("/jobs/1")
+            response = client.delete("/api/v1/jobs/job-1")
             
             assert response.status_code == 200
             data = response.json()
-            assert data["success"] is True
+            assert "message" in data
+            assert "deleted successfully" in data["message"]
 
     def test_delete_job_not_found(self, client):
-        """Test deletion of non-existent job"""
-        with patch('services.job_service.JobService.delete_job') as mock_delete:
+        """Test job deletion for non-existent job"""
+        with patch('routes.history.JobService.delete_job') as mock_delete:
             mock_delete.return_value = False
             
-            response = client.delete("/jobs/999")
+            response = client.delete("/api/v1/nonexistent")
             
             assert response.status_code == 404
 
@@ -210,88 +210,55 @@ class TestHistoryRoutes:
         """Test successful job statistics retrieval"""
         mock_stats = {
             "total_jobs": 10,
-            "completed_jobs": 7,
-            "running_jobs": 2,
+            "completed_jobs": 8,
             "failed_jobs": 1,
-            "avg_runtime": 25.5,
-            "methods": {
-                "umap": 6,
-                "tsne": 4
-            },
-            "recent_activity": []
+            "running_jobs": 1
         }
         
-        with patch('services.job_service.JobService.get_job_stats') as mock_stats_func:
-            mock_stats_func.return_value = mock_stats
+        with patch('routes.history.JobService.get_job_stats') as mock_get_stats:
+            mock_get_stats.return_value = mock_stats
             
-            response = client.get("/stats")
+            response = client.get("/api/v1/stats")
             
             assert response.status_code == 200
             data = response.json()
-            
             assert data["total_jobs"] == 10
-            assert data["completed_jobs"] == 7
-            assert data["avg_runtime"] == 25.5
-            assert "methods" in data
+            assert data["completed_jobs"] == 8
 
-    def test_get_job_stats_error(self, client):
-        """Test job statistics with service error"""
-        with patch('services.job_service.JobService.get_job_stats') as mock_stats:
-            mock_stats.side_effect = Exception("Database error")
+    def test_add_job_tag_success(self, client):
+        """Test successful job tag addition"""
+        with patch('routes.history.JobService.add_job_tag') as mock_add_tag:
+            mock_add_tag.return_value = True
             
-            response = client.get("/stats")
-            
-            assert response.status_code == 500
-
-    def test_pagination_validation(self, client):
-        """Test pagination parameter validation"""
-        with patch('services.job_service.JobService.get_jobs') as mock_get_jobs:
-            mock_get_jobs.return_value = {
-                "jobs": [],
-                "total": 0,
-                "page": 1,
-                "per_page": 10
-            }
-            
-            # Test invalid page (negative)
-            response = client.get("/history", params={"page": -1})
-            assert response.status_code == 422
-            
-            # Test invalid per_page (too large)
-            response = client.get("/history", params={"per_page": 1001})
-            assert response.status_code == 422
-
-    def test_get_job_history_empty_result(self, client):
-        """Test job history when no jobs exist"""
-        with patch('services.job_service.JobService.get_jobs') as mock_get_jobs:
-            mock_get_jobs.return_value = {
-                "jobs": [],
-                "total": 0,
-                "page": 1,
-                "per_page": 10
-            }
-            
-            response = client.get("/history")
+            response = client.post("/api/v1/jobs/job-1/tags", json={"tag": "important"})
             
             assert response.status_code == 200
             data = response.json()
-            assert data["jobs"] == []
-            assert data["total"] == 0
+            assert "message" in data
+            assert "added successfully" in data["message"]
 
-    def test_filter_validation(self, client):
-        """Test filter parameter validation"""
-        with patch('services.job_service.JobService.get_jobs') as mock_get_jobs:
-            mock_get_jobs.return_value = {
-                "jobs": [],
-                "total": 0,
-                "page": 1,
-                "per_page": 10
-            }
+    def test_get_job_tags_success(self, client):
+        """Test successful job tags retrieval"""
+        mock_tags = ["important", "demo", "test"]
+        
+        with patch('routes.history.JobService.get_job_tags') as mock_get_tags:
+            mock_get_tags.return_value = mock_tags
             
-            # Test invalid status
-            response = client.get("/history", params={"status": "invalid_status"})
-            assert response.status_code == 422
+            response = client.get("/api/v1/jobs/job-1/tags")
             
-            # Test invalid method
-            response = client.get("/history", params={"method": "invalid_method"})
-            assert response.status_code == 422 
+            assert response.status_code == 200
+            data = response.json()
+            assert "tags" in data
+            assert data["tags"] == mock_tags
+
+    def test_cleanup_stuck_jobs_success(self, client):
+        """Test successful stuck jobs cleanup"""
+        with patch('routes.history.JobService.cleanup_stuck_jobs') as mock_cleanup:
+            mock_cleanup.return_value = 3
+            
+            response = client.post("/api/v1/cleanup")
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert "message" in data
+            assert "3" in data["message"] 

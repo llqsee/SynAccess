@@ -104,7 +104,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 # Read body
                 body = await request.body()
                 if len(body) <= self.max_body_size:
-                    log_data['request_body'] = body.decode('utf-8')[:self.max_body_size]
+                    try:
+                        log_data['request_body'] = body.decode('utf-8')[:self.max_body_size]
+                    except UnicodeDecodeError:
+                        log_data['request_body'] = f"<Binary body: {len(body)} bytes>"
                 else:
                     log_data['request_body'] = f"<Body too large: {len(body)} bytes>"
             except Exception as e:
@@ -131,7 +134,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         if self.log_response_body and hasattr(response, 'body'):
             try:
                 if hasattr(response.body, '__len__') and len(response.body) <= self.max_body_size:
-                    log_data['response_body'] = response.body.decode('utf-8')[:self.max_body_size]
+                    try:
+                        log_data['response_body'] = response.body.decode('utf-8')[:self.max_body_size]
+                    except UnicodeDecodeError:
+                        log_data['response_body'] = f"<Binary response: {len(response.body)} bytes>"
                 else:
                     log_data['response_body'] = "<Response body too large or not available>"
             except Exception:

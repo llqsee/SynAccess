@@ -1,150 +1,126 @@
 import pytest
 import pandas as pd
-from utils.data_preprocessing import (
-    clean_data,
-    handle_missing_values,
-    encode_categorical_data,
-    scale_numerical_data
-)
-from utils.validation import (
-    validate_file_type,
-    validate_data_structure,
-    validate_embedding_parameters
-)
+import numpy as np
+from utils.data_preprocessing import preprocess_data
+from utils.validation import validate_embedding_params
 
 class TestDataPreprocessing:
-    def test_clean_data_success(self):
-        """Test successful data cleaning"""
-        data = pd.DataFrame({
-            'numeric': [1.0, 2.0, None, 4.0],
-            'categorical': ['A', 'B', 'A', None],
-            'mixed': [1, 'text', 3, 4]
-        })
+    def test_preprocess_data_numeric_only(self):
+        """Test preprocessing with only numeric data"""
+        real_data = [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0]
+        ]
         
-        cleaned = clean_data(data)
+        synthetic_data = [
+            [1.1, 2.1, 3.1],
+            [4.1, 5.1, 6.1]
+        ]
         
-        assert isinstance(cleaned, pd.DataFrame)
-        assert cleaned.shape[0] <= data.shape[0]  # May remove rows
+        real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
+        
+        assert isinstance(real_processed, np.ndarray)
+        assert isinstance(synth_processed, np.ndarray)
+        assert real_processed.shape == (2, 3)
+        assert synth_processed.shape == (2, 3)
+        assert real_processed.dtype == np.float32
+        assert synth_processed.dtype == np.float32
 
-    def test_handle_missing_values(self):
-        """Test missing value handling"""
-        data = pd.DataFrame({
-            'numeric': [1.0, 2.0, None, 4.0],
-            'categorical': ['A', 'B', None, 'B']
-        })
+    def test_preprocess_data_with_categorical(self):
+        """Test preprocessing with categorical data"""
+        real_data = [
+            ['A', 1.0, 2.0],
+            ['B', 3.0, 4.0],
+            ['A', 5.0, 6.0]
+        ]
         
-        result = handle_missing_values(data)
+        synthetic_data = [
+            ['A', 1.1, 2.1],
+            ['B', 3.1, 4.1],
+            ['A', 5.1, 6.1]
+        ]
         
-        assert not result.isnull().any().any()
+        real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
+        
+        assert isinstance(real_processed, np.ndarray)
+        assert isinstance(synth_processed, np.ndarray)
+        # Should have more columns due to one-hot encoding (A->0, B->1, plus 2 numeric)
+        assert real_processed.shape[1] >= 3  # At least original columns
+        assert synth_processed.shape[1] >= 3
+        assert real_processed.dtype == np.float32
+        assert synth_processed.dtype == np.float32
 
-    def test_encode_categorical_data(self):
-        """Test categorical data encoding"""
-        data = pd.DataFrame({
-            'category': ['A', 'B', 'C', 'A'],
-            'numeric': [1, 2, 3, 4]
-        })
+    def test_preprocess_data_mixed_types(self):
+        """Test preprocessing with mixed data types"""
+        real_data = [
+            ['category1', 1, 2.5],
+            ['category2', 2, 3.5],
+            ['category1', 3, 4.5]
+        ]
         
-        encoded = encode_categorical_data(data)
+        synthetic_data = [
+            ['category1', 1, 2.6],
+            ['category2', 2, 3.6],
+            ['category1', 3, 4.6]
+        ]
         
-        # Should have more columns after encoding
-        assert encoded.shape[1] >= data.shape[1]
-
-    def test_scale_numerical_data(self):
-        """Test numerical data scaling"""
-        data = pd.DataFrame({
-            'feature1': [1, 100, 1000],
-            'feature2': [0.1, 0.5, 0.9]
-        })
+        real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
         
-        scaled = scale_numerical_data(data)
-        
-        # Values should be scaled
-        assert scaled['feature1'].std() < data['feature1'].std()
+        assert isinstance(real_processed, np.ndarray)
+        assert isinstance(synth_processed, np.ndarray)
+        assert real_processed.shape[0] == 3
+        assert synth_processed.shape[0] == 3
+        assert real_processed.dtype == np.float32
+        assert synth_processed.dtype == np.float32
 
 class TestValidation:
-    def test_validate_file_type_csv(self):
-        """Test CSV file type validation"""
-        assert validate_file_type("data.csv") is True
-        assert validate_file_type("DATA.CSV") is True
-
-    def test_validate_file_type_excel(self):
-        """Test Excel file type validation"""
-        assert validate_file_type("data.xlsx") is True
-        assert validate_file_type("data.xls") is True
-
-    def test_validate_file_type_json(self):
-        """Test JSON file type validation"""
-        assert validate_file_type("data.json") is True
-
-    def test_validate_file_type_invalid(self):
-        """Test invalid file type validation"""
-        assert validate_file_type("data.txt") is False
-        assert validate_file_type("data.pdf") is False
-        assert validate_file_type("data") is False
-
-    def test_validate_data_structure_valid(self):
-        """Test valid data structure validation"""
-        data = {
-            "headers": ["feature1", "feature2"],
-            "data": [[1, 2], [3, 4]]
-        }
-        
-        assert validate_data_structure(data) is True
-
-    def test_validate_data_structure_missing_headers(self):
-        """Test data structure validation with missing headers"""
-        data = {
-            "data": [[1, 2], [3, 4]]
-        }
-        
-        assert validate_data_structure(data) is False
-
-    def test_validate_data_structure_empty_headers(self):
-        """Test data structure validation with empty headers"""
-        data = {
-            "headers": [],
-            "data": [[1, 2]]
-        }
-        
-        assert validate_data_structure(data) is False
-
-    def test_validate_embedding_parameters_umap(self):
-        """Test UMAP parameter validation"""
+    def test_validate_embedding_params_umap_valid(self):
+        """Test valid UMAP parameters"""
         params = {
-            "method": "umap",
             "n_neighbors": 15,
             "min_dist": 0.1,
-            "n_components": 2
+            "n_components": 2,
+            "random_state": 42
         }
         
-        assert validate_embedding_parameters(params) is True
+        # Should not raise any exception
+        validate_embedding_params("umap", params)
 
-    def test_validate_embedding_parameters_tsne(self):
-        """Test t-SNE parameter validation"""
+    def test_validate_embedding_params_tsne_valid(self):
+        """Test valid t-SNE parameters"""
         params = {
-            "method": "tsne",
             "perplexity": 30,
-            "learning_rate": 200,
-            "n_components": 2
+            "early_exaggeration": 12.0,
+            "n_components": 2,
+            "random_state": 42
         }
         
-        assert validate_embedding_parameters(params) is True
+        # Should not raise any exception
+        validate_embedding_params("tsne", params)
 
-    def test_validate_embedding_parameters_invalid_method(self):
-        """Test parameter validation with invalid method"""
-        params = {
-            "method": "invalid",
-            "n_neighbors": 15
-        }
+    def test_validate_embedding_params_invalid_method(self):
+        """Test validation with invalid method"""
+        params = {"n_neighbors": 15}
         
-        assert validate_embedding_parameters(params) is False
+        with pytest.raises(ValueError, match="Unsupported method"):
+            validate_embedding_params("invalid", params)
 
-    def test_validate_embedding_parameters_invalid_values(self):
-        """Test parameter validation with invalid values"""
+    def test_validate_embedding_params_invalid_umap_params(self):
+        """Test validation with invalid UMAP parameters"""
         params = {
-            "method": "umap",
-            "n_neighbors": -1,  # Invalid
-            "min_dist": 2.0     # Invalid (should be < 1)
+            "invalid_param": 15,
+            "n_neighbors": 10
         }
         
-        assert validate_embedding_parameters(params) is False 
+        with pytest.raises(ValueError, match="Invalid parameters for umap"):
+            validate_embedding_params("umap", params)
+
+    def test_validate_embedding_params_invalid_tsne_params(self):
+        """Test validation with invalid t-SNE parameters"""
+        params = {
+            "invalid_param": 30,
+            "perplexity": 20
+        }
+        
+        with pytest.raises(ValueError, match="Invalid parameters for tsne"):
+            validate_embedding_params("tsne", params) 

@@ -1,92 +1,158 @@
 import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
-from services.embedding import (
-    generate_umap_embedding,
-    generate_tsne_embedding,
-    prepare_data_for_embedding,
-    validate_embedding_data
-)
+from services.embedding import EmbeddingService
 
 class TestEmbeddingService:
-    def test_prepare_data_for_embedding_success(self):
-        """Test successful data preparation for embedding"""
-        real_data = {
-            "headers": ["feature1", "feature2", "feature3"],
-            "data": [
-                [1.0, 2.0, 3.0],
-                [4.0, 5.0, 6.0]
-            ]
-        }
-        
-        synthetic_data = {
-            "headers": ["feature1", "feature2", "feature3"],
-            "data": [
-                [1.1, 2.1, 3.1],
-                [4.1, 5.1, 6.1]
-            ]
-        }
-        
-        real_array, synthetic_array = prepare_data_for_embedding(real_data, synthetic_data)
-        
-        assert isinstance(real_array, np.ndarray)
-        assert isinstance(synthetic_array, np.ndarray)
-        assert real_array.shape == (2, 3)
-        assert synthetic_array.shape == (2, 3)
+    def setup_method(self):
+        """Set up test fixtures"""
+        self.embedding_service = EmbeddingService()
 
-    def test_validate_embedding_data_success(self):
-        """Test successful data validation"""
-        real_data = {
-            "headers": ["feature1", "feature2"],
-            "data": [[1.0, 2.0], [3.0, 4.0]]
-        }
-        
-        synthetic_data = {
-            "headers": ["feature1", "feature2"],
-            "data": [[1.1, 2.1], [3.1, 4.1]]
-        }
-        
-        # Should not raise any exception
-        validate_embedding_data(real_data, synthetic_data)
+    def test_compute_embedding_umap_success(self):
+        """Test successful UMAP embedding computation"""
+        # Create larger datasets that work with UMAP (minimum 10 samples recommended)
+        real_data = [
+            [1.0, 2.0, 3.0, 4.0, 5.0],
+            [2.0, 3.0, 4.0, 5.0, 6.0],
+            [3.0, 4.0, 5.0, 6.0, 7.0],
+            [4.0, 5.0, 6.0, 7.0, 8.0],
+            [5.0, 6.0, 7.0, 8.0, 9.0],
+            [6.0, 7.0, 8.0, 9.0, 10.0],
+            [7.0, 8.0, 9.0, 10.0, 11.0],
+            [8.0, 9.0, 10.0, 11.0, 12.0],
+            [9.0, 10.0, 11.0, 12.0, 13.0],
+            [10.0, 11.0, 12.0, 13.0, 14.0]
+        ]
 
-    def test_validate_embedding_data_mismatched_headers(self):
-        """Test validation with mismatched headers"""
-        real_data = {
-            "headers": ["feature1", "feature2"],
-            "data": [[1.0, 2.0]]
-        }
-        
-        synthetic_data = {
-            "headers": ["feature1", "feature3"],  # Different header
-            "data": [[1.1, 2.1]]
-        }
-        
-        with pytest.raises(ValueError, match="Headers must match"):
-            validate_embedding_data(real_data, synthetic_data)
+        synthetic_data = [
+            [1.1, 2.1, 3.1, 4.1, 5.1],
+            [2.1, 3.1, 4.1, 5.1, 6.1],
+            [3.1, 4.1, 5.1, 6.1, 7.1],
+            [4.1, 5.1, 6.1, 7.1, 8.1],
+            [5.1, 6.1, 7.1, 8.1, 9.1],
+            [6.1, 7.1, 8.1, 9.1, 10.1],
+            [7.1, 8.1, 9.1, 10.1, 11.1],
+            [8.1, 9.1, 10.1, 11.1, 12.1],
+            [9.1, 10.1, 11.1, 12.1, 13.1],
+            [10.1, 11.1, 12.1, 13.1, 14.1]
+        ]
 
-    @patch('umap.UMAP')
-    def test_generate_umap_embedding_success(self, mock_umap_class):
-        """Test successful UMAP embedding generation"""
-        mock_umap = MagicMock()
-        mock_umap_class.return_value = mock_umap
-        
-        mock_umap.fit_transform.return_value = np.array([
-            [0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]
-        ])
-        
-        real_data = {
-            "headers": ["feature1", "feature2"],
-            "data": [[1.0, 2.0], [3.0, 4.0]]
+        embeddings, metadata = self.embedding_service.compute_embedding(
+            real_data=real_data,
+            synthetic_data=synthetic_data,
+            method="umap"
+        )
+
+        # Verify structure
+        assert isinstance(embeddings, dict)
+        assert "real" in embeddings
+        assert "synthetic" in embeddings
+        assert isinstance(metadata, dict)
+        assert "method" in metadata
+        assert "runtime" in metadata
+
+        # Verify dimensions
+        assert len(embeddings["real"]) == 10  # Number of real samples
+        assert len(embeddings["synthetic"]) == 10  # Number of synthetic samples
+        assert len(embeddings["real"][0]) == 2  # 2D embedding
+        assert len(embeddings["synthetic"][0]) == 2  # 2D embedding
+
+        # Verify metadata
+        assert metadata["method"] == "umap"
+        assert metadata["runtime"] > 0
+
+    def test_compute_embedding_tsne_success(self):
+        """Test successful t-SNE embedding computation"""
+        # Create datasets suitable for t-SNE
+        real_data = [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+            [7.0, 8.0, 9.0],
+            [10.0, 11.0, 12.0],
+            [13.0, 14.0, 15.0]
+        ]
+
+        synthetic_data = [
+            [1.1, 2.1, 3.1],
+            [4.1, 5.1, 6.1],
+            [7.1, 8.1, 9.1],
+            [10.1, 11.1, 12.1],
+            [13.1, 14.1, 15.1]
+        ]
+
+        embeddings, metadata = self.embedding_service.compute_embedding(
+            real_data=real_data,
+            synthetic_data=synthetic_data,
+            method="tsne"
+        )
+
+        # Verify structure
+        assert isinstance(embeddings, dict)
+        assert "real" in embeddings
+        assert "synthetic" in embeddings
+        assert isinstance(metadata, dict)
+        assert "method" in metadata
+        assert "runtime" in metadata
+
+        # Verify dimensions
+        assert len(embeddings["real"]) == 5
+        assert len(embeddings["synthetic"]) == 5
+        assert len(embeddings["real"][0]) == 2
+        assert len(embeddings["synthetic"][0]) == 2
+
+        # Verify metadata
+        assert metadata["method"] == "tsne"
+        assert metadata["runtime"] > 0
+
+    def test_compute_embedding_with_params(self):
+        """Test embedding with custom parameters"""
+        # Use larger dataset for UMAP with custom parameters
+        real_data = [[float(i), float(i+1), float(i+2)] for i in range(15)]
+        synthetic_data = [[float(i+0.1), float(i+1.1), float(i+2.1)] for i in range(15)]
+
+        params = {
+            "n_neighbors": 5,  # Reduced for smaller dataset
+            "min_dist": 0.2,
+            "random_state": 42
         }
-        
-        synthetic_data = {
-            "headers": ["feature1", "feature2"],
-            "data": [[1.1, 2.1], [3.1, 4.1]]
-        }
-        
-        result = generate_umap_embedding(real_data, synthetic_data)
-        
-        assert "real_embeddings" in result
-        assert "synthetic_embeddings" in result
-        assert "metadata" in result
-        assert result["metadata"]["method"] == "umap" 
+
+        embeddings, metadata = self.embedding_service.compute_embedding(
+            real_data=real_data,
+            synthetic_data=synthetic_data,
+            method="umap",
+            params=params
+        )
+
+        # Verify structure and parameters
+        assert isinstance(embeddings, dict)
+        assert "real" in embeddings
+        assert "synthetic" in embeddings
+        assert len(embeddings["real"]) == 15
+        assert len(embeddings["synthetic"]) == 15
+
+        # Verify metadata includes custom parameters
+        assert metadata["method"] == "umap"
+        assert "params" in metadata
+        assert metadata["params"]["n_neighbors"] == 5
+        assert metadata["params"]["min_dist"] == 0.2
+
+    def test_compute_embedding_invalid_method(self):
+        """Test embedding with invalid method"""
+        real_data = [[1.0, 2.0], [3.0, 4.0]]
+        synthetic_data = [[1.1, 2.1], [3.1, 4.1]]
+
+        with pytest.raises(ValueError, match="Unsupported method"):
+            self.embedding_service.compute_embedding(
+                real_data=real_data,
+                synthetic_data=synthetic_data,
+                method="invalid_method"
+            )
+
+    def test_compute_embedding_empty_data(self):
+        """Test embedding with empty data"""
+        with pytest.raises(ValueError):
+            self.embedding_service.compute_embedding(
+                real_data=[],
+                synthetic_data=[],
+                method="umap"
+            ) 
