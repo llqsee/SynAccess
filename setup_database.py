@@ -40,10 +40,10 @@ def initialize_database():
         backend_dir = Path(__file__).parent / 'backend'
         sys.path.insert(0, str(backend_dir))
         
-        from database.connection import init_database
+        from database.connection import init_db
         
         print("Initializing SQLite database...")
-        init_database()
+        init_db()
         
         # Check if database file was created
         db_file = backend_dir / 'mavis_dev.db'
