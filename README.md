@@ -262,7 +262,6 @@ UMAP (Uniform Manifold Approximation and Projection) is a powerful dimensionalit
 | **n_neighbors** | 2-200 | 15 | Number of neighboring points used in local approximations | • **Low (2-10)**: Focus on local structure, fine details<br/>• **High (50-200)**: Emphasize global structure, broad patterns |
 | **min_dist** | 0.0-0.99 | 0.1 | Minimum distance between points in low-dimensional space | • **Low (0.0-0.1)**: Tight clusters, detailed structure<br/>• **High (0.5-0.99)**: Spread out points, overview perspective |
 | **n_components** | 2-3 | 2 | Target dimensionality for visualization | • **2D**: Standard scatter plots, easier interpretation<br/>• **3D**: Enhanced cluster separation, spatial relationships |
-| **metric** | Various | euclidean | Distance metric for high-dimensional space | • **euclidean**: Continuous numerical data<br/>• **manhattan**: Sparse or categorical data<br/>• **cosine**: Text or high-dimensional sparse data |
 
 
 ### UMAP Functionality Features
@@ -487,21 +486,7 @@ cd frontend
 npm test
 ```
 
-### Project Maintenance
-Use the cleanup script to manage redundant files and keep the project lean:
 
-```bash
-# Run the cleanup script
-python scripts/cleanup.py
-```
-
-This script will:
-- Remove Python cache directories (`__pycache__`)
-- Clean Jupyter notebook checkpoints (`.ipynb_checkpoints`)
-- Clear outputs from Jupyter notebooks to reduce size
-- Clean up large generated report files (keeping samples)
-- Remove `node_modules` if present
-- Show project size analysis
 
 ## 🤝 Contributing
 
