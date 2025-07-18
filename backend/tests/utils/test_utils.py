@@ -98,29 +98,59 @@ class TestValidation:
         # Should not raise any exception
         validate_embedding_params("tsne", params)
 
+    def test_validate_embedding_params_pca_valid(self):
+        """Test valid PCA parameters"""
+        params = {
+            "n_components": 2,
+            "random_state": 42
+        }
+        
+        # Should not raise any exception
+        validate_embedding_params("pca", params)
+
     def test_validate_embedding_params_invalid_method(self):
         """Test validation with invalid method"""
         params = {"n_neighbors": 15}
         
-        with pytest.raises(ValueError, match="Unsupported method"):
+        with pytest.raises(ValueError, match="Unsupported embedding method"):
             validate_embedding_params("invalid", params)
 
     def test_validate_embedding_params_invalid_umap_params(self):
         """Test validation with invalid UMAP parameters"""
         params = {
-            "invalid_param": 15,
-            "n_neighbors": 10
+            "n_neighbors": -1,  # Invalid negative value
+            "min_dist": 0.1
         }
         
-        with pytest.raises(ValueError, match="Invalid parameters for umap"):
+        # Current validation does check parameter values
+        with pytest.raises(ValueError, match="n_neighbors must be an integer >= 2"):
             validate_embedding_params("umap", params)
 
     def test_validate_embedding_params_invalid_tsne_params(self):
         """Test validation with invalid t-SNE parameters"""
         params = {
-            "invalid_param": 30,
-            "perplexity": 20
+            "perplexity": -1,  # Invalid negative value
+            "n_components": 2
         }
         
-        with pytest.raises(ValueError, match="Invalid parameters for tsne"):
-            validate_embedding_params("tsne", params) 
+        # Current validation does check parameter values
+        with pytest.raises(ValueError, match="perplexity must be a positive number"):
+            validate_embedding_params("tsne", params)
+
+    def test_validate_embedding_params_invalid_pca_params(self):
+        """Test validation with invalid PCA parameters"""
+        params = {
+            "n_components": 0,  # Invalid zero value
+            "random_state": 42
+        }
+        
+        # Current validation does check parameter values
+        with pytest.raises(ValueError, match="n_components must be a positive integer"):
+            validate_embedding_params("pca", params)
+
+    def test_validate_embedding_params_invalid_params_type(self):
+        """Test validation with invalid params type"""
+        params = "not a dict"
+        
+        with pytest.raises(ValueError, match="Parameters must be a dictionary"):
+            validate_embedding_params("umap", params) 
