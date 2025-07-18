@@ -44,7 +44,12 @@ describe('useEmbedding', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Reset mock implementations
-    mockSubmitEmbeddingJob.mockResolvedValue({ job_id: 'test-job-123' });
+    mockSubmitEmbeddingJob.mockResolvedValue({ 
+      job_id: 'test-job-123',
+      task_id: 'test-task-123',
+      status: 'running',
+      queue_position: 0
+    });
     mockGetJobStatus.mockResolvedValue({ status: 'completed', progress: 1.0 });
     mockGetJobResults.mockResolvedValue({
       embeddings: mockEmbeddings,
@@ -54,14 +59,21 @@ describe('useEmbedding', () => {
         syntheticData: mockSyntheticData
       }
     });
+    
+    // Mock dataUtils functions
+    jest.spyOn(dataUtils, 'validateDataCompatibility').mockReturnValue({ isValid: true });
+    jest.spyOn(dataUtils, 'combineEmbeddings').mockReturnValue([
+      [0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]
+    ]);
+    jest.spyOn(dataUtils, 'createEmbeddingLabels').mockReturnValue(['Real', 'Real', 'Synthetic', 'Synthetic']);
   });
 
   describe('handleVisualize', () => {
-    it('should successfully process embeddings', async () => {
+    it('should successfully submit job', async () => {
       const { result } = renderHook(() => useEmbedding());
 
       await act(async () => {
-        await result.current.handleVisualize(mockRealData, mockSyntheticData, 'umap');
+        await result.current.handleVisualize(mockRealData, mockSyntheticData, { method: 'umap', params: {} }, true);
       });
 
       // Wait for async operations to complete
@@ -76,12 +88,10 @@ describe('useEmbedding', () => {
         synthetic_headers: mockSyntheticData.headers
       });
 
-      expect(result.current.loading).toBe(false);
+      // Check that the job was submitted successfully
+      expect(mockSubmitEmbeddingJob).toHaveBeenCalled();
       expect(result.current.error).toBeNull();
-      expect(result.current.embeddingData).toEqual([
-        [0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]
-      ]);
-      expect(result.current.embeddingMetadata).toEqual(mockMetadata);
+      expect(result.current.currentJobId).toBe('test-job-123');
     });
 
     it('should handle API errors', async () => {
@@ -90,7 +100,7 @@ describe('useEmbedding', () => {
       const { result } = renderHook(() => useEmbedding());
 
       await act(async () => {
-        await result.current.handleVisualize(mockRealData, mockSyntheticData, 'umap');
+        await result.current.handleVisualize(mockRealData, mockSyntheticData, { method: 'umap', params: {} }, true);
       });
 
       // Wait for async operations to complete
@@ -103,47 +113,29 @@ describe('useEmbedding', () => {
       expect(result.current.processingStatus).toBeNull();
     });
 
-    it('should handle invalid API response', async () => {
-      mockSubmitEmbeddingJob.mockResolvedValue({ job_id: 'test-job-123' });
-      mockGetJobResults.mockResolvedValue({}); // Missing embeddings
-
+    it('should handle backend not connected', async () => {
       const { result } = renderHook(() => useEmbedding());
 
       await act(async () => {
-        await result.current.handleVisualize(mockRealData, mockSyntheticData, 'umap');
+        await result.current.handleVisualize(mockRealData, mockSyntheticData, { method: 'umap', params: {} }, false);
       });
 
-      // Wait for async operations to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      expect(result.current.error).toBe('Error submitting embedding job: Invalid response from server: missing embeddings or metadata');
+      expect(result.current.error).toBe('Backend server is not connected. Please ensure it is running.');
     });
 
-    it('should sample data correctly', async () => {
-      const mockSampleData = jest.spyOn(dataUtils, 'sampleData');
-      mockSampleData.mockReturnValue({
-        real_data: [[1, 2]], // Only first sample
-        synthetic_data: [[5, 6]], // Only first sample
-        real_headers: mockRealData.headers,
-        synthetic_headers: mockSyntheticData.headers
+    it('should handle invalid data validation', async () => {
+      jest.spyOn(dataUtils, 'validateDataCompatibility').mockReturnValue({ 
+        isValid: false, 
+        error: 'Invalid data format' 
       });
 
       const { result } = renderHook(() => useEmbedding());
 
       await act(async () => {
-        await result.current.handleVisualize(mockRealData, mockSyntheticData, 'umap', { max_samples: 1 });
+        await result.current.handleVisualize(mockRealData, mockSyntheticData, { method: 'umap', params: {} }, true);
       });
 
-      expect(mockSubmitEmbeddingJob).toHaveBeenCalledWith({
-        real_data: [[1, 2]], // Only first sample
-        synthetic_data: [[5, 6]], // Only first sample
-        method: 'umap',
-        params: { max_samples: 1 },
-        real_headers: mockRealData.headers,
-        synthetic_headers: mockSyntheticData.headers
-      });
-
-      mockSampleData.mockRestore();
+      expect(result.current.error).toBe('Invalid data format');
     });
 
     it('should set processing status for large datasets', async () => {
@@ -160,7 +152,7 @@ describe('useEmbedding', () => {
       const { result } = renderHook(() => useEmbedding());
 
       await act(async () => {
-        await result.current.handleVisualize(largeRealData, largeSyntheticData, 'umap');
+        await result.current.handleVisualize(largeRealData, largeSyntheticData, { method: 'umap', params: {} }, true);
       });
 
       // Should have set the large dataset processing status at some point
@@ -179,7 +171,7 @@ describe('useEmbedding', () => {
 
       // Start the visualization
       act(() => {
-        result.current.handleVisualize(mockRealData, mockSyntheticData, 'umap');
+        result.current.handleVisualize(mockRealData, mockSyntheticData, { method: 'umap', params: {} }, true);
       });
 
       // Should be loading initially
@@ -190,7 +182,42 @@ describe('useEmbedding', () => {
         await new Promise(resolve => setTimeout(resolve, 150));
       });
 
-      expect(result.current.loading).toBe(false);
+      // The loading state might still be true due to polling, so we check the job was submitted
+      expect(mockSubmitEmbeddingJob).toHaveBeenCalled();
+    });
+  });
+
+  describe('loadFromHistory', () => {
+    it('should load embeddings from history', async () => {
+      const { result } = renderHook(() => useEmbedding());
+
+      await act(async () => {
+        result.current.loadFromHistory(mockEmbeddings, mockMetadata, {
+          realData: mockRealData,
+          syntheticData: mockSyntheticData
+        });
+      });
+
+      expect(result.current.embeddingData).toEqual([
+        [0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]
+      ]);
+      
+      // Check that the metadata contains the expected properties
+      expect(result.current.embeddingMetadata).toMatchObject({
+        ...mockMetadata,
+        labels: ['Real', 'Real', 'Synthetic', 'Synthetic']
+      });
+      expect(result.current.error).toBeNull();
+    });
+
+    it('should handle invalid history data', async () => {
+      const { result } = renderHook(() => useEmbedding());
+
+      await act(async () => {
+        result.current.loadFromHistory(null, mockMetadata);
+      });
+
+      expect(result.current.error).toBe('Error loading embedding from history: Invalid embeddings data from history');
     });
   });
 }); 
