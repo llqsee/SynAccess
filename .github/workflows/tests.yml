@@ -33,7 +33,7 @@ on:
       - main
 
 jobs:
-  manual-test:
+  test:
     runs-on: ubuntu-latest
     
     steps:
@@ -68,12 +68,12 @@ jobs:
         cd frontend
         npm ci
         
-    - name: Run manual tests
+    - name: Run tests
       shell: bash -l {0}
       run: |
         conda activate mavis
         python run_tests.py \
-          --${{ inputs.test_type || 'all' }} \
+          ${{ github.event_name == 'workflow_dispatch' && format('--{0}', inputs.test_type) || '' }} \
           ${{ (inputs.coverage || 'true') == 'true' && '--coverage' || '' }} \
           ${{ (inputs.verbose || 'true') == 'true' && '--verbose' || '' }} \
           --ci
