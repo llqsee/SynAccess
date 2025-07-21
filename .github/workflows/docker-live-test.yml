@@ -12,10 +12,7 @@ on:
         description: 'Expose ports for external access'
         default: true
         required: false
-        type: boolean
-  pull_request:
-    branches:
-      - main
+        type: boolean 
 
 jobs:
   launch-app:
