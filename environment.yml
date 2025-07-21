@@ -24,17 +24,26 @@ dependencies:
   - black
   - flake8
   - isort
+  # Testing
+  - pytest
+  - pytest-asyncio
+  - pytest-cov
+  - pytest-mock
   # Web framework
   - fastapi
   - uvicorn
   # Additional statistical packages for distribution analysis
   - statsmodels
+  # Compression libraries for data storage
+  - lz4
+  - zstandard
+  - pyarrow  # Required for parquet format support
+  # ZeroMQ for asynchronous task queuing
+  - pyzmq
   - pip:
     - python-dotenv
     - plotly
     - jupyter-black
-    - pydantic  # For FastAPI request/response models
-    #- tsnecuda
-    - vizdataquality
+    - pydantic  # For FastAPI request/response models    
     - awscli
     - mkdocs 
