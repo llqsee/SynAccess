@@ -12,6 +12,8 @@ services:
       - PYTHONPATH=/app
       - DATABASE_URL=sqlite:///mavis_dev.db
       - NODE_ENV=${NODE_ENV:-production}
+      - STARTUP_COMMAND=${STARTUP_COMMAND:-./start.sh}
+      - DOCKERFILE=${DOCKERFILE:-Dockerfile}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
