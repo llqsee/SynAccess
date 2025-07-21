@@ -5,10 +5,11 @@ on:
     inputs:
       test_type:
         description: 'Type of tests to run'
-        default: 'all'
+        default: 'both'
         required: true
         type: choice
         options:          
+          - both
           - frontend
           - backend
           - lint
@@ -61,6 +62,9 @@ jobs:
       shell: bash -l {0}
       run: |
         conda env create -f environment.yml
+        conda activate mavis
+        python -c "import sys; print('Python path:', sys.executable)"
+        python -c "import sqlalchemy; print('SQLAlchemy version:', sqlalchemy.__version__)"
 
     - name: Install Node.js dependencies
       run: |
@@ -71,13 +75,26 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate mavis
-        python run_tests.py \
-          ${{ github.event.inputs.test_type == 'frontend' && '--frontend' || '' }} \
-          ${{ github.event.inputs.test_type == 'backend' && '--backend' || '' }} \
-          ${{ github.event.inputs.test_type == 'lint' && '--lint' || '' }} \
-          ${{ (github.event.inputs.coverage == 'true') && '--coverage' || '' }} \
-          ${{ (github.event.inputs.verbose == 'true') && '--verbose' || '' }} \
-          --ci
+        echo "Current Python path: $(which python)"
+        echo "Python version: $(python --version)"
+        echo "Checking if sqlalchemy is available:"
+        python -c "import sqlalchemy; print('SQLAlchemy available')" || echo "SQLAlchemy NOT available"
+        
+        TEST_COMMAND="python run_tests.py"
+        
+        # Add test type flag only for specific test types (not for 'both')
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.test_type }}" != "both" ]; then
+          TEST_COMMAND+=" --${{ github.event.inputs.test_type }}"
+        fi
+        
+        # Add common flags
+        TEST_COMMAND+=" ${{ (github.event.inputs.coverage || 'true') == 'true' && '--coverage' || '' }}"
+        TEST_COMMAND+=" ${{ (github.event.inputs.verbose || 'true') == 'true' && '--verbose' || '' }}"
+        TEST_COMMAND+=" --ci"
+        
+        echo "Running command: $TEST_COMMAND"
+        eval "$TEST_COMMAND"
+
 
     - name: Upload backend coverage (if generated)
       uses: codecov/codecov-action@v3
