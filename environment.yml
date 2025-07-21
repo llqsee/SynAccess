@@ -46,7 +46,7 @@ dependencies:
   - pyarrow  # Required for parquet format support
   # ZeroMQ for asynchronous task queuing
   - pyzmq
-      - pip:
+  - pip:
     - python-dotenv
     - plotly
     - jupyter-black
