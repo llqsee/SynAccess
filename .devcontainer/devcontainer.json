@@ -3,10 +3,10 @@
   "dockerComposeFile": "../docker-compose.yml",
   "service": "mavis-app",
   "overrideCommand": true,
+  "runServices": ["mavis-app"],
   "workspaceFolder": "/app",
   "forwardPorts": [8000, 3000],
-  "postCreateCommand": "conda activate mavis && python setup_database.py && cd frontend && npm install",
-  "postStartCommand": "cd frontend && npm start &",
+
   "portsAttributes": {
     "8000": {
       "label": "Backend API",

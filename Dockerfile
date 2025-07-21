@@ -11,12 +11,16 @@ RUN npm run build
 # Python backend stage
 FROM continuumio/miniconda3:latest
 
-# Install system dependencies
+# Install system dependencies and Node.js
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
 
 # Create working directory
 WORKDIR /app
@@ -40,8 +44,14 @@ source /opt/conda/etc/profile.d/conda.sh\n\
 conda activate mavis\n\
 cd /app\n\
 python setup_database.py\n\
-cd backend\n\
-exec uvicorn main:app --host 0.0.0.0 --port 8000' > start.sh && \
+if [ "$NODE_ENV" = "development" ]; then\n\
+  cd frontend && npm install && npm start &\n\
+  cd /app/backend\n\
+  exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload\n\
+else\n\
+  cd backend\n\
+  exec uvicorn main:app --host 0.0.0.0 --port 8000\n\
+fi' > start.sh && \
     chmod +x start.sh
 
 EXPOSE 8000
