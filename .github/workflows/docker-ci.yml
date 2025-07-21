@@ -46,32 +46,32 @@ jobs:
       run: |
         # Build the application
         echo "🏗️ Building MAVIS application with Docker Compose..."
-        docker-compose build
+        docker compose build
         
         # Run tests if enabled
         if [ "${{ inputs.run_tests || 'true' }}" = "true" ]; then
           echo "🧪 Running tests in Docker environment..."
-          docker-compose run --rm mavis-app python run_tests.py --ci --coverage --verbose
+          docker compose run --rm mavis-app python run_tests.py --ci --coverage --verbose
         fi
         
         # Test the application startup
         echo "🚀 Testing application startup..."
-        docker-compose up -d
+        docker compose up -d
         sleep 30
         
         # Check if services are running
         echo "📊 Checking service health..."
-        docker-compose ps
+        docker compose ps
         
         # Test API endpoints
         echo "🔍 Testing API endpoints..."
         curl -f http://localhost:8000/health || echo "Backend health check failed"
         
         # Stop services
-        docker-compose down
+        docker compose down
         
     - name: Upload test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: docker-test-results
@@ -88,12 +88,12 @@ jobs:
         # docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
         
         # Build and push
-        docker-compose build
-        # docker-compose push  # Uncomment when registry is configured
+        docker compose build
+        # docker compose push  # Uncomment when registry is configured
         
     - name: Cleanup
       if: always()
       run: |
         echo "🧹 Cleaning up Docker resources..."
-        docker-compose down --volumes --remove-orphans
+        docker compose down --volumes --remove-orphans
         docker system prune -f 

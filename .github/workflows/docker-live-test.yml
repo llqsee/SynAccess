@@ -33,24 +33,24 @@ jobs:
     - name: Build application
       run: |
         echo "🏗️ Building MAVIS application..."
-        docker-compose build
+        docker compose build
         
     - name: Run tests (optional)
       if: ${{ inputs.run_tests == 'true' }}
       run: |
         echo "🧪 Running tests..."
-        docker-compose run --rm mavis-app python run_tests.py --ci --coverage --verbose
+        docker compose run --rm mavis-app python run_tests.py --ci --coverage --verbose
         
     - name: Launch application
       run: |
         echo "🚀 Launching MAVIS application..."
-        docker-compose up -d
+        docker compose up -d
         
         echo "⏳ Waiting for services to start..."
         sleep 30
         
         echo "📊 Service status:"
-        docker-compose ps
+        docker compose ps
         
         echo "🔍 Testing API endpoints..."
         curl -f http://localhost:8000/health || echo "Health check failed"
@@ -70,7 +70,7 @@ jobs:
       if: always()
       run: |
         echo "🛑 Stopping application..."
-        docker-compose down --volumes --remove-orphans
+        docker compose down --volumes --remove-orphans
         
     - name: Cleanup
       if: always()
