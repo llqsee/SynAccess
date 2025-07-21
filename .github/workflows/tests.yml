@@ -8,8 +8,7 @@ on:
         default: 'all'
         required: true
         type: choice
-        options:
-          - all
+        options:          
           - frontend
           - backend
           - lint
@@ -67,24 +66,26 @@ jobs:
       run: |
         cd frontend
         npm ci
-        
+
     - name: Run tests
       shell: bash -l {0}
       run: |
         conda activate mavis
         python run_tests.py \
-          ${{ github.event_name == 'workflow_dispatch' && format('--{0}', inputs.test_type) || '' }} \
-          ${{ (inputs.coverage || 'true') == 'true' && '--coverage' || '' }} \
-          ${{ (inputs.verbose || 'true') == 'true' && '--verbose' || '' }} \
+          ${{ github.event.inputs.test_type == 'frontend' && '--frontend' || '' }} \
+          ${{ github.event.inputs.test_type == 'backend' && '--backend' || '' }} \
+          ${{ github.event.inputs.test_type == 'lint' && '--lint' || '' }} \
+          ${{ (github.event.inputs.coverage == 'true') && '--coverage' || '' }} \
+          ${{ (github.event.inputs.verbose == 'true') && '--verbose' || '' }} \
           --ci
 
-    - name: Upload coverage reports (if generated)
+    - name: Upload backend coverage (if generated)
       uses: codecov/codecov-action@v3
       with:
         file: ./backend/htmlcov/coverage.xml
         flags: backend
         name: backend-coverage
-      if: ${{ inputs.coverage == 'true' || github.event_name != 'workflow_dispatch' }}
+      if: ${{ github.event.inputs.coverage == 'true' || github.event_name != 'workflow_dispatch' }}
 
     - name: Upload frontend coverage (if generated)
       uses: codecov/codecov-action@v3
@@ -92,4 +93,4 @@ jobs:
         file: ./frontend/coverage/lcov.info
         flags: frontend
         name: frontend-coverage
-      if: ${{ inputs.coverage == 'true' || github.event_name != 'workflow_dispatch' }}
+      if: ${{ github.event.inputs.coverage == 'true' || github.event_name != 'workflow_dispatch' }}
