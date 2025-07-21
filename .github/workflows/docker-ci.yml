@@ -25,7 +25,7 @@ on:
 
   push:
     branches:
-      - initial-dev
+      - init-branch
 
   pull_request:
     branches:
