@@ -32,6 +32,12 @@ dependencies:
   # Web framework
   - fastapi
   - uvicorn
+  # Database
+  - sqlalchemy
+  # HTTP requests
+  - requests
+  # YAML parsing
+  - pyyaml
   # Additional statistical packages for distribution analysis
   - statsmodels
   # Compression libraries for data storage
@@ -40,11 +46,12 @@ dependencies:
   - pyarrow  # Required for parquet format support
   # ZeroMQ for asynchronous task queuing
   - pyzmq
-  - pip:
+      - pip:
     - python-dotenv
     - plotly
     - jupyter-black
-    - pydantic  # For FastAPI request/response models    
+    - pydantic  # For FastAPI request/response models
+    - pydantic-settings  # For settings management
     - awscli
     - mkdocs
     - mkdocs-material
