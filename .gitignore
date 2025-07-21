@@ -1,6 +1,9 @@
 # Data
 /data/
 
+# Figures
+/notebooks/figures/
+
 # Reports
 /reports/
 
