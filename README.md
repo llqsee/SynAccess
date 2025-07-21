@@ -591,6 +591,93 @@ flake8 backend/
 - **Coverage reports** uploaded to Codecov
 - **Manual testing** available via GitHub Actions
 
+## 🚀 GitHub Codespaces (Live Development)
+
+For the best development experience with live testing, use **GitHub Codespaces**:
+
+### **Quick Start:**
+1. **Open Codespace**: Click the green "Code" button on your GitHub repo
+2. **Select "Codespaces"** tab
+3. **Click "Create codespace on main"**
+4. **Wait for setup** (takes 2-3 minutes)
+
+### **What You Get:**
+- **Full VS Code environment** in your browser
+- **Application running live** on ports 8000 (backend) and 3000 (frontend)
+- **Automatic port forwarding** with preview links
+- **Pre-configured extensions** for Python, React, Docker
+- **Conda environment** activated automatically
+- **Tests run automatically** on startup
+
+### **Access Your Application:**
+- **Backend API**: http://localhost:8000
+- **Frontend**: http://localhost:3000  
+- **API Docs**: http://localhost:8000/docs
+- **Test Results**: Available in the terminal
+
+### **Development Features:**
+- **Real-time editing** with live preview
+- **Integrated terminal** for running commands
+- **Git integration** for commits and pushes
+- **Debugging** with breakpoints
+- **Collaborative development** with team members
+
+### **Commands in Codespace:**
+```bash
+# Run tests
+python run_tests.py --ci --coverage --verbose
+
+# Start development servers
+cd backend && python main.py
+cd frontend && npm start
+
+# Build Docker images
+docker-compose build
+
+# Run in Docker
+docker-compose up -d
+
+# Database operations
+python setup_database.py  # Initialize database
+sqlite3 backend/mavis_dev.db  # Direct database access
+```
+
+### **Database Setup:**
+- **SQLite database** automatically initialized on startup
+- **Database file**: `/app/backend/mavis_dev.db`
+- **SQL Tools extension** for database management
+- **Data persistence** across sessions
+- **Automatic migrations** run on startup
+
+### **Database Features:**
+- **Job history** storage and retrieval
+- **User sessions** and authentication data
+- **Processing queues** and task management
+- **Performance metrics** and analytics
+- **Data validation** results storage
+
+### **Database Commands:**
+```bash
+# View database schema
+sqlite3 backend/mavis_dev.db ".schema"
+
+# Check job history
+sqlite3 backend/mavis_dev.db "SELECT * FROM jobs LIMIT 10;"
+
+# Reset database
+rm backend/mavis_dev.db && python setup_database.py
+
+# Backup database
+cp backend/mavis_dev.db backend/mavis_backup.db
+```
+
+### **Benefits:**
+- ✅ **No local setup** required
+- ✅ **Consistent environment** across team
+- ✅ **Live testing** with real data
+- ✅ **Full IDE features** in browser
+- ✅ **Easy sharing** and collaboration
+
 ## 🤝 Contributing
 
 1. Fork the repository

@@ -1,0 +1,67 @@
+{
+  "name": "MAVIS Development Environment",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "mavis-app",
+  "workspaceFolder": "/app",
+  "forwardPorts": [8000, 3000],
+  "portsAttributes": {
+    "8000": {
+      "label": "Backend API",
+      "onAutoForward": "openPreview",
+      "description": "FastAPI backend server"
+    },
+    "3000": {
+      "label": "Frontend",
+      "onAutoForward": "openPreview", 
+      "description": "React frontend application"
+    }
+  },
+  "postCreateCommand": "conda activate mavis && python setup_database.py && python run_tests.py --ci --coverage --verbose",
+  "postStartCommand": "conda activate mavis && python setup_database.py",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
+        "ms-python.isort",
+        "ms-vscode.vscode-typescript-next",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-json",
+        "redhat.vscode-yaml",
+        "ms-vscode.vscode-markdown",
+        "ms-vscode.vscode-docker",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-sqlite"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/conda/envs/mavis/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.flake8Enabled": true,
+        "python.formatting.provider": "black",
+        "python.sortImports.args": ["--profile", "black"],
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": true
+        },
+        "sqltools.connections": [
+          {
+            "name": "MAVIS Database",
+            "driver": "SQLite",
+            "database": "/app/backend/mavis_dev.db",
+            "description": "MAVIS SQLite database"
+          }
+        ]
+      }
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "remoteUser": "root",
+  "mounts": [
+    "source=${localWorkspaceFolder}/data,target=/app/data,type=bind,consistency=cached"
+  ]
+} 

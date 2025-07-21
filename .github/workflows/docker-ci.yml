@@ -1,0 +1,99 @@
+name: Docker Compose CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build and test type'
+        default: 'full'
+        required: true
+        type: choice
+        options:
+          - full
+          - backend-only
+          - frontend-only
+      run_tests:
+        description: 'Run application tests'
+        default: true
+        required: false
+        type: boolean
+      push_image:
+        description: 'Push to Docker registry'
+        default: false
+        required: false
+        type: boolean
+
+  push:
+    branches:
+      - initial-dev
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  docker-build-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build and test with Docker Compose
+      run: |
+        # Build the application
+        echo "🏗️ Building MAVIS application with Docker Compose..."
+        docker-compose build
+        
+        # Run tests if enabled
+        if [ "${{ inputs.run_tests || 'true' }}" = "true" ]; then
+          echo "🧪 Running tests in Docker environment..."
+          docker-compose run --rm mavis-app python run_tests.py --ci --coverage --verbose
+        fi
+        
+        # Test the application startup
+        echo "🚀 Testing application startup..."
+        docker-compose up -d
+        sleep 30
+        
+        # Check if services are running
+        echo "📊 Checking service health..."
+        docker-compose ps
+        
+        # Test API endpoints
+        echo "🔍 Testing API endpoints..."
+        curl -f http://localhost:8000/health || echo "Backend health check failed"
+        
+        # Stop services
+        docker-compose down
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: docker-test-results
+        path: |
+          backend/htmlcov/
+          frontend/coverage/
+          logs/
+        
+    - name: Build and push Docker image (if requested)
+      if: ${{ inputs.push_image == 'true' }}
+      run: |
+        echo "🐳 Building and pushing Docker image..."
+        # Add your Docker registry login here if needed
+        # docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+        
+        # Build and push
+        docker-compose build
+        # docker-compose push  # Uncomment when registry is configured
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        echo "🧹 Cleaning up Docker resources..."
+        docker-compose down --volumes --remove-orphans
+        docker system prune -f 
