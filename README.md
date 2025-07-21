@@ -19,11 +19,115 @@ A full-stack web application for visualizing and comparing real and synthetic da
 
 ## 🏗️ Architecture Overview
 
-- **Frontend**: React (Material-UI), custom hooks, interactive components
-- **Backend**: FastAPI, RESTful routes, business logic services, SQLite
-- **Docs**: MkDocs Material, with custom dark mode and logo
-- **Testing**: Backend (pytest), Frontend (Jest + React Testing Library)
-- **Deployment**: Docker, Conda, Node.js
+The following diagram illustrates MAVIS's complete system architecture, showing the relationships between frontend components, backend services, and external dependencies:
+
+```mermaid
+graph TB
+    %% User Layer
+    User[👤 User] --> Frontend{Frontend<br/>React App}
+    
+    %% Frontend Components
+    Frontend --> Auth[🔐 Authentication<br/>AuthContext]
+    Frontend --> Header[📋 Header<br/>Navigation]
+    Frontend --> Sidebar[📂 Sidebar<br/>File Upload]
+    Frontend --> EmbedPlot[📊 EmbeddingPlot<br/>Interactive Scatter Plot]
+    Frontend --> DistPlot[📈 DistributionPlot<br/>Statistical Comparisons]
+    Frontend --> History[📜 History<br/>Job Management]
+    Frontend --> Results[📄 ResultsPane<br/>Analysis Results]
+    Frontend --> SummaryTab[📋 SummaryTab<br/>Validation & Reports]
+    Frontend --> ValidationPopup[⚠️ ValidationPopup<br/>Issue Alerts]
+    Frontend --> PerformanceDashboard[📊 PerformanceDashboard<br/>Monitoring]
+    
+    %% Frontend Hooks & Services
+    Frontend --> DataHook[🔄 useDataUpload<br/>File Processing]
+    Frontend --> EmbedHook[🔄 useEmbedding<br/>Visualization Logic]
+    Frontend --> ValidationHook[🔄 useValidation<br/>Data Validation]
+    Frontend --> API[🌐 API Service<br/>HTTP Client]
+    
+    %% Backend Entry Point
+    API -->|HTTP Requests| Backend{Backend<br/>FastAPI App}
+    
+    %% Backend Routes
+    Backend --> EmbedRoute[📍 /embed<br/>Embedding Computation]
+    Backend --> DistRoute[📍 /distribution<br/>Statistical Analysis]
+    Backend --> HistRoute[📍 /history<br/>Job History]
+    Backend --> HealthRoute[📍 /health<br/>Status Check]
+    
+    %% Backend Services
+    EmbedRoute --> EmbedService[⚙️ Embedding Service<br/>UMAP/t-SNE Processing]
+    EmbedRoute --> JobService[💼 Job Service<br/>Background Processing]
+    DistRoute --> DataPreproc[🔧 Data Preprocessing<br/>Validation & Cleaning]
+    HistRoute --> JobService
+    
+    %% Data Processing Pipeline
+    EmbedService --> UMAP[🎯 UMAP<br/>Dimensionality Reduction]
+    EmbedService --> TSNE[🎯 t-SNE<br/>Dimensionality Reduction]
+    EmbedService --> OneHot[🔄 One-Hot Encoding<br/>Categorical Processing]
+    
+    %% Database Layer
+    JobService --> Database[(🗄️ SQLite Database<br/>mavis_dev.db)]
+    
+    %% File System
+    Sidebar -->|File Upload| FileSystem[📁 File System<br/>CSV/Excel/JSON]
+    
+    %% External Libraries & Dependencies
+    UMAP --> UMAPLib[📚 umap-learn]
+    TSNE --> TSNELib[📚 openTSNE]
+    EmbedPlot --> D3[📚 D3.js<br/>Interactive Visualization]
+    DistPlot --> Plotly[📚 Plotly.js<br/>Statistical Charts]
+    Frontend --> MUI[📚 Material-UI<br/>Component Library]
+    
+    %% Deployment & Infrastructure
+    Backend --> Docker[🐳 Docker<br/>Containerization]
+    Frontend --> Docker
+    Docker --> DockerCompose[🔧 Docker Compose<br/>Multi-Service Setup]
+    
+    %% Configuration & Environment
+    Backend --> Config[⚙️ Config<br/>Environment Settings]
+    Config --> EnvFile[📄 environment.yml<br/>Conda Dependencies]
+    
+    %% Testing Infrastructure
+    Frontend --> FrontendTests[🧪 Frontend Tests<br/>Jest + React Testing Library]
+    Backend --> BackendTests[🧪 Backend Tests<br/>pytest]
+    
+    %% Monitoring & Logging
+    Backend --> Monitoring[📊 Monitoring Service<br/>Metrics Collection]
+    Backend --> Logging[📝 Logging<br/>Application Logs]
+    
+    %% Data Flow
+    User -.->|1. Upload Data| FileSystem
+    FileSystem -.->|2. Process Files| DataHook
+    DataHook -.->|3. Send to Backend| API
+    API -.->|4. Compute Embeddings| EmbedService
+    EmbedService -.->|5. Return Results| EmbedPlot
+    EmbedPlot -.->|6. Interactive Visualization| User
+    
+    %% Styling
+    classDef frontend fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef backend fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef service fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef data fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef external fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef infra fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    
+    class Frontend,Auth,Header,Sidebar,EmbedPlot,DistPlot,History,Results,SummaryTab,ValidationPopup,PerformanceDashboard,DataHook,EmbedHook,ValidationHook,API,FrontendTests frontend
+    class Backend,EmbedRoute,DistRoute,HistRoute,HealthRoute,BackendTests backend
+    class EmbedService,JobService,DataPreproc,Monitoring,Logging service
+    class Database,FileSystem,Config,EnvFile data
+    class UMAPLib,TSNELib,D3,Plotly,MUI external
+    class Docker,DockerCompose infra
+```
+
+### Key Architecture Components:
+
+- **Frontend (Light Blue)**: React-based user interface with Material-UI components, custom hooks for state management, and interactive visualization components
+- **Backend (Purple)**: FastAPI application with RESTful routes for embedding computation, statistical analysis, and job management
+- **Services (Orange)**: Core business logic including embedding computation, job processing, and data preprocessing
+- **Data Layer (Green)**: SQLite database for persistence and file system integration for data uploads
+- **External Libraries (Pink)**: Scientific computing libraries (UMAP, t-SNE), visualization frameworks (D3.js, Plotly), and UI components
+- **Infrastructure (Light Green)**: Docker containerization and deployment configuration
+
+The numbered data flow shows the typical user journey from data upload through processing to interactive visualization.
 
 ---
 
@@ -136,8 +240,7 @@ UMAP (Uniform Manifold Approximation and Projection) is a powerful dimensionalit
 |-----------|-------|---------|-------------|----------|
 | **n_neighbors** | 2-200 | 15 | Number of neighboring points used in local approximations | • **Low (2-10)**: Focus on local structure, fine details<br/>• **High (50-200)**: Emphasize global structure, broad patterns |
 | **min_dist** | 0.0-0.99 | 0.1 | Minimum distance between points in low-dimensional space | • **Low (0.0-0.1)**: Tight clusters, detailed structure<br/>• **High (0.5-0.99)**: Spread out points, overview perspective |
-| **n_components** | 2-3 | 2 | Target dimensionality for visualization | • **2D**: Standard scatter plots, easier interpretation<br/>• **3D**: Enhanced cluster separation, spatial relationships |
-
+| **n_components** | 2 | Target dimensionality for visualization | • **2D**: Standard scatter plots, easier interpretation |
 
 ### UMAP Functionality Features
 
@@ -170,6 +273,82 @@ UMAP (Uniform Manifold Approximation and Projection) is a powerful dimensionalit
 - **Hover Information**: Detailed tooltips showing original data values
 - **Real vs Synthetic Toggle**: Switch between dataset visualizations
 
+## 🎯 openTSNE Configuration & Parameters
+
+t-SNE (t-Distributed Stochastic Neighbor Embedding) is a powerful dimensionality reduction technique that excels at preserving local structure and revealing clusters in high-dimensional data. MAVIS provides comprehensive parameter control for optimal t-SNE visualization results.
+
+### Key openTSNE Parameters
+
+| Parameter | Range | Default | Description | Use Case |
+|-----------|-------|---------|-------------|----------|
+| **perplexity** | 5-50 | 30 | Balance between local and global structure | • **Low (5-15)**: Focus on local clusters, fine details<br/>• **High (30-50)**: Emphasize global structure, broad patterns |
+| **early_exaggeration** | 4-20 | 12 | Initial separation of clusters | • **Low (4-8)**: Subtle cluster separation<br/>• **High (12-20)**: Strong initial cluster formation |
+| **n_components** | 2 | Target dimensionality for visualization | • **2D**: Standard scatter plots, easier interpretation |
+
+### openTSNE Functionality Features
+
+#### 🔧 **Interactive Parameter Tuning**
+- **Real-time Preview**: Adjust parameters and see immediate effects on visualization
+- **Parameter Presets**: Quick-select configurations for different data types:
+  - *Detailed View*: perplexity=10, learning_rate=100 (fine-grained analysis)
+  - *Balanced View*: perplexity=30, learning_rate=200 (default, general purpose)
+  - *Overview Mode*: perplexity=50, learning_rate=500 (broad patterns)
+
+#### 📊 **Advanced Visualization Options**
+- **Color Mapping**: 
+  - Categorical variables with distinct color palettes
+  - Continuous variables with gradient color scales
+  - Custom color schemes for accessibility
+- **Point Styling**:
+  - Adjustable point sizes for data density representation
+  - Opacity control for overlapping point visualization
+  - Shape differentiation for multiple categories
+
+#### ⚡ **Performance Optimization**
+- **Batch Processing**: Handles large datasets (>100k points) efficiently
+- **Progressive Rendering**: Shows intermediate results during computation
+- **Memory Management**: Automatic optimization for available system resources
+- **Background Processing**: Non-blocking computation with progress indicators
+
+#### 🎨 **Interactive Features**
+- **Zoom & Pan**: Smooth navigation through embedding space
+- **Point Selection**: Click and drag to select data subsets
+- **Hover Information**: Detailed tooltips showing original data values
+- **Real vs Synthetic Toggle**: Switch between dataset visualizations
+
+#### 🔄 **Algorithm-Specific Features**
+- **Perplexity Optimization**: Automatic perplexity selection based on dataset size
+- **Early Exaggeration**: Enhanced initial cluster separation for better visualization
+- **Gradient Descent Monitoring**: Real-time convergence tracking
+- **Barnes-Hut Approximation**: Efficient computation for large datasets
+
+### UMAP vs t-SNE Comparison
+
+| Aspect | UMAP | openTSNE |
+|--------|------|-------|
+| **Local Structure** | Excellent | Excellent |
+| **Global Structure** | Good | Limited |
+| **Computation Speed** | Fast | Moderate |
+| **Memory Usage** | Low | Moderate |
+| **Parameter Sensitivity** | Low | High |
+| **Scalability** | Excellent (>100k points) | Good (<50k points) |
+| **Cluster Preservation** | Good | Excellent |
+| **Reproducibility** | High | Moderate |
+
+### When to Use Each Algorithm
+
+**Choose UMAP when:**
+- Working with large datasets (>50k points)
+- Need to preserve both local and global structure
+- Want faster computation times
+- Need consistent results across runs
+
+**Choose t-SNE when:**
+- Focus is on local cluster structure
+- Working with smaller datasets (<50k points)
+- Need maximum cluster separation
+- Analyzing fine-grained local patterns
+
 ## 📈 Distribution Analysis & Chart Functionalities
 
 MAVIS provides comprehensive statistical comparison tools through interactive distribution visualizations, enabling detailed quality assessment of synthetic data.
@@ -188,7 +367,8 @@ MAVIS automatically selects appropriate chart types based on your data:
 #### 📊 **Histogram Comparisons**
 - **Overlapping Histograms**: Direct visual comparison of real vs synthetic distributions
 - **Customizable Binning**: 
-  - Automatic optimal bin selection using Sturges' rule  
+  - Automatic optimal bin selection using Sturges' rule
+  - Manual bin count adjustment (5-100 bins)
   - Adaptive binning for different data ranges
 - **Statistical Overlays**:
   - Mean and median lines with confidence intervals
@@ -274,6 +454,29 @@ MAVIS automatically selects appropriate chart types based on your data:
 
 Once the backend is running, visit http://localhost:8000/docs for the interactive API documentation powered by FastAPI's automatic OpenAPI generation.
 
+## 📚 Documentation
+
+### Building Documentation
+```bash
+cd docs
+mkdocs serve
+```
+Documentation will be available at http://localhost:8000
+
+### Documentation Features
+- **Dark mode support** with custom styling
+- **Logo integration** for branding
+- **Edit this page** buttons linking to GitHub
+- **View source** buttons for raw markdown
+- **Comprehensive guides** for users and developers
+
+### Documentation Structure
+- **Getting Started**: Installation, quick start, overview
+- **Features**: Detailed feature documentation
+- **User Guide**: Step-by-step usage instructions
+- **Technical**: API reference, architecture, configuration
+- **Development**: Setup, testing, contributing guidelines
+
 ## 🚀 Production Deployment
 
 ### Backend Deployment
@@ -338,23 +541,55 @@ EXPOSE 80
 
 ## 🧪 Development
 
-### Code Quality
-Make sure the conda environment is activated (`conda activate mavis`), then run:
+### Testing
 
+**Run all tests using the test runner script:**
 ```bash
+conda activate mavis
+python run_tests.py --ci --coverage --lint --verbose
+```
+
+**Individual test options:**
+```bash
+# Backend tests only
+python run_tests.py --backend --coverage
+
+# Frontend tests only  
+python run_tests.py --frontend --coverage
+
+# With specific test patterns
+python run_tests.py --pattern "embedding"
+```
+
+**Manual testing:**
+```bash
+# Backend tests
 conda activate mavis
 cd backend
 python -m pytest
-```
-- Tests in `backend/tests/` (services, routes, utils, database)
 
-**Frontend:**
-```bash
+# Frontend tests
 cd frontend
 npm test
 ```
 
+### Code Quality
+Make sure the conda environment is activated (`conda activate mavis`), then run:
 
+```bash
+# Format code
+black backend/
+isort backend/
+
+# Lint code
+flake8 backend/
+```
+
+### CI/CD Pipeline
+- **Automated testing** on pull requests to `main` branch
+- **Automated testing** on pushes to `initial-dev` branch
+- **Coverage reports** uploaded to Codecov
+- **Manual testing** available via GitHub Actions
 
 ## 🤝 Contributing
 
