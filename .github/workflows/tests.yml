@@ -1,0 +1,112 @@
+name: Frontend and Backend Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of tests to run'
+        default: 'both'
+        required: true
+        type: choice
+        options:          
+          - both
+          - frontend
+          - backend
+          - lint
+      coverage:
+        description: 'Generate coverage reports'
+        default: true
+        required: false
+        type: boolean
+      verbose:
+        description: 'Verbose output'
+        default: true
+        required: false
+        type: boolean
+
+  push:
+    branches:
+      - initial-dev
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: '3.10'
+
+    - name: Create Conda environment
+      shell: bash -l {0}
+      run: |
+        conda env create -f environment.yml
+        conda activate mavis
+        python -c "import sys; print('Python path:', sys.executable)"
+        python -c "import sqlalchemy; print('SQLAlchemy version:', sqlalchemy.__version__)"
+
+    - name: Install Node.js dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Run tests
+      shell: bash -l {0}
+      run: |
+        conda activate mavis
+        echo "Current Python path: $(which python)"
+        echo "Python version: $(python --version)"
+        echo "Checking if sqlalchemy is available:"
+        python -c "import sqlalchemy; print('SQLAlchemy available')" || echo "SQLAlchemy NOT available"
+        
+        TEST_COMMAND="python run_tests.py"
+        
+        # Add test type flag only for specific test types (not for 'both')
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.test_type }}" != "both" ]; then
+          TEST_COMMAND+=" --${{ github.event.inputs.test_type }}"
+        fi
+        
+        # Add common flags
+        TEST_COMMAND+=" ${{ (github.event.inputs.coverage || 'true') == 'true' && '--coverage' || '' }}"
+        TEST_COMMAND+=" ${{ (github.event.inputs.verbose || 'true') == 'true' && '--verbose' || '' }}"
+        TEST_COMMAND+=" --ci"
+        
+        echo "Running command: $TEST_COMMAND"
+        eval "$TEST_COMMAND"
+
+    - name: Upload backend coverage (if generated)
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/htmlcov/coverage.xml
+        flags: backend
+        name: backend-coverage
+      if: ${{ github.event.inputs.coverage == 'true' || github.event_name != 'workflow_dispatch' }}
+
+    - name: Upload frontend coverage (if generated)
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./frontend/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+      if: ${{ github.event.inputs.coverage == 'true' || github.event_name != 'workflow_dispatch' }}
