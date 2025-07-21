@@ -46,4 +46,8 @@ dependencies:
     - jupyter-black
     - pydantic  # For FastAPI request/response models    
     - awscli
-    - mkdocs 
+    - mkdocs
+    - mkdocs-material
+    - mkdocs-material-extensions
+    - mkdocs-git-revision-date-localized-plugin
+    - mkdocs-minify-plugin 
