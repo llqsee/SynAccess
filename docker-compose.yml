@@ -2,16 +2,23 @@ version: '3.8'
 
 services:
   mavis-app:
-    build: .
+    build: 
+      context: .
+      dockerfile: ${DOCKERFILE:-Dockerfile}
     ports:
       - "8000:8000"
+      - "3000:3000"
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=sqlite:///mavis_dev.db
+      - NODE_ENV=${NODE_ENV:-production}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./frontend:/app/frontend:delegated
+      - ./backend:/app/backend:delegated
     restart: unless-stopped
+    command: ${STARTUP_COMMAND:-./start.sh}
 
   # Add nginx for production
   nginx:
