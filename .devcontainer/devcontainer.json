@@ -1,6 +1,6 @@
 {
   "name": "MAVIS Development Environment",
-  "dockerComposeFile": "docker-compose.yml",
+  "dockerComposeFile": "../docker-compose.yml",
   "service": "mavis-app",
   "workspaceFolder": "/app",
   "forwardPorts": [8000, 3000],
@@ -16,7 +16,7 @@
       "description": "React frontend application"
     }
   },
-  "postCreateCommand": "conda activate mavis && python setup_database.py && python run_tests.py --ci --coverage --verbose",
+  "postCreateCommand": "conda activate mavis && python setup_database.py",
   "postStartCommand": "conda activate mavis && python setup_database.py",
   "customizations": {
     "vscode": {
