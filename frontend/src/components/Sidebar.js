@@ -16,9 +16,19 @@ import {
   Stepper,
   Step,
   StepLabel,
-  StepContent
+  StepContent,
+  TextField,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Alert,
+  Chip,
+  LinearProgress,
+  IconButton,
+  Tooltip,
+  Stack
 } from '@mui/material';
-import { CheckCircle, CloudUpload, ArrowForward, Settings, ExpandLess, ExpandMore } from '@mui/icons-material';
+import { CheckCircle, CloudUpload, ArrowForward, Settings, ExpandLess, ExpandMore, PlayArrow, Cancel } from '@mui/icons-material';
 
 const Sidebar = ({
   onRealDataUpload,
@@ -31,7 +41,14 @@ const Sidebar = ({
   syntheticDataName,
   backendConnected,
   isCollapsed,
-  onToggleCollapse
+  onToggleCollapse,
+  realData,
+  syntheticData,
+  onCancel,
+  processingStatus,
+  progress = 0,
+  canCancel = false,
+  error
 }) => {
   const [method, setMethod] = useState('umap');
   const [nNeighbors, setNNeighbors] = useState(15);
@@ -87,7 +104,7 @@ const Sidebar = ({
     setter(value);
   };
 
-  const isVisualizationDisabled = loading || !realDataLoaded || !syntheticDataLoaded || !backendConnected;
+  const isVisualizationDisabled = !realDataLoaded || !syntheticDataLoaded || !backendConnected;
 
   // Determine current step
   const getCurrentStep = () => {
@@ -530,8 +547,6 @@ const Sidebar = ({
           </Step>
         </Stepper>
       </Box>
-
-
 
       {/* Help Text */}
       {!syntheticDataLoaded && (

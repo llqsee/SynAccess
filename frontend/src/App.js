@@ -26,7 +26,8 @@ import {
   CheckCircle,
   Error as ErrorIcon,
   AutorenewRounded,
-  Menu
+  Menu,
+  History as HistoryIcon
 } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
@@ -35,8 +36,12 @@ import Sidebar from './components/Sidebar';
 import EmbeddingPlot from './components/EmbeddingPlot';
 import DistributionPlot from './components/DistributionPlot';
 import ResultsPane from './components/ResultsPane';
+import History from './components/History';
+import SummaryTab from './components/SummaryTab';
+import ValidationPopup from './components/ValidationPopup';
 import { useDataUpload } from './hooks/useDataUpload';
 import { useEmbedding } from './hooks/useEmbedding';
+import { useValidation } from './hooks/useValidation';
 import { healthCheck } from './services/api';
 
 // Create theme with better color scheme
@@ -114,11 +119,34 @@ function AppContent() {
     embeddingMetadata,
     loading,
     error: embeddingError,
+    processingStatus,
+    currentJobId,
+    currentTaskId,
+    progress,
+    queuePosition,
+    estimatedWaitTime,
+    canCancel,
+    originalRealData,
+    originalSyntheticData,
     setError: setEmbeddingError,
-    handleVisualize
+    handleVisualize,
+    handleCancel,
+    loadFromHistory
   } = useEmbedding();
 
-  const error = uploadError || embeddingError;
+  const {
+    validationResults,
+    validating,
+    validationError,
+    criticalIssues,
+    showValidationPopup,
+    runValidation,
+    dismissValidationPopup,
+    clearValidation,
+    getValidationSummary
+  } = useValidation();
+
+  const error = uploadError || embeddingError || validationError;
   
   const setError = useCallback((error) => {
     setUploadError(error);
@@ -143,7 +171,7 @@ function AppContent() {
     handleVisualize(realData, syntheticData, params, backendStatus === 'connected');
     // Auto-switch to embeddings tab after visualization starts
     if (backendStatus === 'connected') {
-      setActiveTab(1);
+      setActiveTab(2);
     }
   };
 
@@ -151,18 +179,27 @@ function AppContent() {
     setActiveTab(newValue);
   };
 
+  const handleLoadFromHistory = useCallback((embeddings, metadata, sessionState) => {
+    loadFromHistory(embeddings, metadata, sessionState);
+    setActiveTab(2); // Switch to embeddings tab
+  }, [loadFromHistory]);
+
   // Determine which tabs should be enabled
   const dataUploaded = realData && syntheticData;
+  const hasOriginalData = dataUploaded || 
+                         (embeddingMetadata?.hasCompressedData) || 
+                         (embeddingMetadata?.realData?.data && embeddingMetadata?.syntheticData?.data) ||
+                         (originalRealData?.data && originalSyntheticData?.data);
+  const dataAvailable = dataUploaded || hasOriginalData;
   const embeddingGenerated = embeddingData && embeddingMetadata;
-  
-
   
   // Smart tab enabling logic
   const tabsEnabled = {
     upload: true, // Always enabled
     embeddings: dataUploaded, // Enabled when data is uploaded
-    distributions: dataUploaded, // Enabled when data is uploaded
-    summary: dataUploaded, // Enabled when data is uploaded
+    distributions: dataAvailable, // Enabled when data is uploaded OR loaded from history with compressed data
+    summary: dataAvailable, // Enabled when data is uploaded OR loaded from history with compressed data
+    history: true, // Always enabled - users can view history anytime
   };
 
   return (
@@ -184,6 +221,26 @@ function AppContent() {
                 variant="outlined"
               />
             )}
+            {validating && (
+              <Chip
+                icon={<Assessment sx={{ animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.5 }, '100%': { opacity: 1 } } }} />}
+                label="Running Data Validation"
+                color="info"
+                size="small"
+                variant="outlined"
+              />
+            )}
+            {validationResults && !validating && (
+              <Chip
+                icon={<CheckCircle />}
+                label={`Validation Complete (${getValidationSummary()?.score || 0}% quality score)`}
+                color={getValidationSummary()?.overallStatus === 'EXCELLENT' ? 'success' : 
+                       getValidationSummary()?.overallStatus === 'GOOD' ? 'info' :
+                       getValidationSummary()?.overallStatus === 'FAIR' ? 'warning' : 'error'}
+                size="small"
+                variant="outlined"
+              />
+            )}
           </Box>
 
           {/* Error Alert */}
@@ -192,6 +249,14 @@ function AppContent() {
               {error}
             </Alert>
           )}
+
+          {/* Validation Popup */}
+          <ValidationPopup
+            open={showValidationPopup}
+            onClose={dismissValidationPopup}
+            criticalIssues={criticalIssues}
+            onViewFullReport={() => setActiveTab(1)} // Switch to Summary tab
+          />
 
           {/* Loading Progress Bar */}
           {loading && (
@@ -207,9 +272,7 @@ function AppContent() {
                   }
                 }} 
               />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                Processing data and computing embeddings... This may take a few moments.
-              </Typography>
+
             </Box>
           )}
 
@@ -241,6 +304,12 @@ function AppContent() {
                   disabled={!tabsEnabled.upload}
                 />
                 <Tab 
+                  icon={<Assessment />} 
+                  label="Summary" 
+                  iconPosition="start"
+                  disabled={!tabsEnabled.summary}
+                />
+                <Tab 
                   icon={<ScatterPlot />} 
                   label="Embeddings" 
                   iconPosition="start"
@@ -253,10 +322,10 @@ function AppContent() {
                   disabled={!tabsEnabled.distributions}
                 />
                 <Tab 
-                  icon={<Assessment />} 
-                  label="Summary" 
+                  icon={<HistoryIcon />} 
+                  label="History" 
                   iconPosition="start"
-                  disabled={!tabsEnabled.summary}
+                  disabled={!tabsEnabled.history}
                 />
               </Tabs>
             </Box>
@@ -289,6 +358,13 @@ function AppContent() {
                             backendConnected={backendStatus === 'connected'}
                             isCollapsed={false}
                             onToggleCollapse={() => {}}
+                            realData={realData}
+                            syntheticData={syntheticData}
+                            onCancel={handleCancel}
+                            processingStatus={processingStatus}
+                            progress={progress}
+                            canCancel={canCancel}
+                            error={error}
                           />
                         </Box>
                       </Paper>
@@ -323,8 +399,23 @@ function AppContent() {
                 </Box>
               </TabPanel>
 
-              {/* Embeddings Tab */}
+              {/* Summary Tab */}
               <TabPanel value={activeTab} index={1}>
+                <Box sx={{ p: 2 }}>
+                  <SummaryTab
+                    realData={realData || (embeddingMetadata?.hasCompressedData ? embeddingMetadata.realData : null) || originalRealData}
+                    syntheticData={syntheticData || (embeddingMetadata?.hasCompressedData ? embeddingMetadata.syntheticData : null) || originalSyntheticData}
+                    embeddingData={embeddingData}
+                    embeddingMetadata={embeddingMetadata}
+                    validationResults={validationResults}
+                    validating={validating}
+                    onRunValidation={runValidation}
+                  />
+                </Box>
+              </TabPanel>
+
+              {/* Embeddings Tab */}
+              <TabPanel value={activeTab} index={2}>
                 <Box sx={{ 
                   p: 1, 
                   height: '100%', 
@@ -421,15 +512,15 @@ function AppContent() {
               </TabPanel>
 
               {/* Distributions Tab */}
-              <TabPanel value={activeTab} index={2}>
+              <TabPanel value={activeTab} index={3}>
                 <Box sx={{ p: 2 }}>
-                  {dataUploaded ? (
+                  {dataAvailable ? (
                     <Box sx={{ minHeight: '80vh' }}>
                       <DistributionPlot
-                        realData={realData?.data}
-                        syntheticData={syntheticData?.data}
-                        realHeaders={realData?.headers}
-                        syntheticHeaders={syntheticData?.headers}
+                        realData={realData?.data || embeddingMetadata?.realData?.data || originalRealData?.data}
+                        syntheticData={syntheticData?.data || embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data}
+                        realHeaders={realData?.headers || embeddingMetadata?.realData?.headers || originalRealData?.headers}
+                        syntheticHeaders={syntheticData?.headers || embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers}
                       />
                     </Box>
                   ) : (
@@ -448,73 +539,10 @@ function AppContent() {
                 </Box>
               </TabPanel>
 
-              {/* Summary Tab */}
-              <TabPanel value={activeTab} index={3}>
-                <Box sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Analysis Summary
-                  </Typography>
-                  {dataUploaded ? (
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} md={6}>
-                        <Paper sx={{ p: 2, minHeight: '70vh' }}>
-                          <Typography variant="subtitle1" gutterBottom>
-                            Data Statistics
-                          </Typography>
-                          <Box sx={{ height: '100%', overflow: 'auto' }}>
-                            <ResultsPane
-                              realData={realData?.data}
-                              syntheticData={syntheticData?.data}
-                              embeddingMetadata={embeddingMetadata}
-                              compact={false}
-                            />
-                          </Box>
-                        </Paper>
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <Paper sx={{ p: 2, minHeight: '70vh' }}>
-                          <Typography variant="subtitle1" gutterBottom>
-                            Quick Insights
-                          </Typography>
-                          <Box sx={{ color: 'text.secondary', lineHeight: 1.6, height: '100%', overflow: 'auto' }}>
-                            {embeddingGenerated && (
-                              <Typography paragraph>
-                                ✓ Embedding visualization shows the relationship between real and synthetic data points
-                              </Typography>
-                            )}
-                            <Typography paragraph>
-                              ✓ Distribution analysis compares statistical properties across all variables
-                            </Typography>
-                            <Typography paragraph>
-                              ✓ Use the tabs above to explore different aspects of your data comparison
-                            </Typography>
-                            {realData && syntheticData && (
-                              <Box sx={{ mt: 2, p: 2, bgcolor: 'primary.50', borderRadius: 1 }}>
-                                <Typography variant="body2">
-                                  <strong>Dataset Info:</strong><br />
-                                  Real data: {realData.data?.length || 0} rows<br />
-                                  Synthetic data: {syntheticData.data?.length || 0} rows<br />
-                                  Variables: {realData.headers?.length || 0}
-                                </Typography>
-                              </Box>
-                            )}
-                          </Box>
-                        </Paper>
-                      </Grid>
-                    </Grid>
-                  ) : (
-                    <Paper sx={{ p: 4, textAlign: 'center', minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Box>
-                        <Assessment sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                        <Typography variant="h6" color="text.secondary" gutterBottom>
-                          No Analysis Available
-                        </Typography>
-                        <Typography color="text.secondary">
-                          Upload datasets and generate visualizations to see the analysis summary.
-                        </Typography>
-                      </Box>
-                    </Paper>
-                  )}
+              {/* History Tab */}
+              <TabPanel value={activeTab} index={4}>
+                <Box sx={{ p: 2, height: '100%' }}>
+                  <History onLoadEmbedding={handleLoadFromHistory} />
                 </Box>
               </TabPanel>
             </Box>

@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Tuple, Union
+from typing import Dict, List, Any, Tuple, Union, Callable, Optional
 import numpy as np
 import pandas as pd
 import time
@@ -22,7 +22,8 @@ class EmbeddingService:
         params: Dict[str, Any] = None,
         n_samples: int = None,
         real_headers: List[str] = None,
-        synthetic_headers: List[str] = None
+        synthetic_headers: List[str] = None,
+        progress_callback: Optional[Callable[[float], None]] = None
     ) -> Tuple[Dict[str, List[List[float]]], Dict[str, Any]]:
         """
         Compute embeddings for real and synthetic data using one-hot encoding for categorical features.
@@ -36,6 +37,7 @@ class EmbeddingService:
             n_samples: Number of samples to use (optional)
             real_headers: Column headers for real data
             synthetic_headers: Column headers for synthetic data
+            progress_callback: Optional callback for progress updates (0.0 to 1.0)
             
         Returns:
             embeddings: Dictionary with 'real' and 'synthetic' embedding arrays
@@ -51,9 +53,17 @@ class EmbeddingService:
         if method == "tsne" and params.get("n_components", 2) != 2:
             raise ValueError("t-SNE only supports 2D visualizations.")
         
+        # Report initial progress
+        if progress_callback:
+            progress_callback(0.1)
+        
         # Preprocess data using simplified preprocessing
         real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
         preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding'}
+        
+        # Report preprocessing completion
+        if progress_callback:
+            progress_callback(0.2)
         
         # Handle sampling parameters
         n_real_samples = params.pop('n_real_samples', None)
@@ -94,9 +104,13 @@ class EmbeddingService:
         else:
             synth_sampled = synth_processed
         
+        # Report sampling completion
+        if progress_callback:
+            progress_callback(0.3)
+        
         # Compute embeddings using the method
         embedding_real, embedding_synth = self.methods[method](
-            real_sampled, synth_sampled, **params
+            real_sampled, synth_sampled, progress_callback=progress_callback, **params
         )
         
         # Collect metadata
@@ -126,6 +140,7 @@ class EmbeddingService:
         n_neighbors: int = 15,
         min_dist: float = 0.1,
         random_state: int = None,
+        progress_callback: Optional[Callable[[float], None]] = None,
         **kwargs
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -140,11 +155,18 @@ class EmbeddingService:
         )
         
         # Fit on real data only
+        if progress_callback:
+            progress_callback(0.5)
         umap_model.fit(real_data)
         
         # Transform both real and synthetic data
+        if progress_callback:
+            progress_callback(0.8)
         embedding_real = umap_model.transform(real_data)
         embedding_synth = umap_model.transform(synth_data)
+        
+        if progress_callback:
+            progress_callback(0.95)
         
         return embedding_real, embedding_synth    
     
@@ -158,6 +180,7 @@ class EmbeddingService:
         early_exaggeration: float = 12.0,
         random_state: int = None,
         n_jobs: int = 1,
+        progress_callback: Optional[Callable[[float], None]] = None,
         **kwargs
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -181,14 +204,20 @@ class EmbeddingService:
         )
         
         # Fit real data
+        if progress_callback:
+            progress_callback(0.5)
         tsne_embedding = tsne.fit(real_data)       
         
         # Transform both real synthetic data
+        if progress_callback:
+            progress_callback(0.8)
         partial_embedding_real = tsne_embedding.transform(real_data)        
         embedding_real = np.array(partial_embedding_real)
 
         partial_embedding_synth = tsne_embedding.transform(synth_data)        
         embedding_synth = np.array(partial_embedding_synth)
 
+        if progress_callback:
+            progress_callback(0.95)
 
-        return embedding_real, embedding_synth
+        return embedding_real, embedding_synth 

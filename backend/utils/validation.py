@@ -1,52 +1,101 @@
-from typing import List, Union, Dict, Any
-import numpy as np
-import pandas as pd
+"""
+Data validation utilities for the MAVIS application.
+"""
 
-# def validate_data_dimensions(
-#     real_data: Union[np.ndarray, List[List[float]], pd.DataFrame],
-#     synthetic_data: Union[np.ndarray, List[List[float]], pd.DataFrame]
-# ) -> None:
-#     """
-#     Validate that real and synthetic data have compatible dimensions.
+from typing import List, Any, Dict
+import numpy as np
+
+def validate_data_format(real_data: List[List[Any]], synthetic_data: List[List[Any]]) -> None:
+    """
+    Validate that the input data has the correct format.
     
-#     Args:
-#         real_data: Real dataset
-#         synthetic_data: Synthetic dataset
+    Args:
+        real_data: Real dataset as list of lists
+        synthetic_data: Synthetic dataset as list of lists
         
-#     Raises:
-#         ValueError: If dimensions are incompatible
-#     """
-#     real = np.asarray(real_data)
-#     synth = np.asarray(synthetic_data)
+    Raises:
+        ValueError: If data format is invalid
+    """
+    if not real_data or not synthetic_data:
+        raise ValueError("Both real_data and synthetic_data must be provided")
     
-#     if real.shape[1] != synth.shape[1]:
-#         raise ValueError(
-#             f"Dimension mismatch: real data has {real.shape[1]} features, "
-#             f"synthetic data has {synth.shape[1]} features"
-#         )
+    if not isinstance(real_data, list) or not isinstance(synthetic_data, list):
+        raise ValueError("Both real_data and synthetic_data must be lists")
+    
+    if len(real_data) == 0 or len(synthetic_data) == 0:
+        raise ValueError("Both real_data and synthetic_data must contain at least one row")
+    
+    # Check that all rows have the same number of columns
+    real_cols = len(real_data[0]) if real_data else 0
+    synthetic_cols = len(synthetic_data[0]) if synthetic_data else 0
+    
+    if real_cols == 0 or synthetic_cols == 0:
+        raise ValueError("Data rows must contain at least one column")
+    
+    # Check that all rows have the same number of columns
+    for i, row in enumerate(real_data):
+        if len(row) != real_cols:
+            raise ValueError(f"All rows in real_data must have the same number of columns. Row {i} has {len(row)} columns, expected {real_cols}")
+    
+    for i, row in enumerate(synthetic_data):
+        if len(row) != synthetic_cols:
+            raise ValueError(f"All rows in synthetic_data must have the same number of columns. Row {i} has {len(row)} columns, expected {synthetic_cols}")
+    
+    # Check that both datasets have the same number of columns
+    if real_cols != synthetic_cols:
+        raise ValueError(f"Real and synthetic data must have the same number of columns. Real: {real_cols}, Synthetic: {synthetic_cols}")
 
 def validate_embedding_params(method: str, params: Dict[str, Any]) -> None:
     """
     Validate embedding method parameters.
     
     Args:
-        method: Embedding method ('umap' or 'tsne')
-        params: Method-specific parameters
+        method: Embedding method ('umap', 'tsne', 'pca')
+        params: Method parameters
         
     Raises:
         ValueError: If parameters are invalid
     """
-    method = method.lower()
-    if method not in {"umap", "tsne"}:
-        raise ValueError(f"Unsupported method: {method}")
+    if method not in ['umap', 'tsne', 'pca']:
+        raise ValueError(f"Unsupported embedding method: {method}. Supported methods: umap, tsne, pca")
     
-    # Define valid parameters for each method
-    valid_params = {
-        "umap": {"n_neighbors", "min_dist", "n_components", "random_state", "n_real_samples", "n_synth_samples"},
-        "tsne": {"perplexity", "early_exaggeration", "n_components", "random_state", "n_real_samples", "n_synth_samples"}
-    }
+    if not isinstance(params, dict):
+        raise ValueError("Parameters must be a dictionary")
     
-    # Check for invalid parameters
-    invalid_params = set(params.keys()) - valid_params[method]
-    if invalid_params:
-        raise ValueError(f"Invalid parameters for {method}: {invalid_params}") 
+    # Method-specific validation
+    if method == 'umap':
+        if 'n_neighbors' in params and (not isinstance(params['n_neighbors'], int) or params['n_neighbors'] < 2):
+            raise ValueError("n_neighbors must be an integer >= 2")
+        if 'min_dist' in params and (not isinstance(params['min_dist'], (int, float)) or params['min_dist'] < 0):
+            raise ValueError("min_dist must be a non-negative number")
+        if 'n_components' in params and (not isinstance(params['n_components'], int) or params['n_components'] < 1):
+            raise ValueError("n_components must be a positive integer")
+    
+    elif method == 'tsne':
+        if 'perplexity' in params and (not isinstance(params['perplexity'], (int, float)) or params['perplexity'] <= 0):
+            raise ValueError("perplexity must be a positive number")
+        if 'n_components' in params and (not isinstance(params['n_components'], int) or params['n_components'] < 1):
+            raise ValueError("n_components must be a positive integer")
+        if 'n_iter' in params and (not isinstance(params['n_iter'], int) or params['n_iter'] < 1):
+            raise ValueError("n_iter must be a positive integer")
+    
+    elif method == 'pca':
+        if 'n_components' in params and (not isinstance(params['n_components'], int) or params['n_components'] < 1):
+            raise ValueError("n_components must be a positive integer")
+
+def validate_n_samples(n_samples: int, total_samples: int) -> None:
+    """
+    Validate the number of samples to use.
+    
+    Args:
+        n_samples: Number of samples to use
+        total_samples: Total number of samples available
+        
+    Raises:
+        ValueError: If n_samples is invalid
+    """
+    if n_samples is not None:
+        if not isinstance(n_samples, int) or n_samples <= 0:
+            raise ValueError("n_samples must be a positive integer")
+        if n_samples > total_samples:
+            raise ValueError(f"n_samples ({n_samples}) cannot be greater than total samples ({total_samples})") 

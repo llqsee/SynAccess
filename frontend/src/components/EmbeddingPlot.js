@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
-import { Box, Typography, Paper, Chip, IconButton, Tooltip, FormControl, InputLabel, Select, MenuItem, Divider, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Paper, Chip, IconButton, Tooltip, Divider, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import { Clear, SelectAll, BarChart, CropFree, UnfoldMore, UnfoldLess } from '@mui/icons-material';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
@@ -8,9 +8,7 @@ import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '.
 
 const EmbeddingPlot = ({ 
   data, 
-  metadata, 
-  width = 800, 
-  height = 600,
+  metadata,
   pointSize = 0.8,  
   pointOpacity = 0.6  
 }) => {
@@ -26,10 +24,21 @@ const EmbeddingPlot = ({
   const [plotLoading, setPlotLoading] = useState(false);
   const [plotError, setPlotError] = useState(null);
   
-  // Layout state for adjustable panels
-  const [sidebarWidth, setSidebarWidth] = useState(35); // percentage
+  // Enhanced layout state with intelligent defaults
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    // Smart initial sidebar width based on viewport
+    if (typeof window !== 'undefined') {
+      const viewportWidth = window.innerWidth;
+      if (viewportWidth < 768) return 40; // Mobile: reasonable sidebar
+      if (viewportWidth < 1024) return 35; // Tablet: balanced
+      if (viewportWidth < 1440) return 30; // Desktop: more plot space
+      return 25; // Large screens: maximize plot area
+    }
+    return 30;
+  });
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Removed aspect ratio mode - now fully automatic
   
   // Refs for smooth resizing and API management
   const resizeTimeoutRef = useRef(null);
@@ -38,31 +47,199 @@ const EmbeddingPlot = ({
   const plotGenerationTimeoutRef = useRef(null);
   const lastRequestParamsRef = useRef(null);
 
+  // Check if this embedding is loaded from history (no original data available)
+  const isFromHistory = useMemo(() => {
+    // The key question is: do we have the original data to generate distribution plots?
+    // This is now mainly for internal tracking since both fresh and history embeddings work
+    if (!metadata) return true;
+    
+    // Check if we have original data structure for distribution plots in metadata
+    const hasOriginalDataInMetadata = metadata.realData?.data && 
+                                    metadata.syntheticData?.data &&
+                                    Array.isArray(metadata.realData.data) &&
+                                    Array.isArray(metadata.syntheticData.data) &&
+                                    metadata.realData.data.length > 0 &&
+                                    metadata.syntheticData.data.length > 0;
+    
+    // Check if we have original data structure in session state
+    let hasOriginalDataInSession = false;
+    try {
+      const sessionRealData = window.sessionStorage.getItem('realData');
+      const sessionSyntheticData = window.sessionStorage.getItem('syntheticData');
+      
+      if (sessionRealData && sessionSyntheticData) {
+        const realData = JSON.parse(sessionRealData);
+        const syntheticData = JSON.parse(sessionSyntheticData);
+        
+        hasOriginalDataInSession = realData.data && syntheticData.data && 
+                                 Array.isArray(realData.data) && Array.isArray(syntheticData.data) &&
+                                 realData.data.length > 0 && syntheticData.data.length > 0;
+      }
+    } catch (error) {
+      console.warn('Failed to check session state data:', error);
+    }
+    
+    // If we have original data in either place, we can generate plots
+    return !(hasOriginalDataInMetadata || hasOriginalDataInSession);
+  }, [metadata]);
+
   // Get original data for histogram generation
   const getOriginalData = useCallback(() => {
-    if (!metadata?.realData?.data || !metadata?.syntheticData?.data) return null;
+    // Try to get data from metadata first (for history embeddings)
+    if (metadata?.realData?.data && metadata?.syntheticData?.data) {
+      const realData = metadata.realData.data;
+      const syntheticData = metadata.syntheticData.data;
+      
+      // Validate that data arrays contain valid arrays
+      if (!Array.isArray(realData) || !Array.isArray(syntheticData)) return null;
+      
+      // Filter out invalid data rows
+      const validRealData = realData.filter(row => row && Array.isArray(row) && row.length > 0);
+      const validSyntheticData = syntheticData.filter(row => row && Array.isArray(row) && row.length > 0);
+      
+      if (validRealData.length === 0 && validSyntheticData.length === 0) return null;
+      
+      const realLabels = Array(validRealData.length).fill('Real');
+      const syntheticLabels = Array(validSyntheticData.length).fill('Synthetic');
+      
+      return {
+        data: [...validRealData, ...validSyntheticData],
+        labels: [...realLabels, ...syntheticLabels],
+        headers: metadata.realData.headers || []
+      };
+    }
     
-    const realData = metadata.realData.data;
-    const syntheticData = metadata.syntheticData.data;
+    // If metadata doesn't have original data, try to access session state data
+    // This is the same pattern used in App.js for DistributionPlot
+    try {
+      // Access session state data directly (same as DistributionPlot component)
+      const sessionRealData = window.sessionStorage.getItem('realData');
+      const sessionSyntheticData = window.sessionStorage.getItem('syntheticData');
+      
+      if (sessionRealData && sessionSyntheticData) {
+        const realData = JSON.parse(sessionRealData);
+        const syntheticData = JSON.parse(sessionSyntheticData);
+        
+        if (realData.data && syntheticData.data && 
+            Array.isArray(realData.data) && Array.isArray(syntheticData.data) &&
+            realData.data.length > 0 && syntheticData.data.length > 0) {
+          
+          const realLabels = Array(realData.data.length).fill('Real');
+          const syntheticLabels = Array(syntheticData.data.length).fill('Synthetic');
+          
+          return {
+            data: [...realData.data, ...syntheticData.data],
+            labels: [...realLabels, ...syntheticLabels],
+            headers: realData.headers || []
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to access session state data:', error);
+    }
     
-    // Validate that data arrays contain valid arrays
-    if (!Array.isArray(realData) || !Array.isArray(syntheticData)) return null;
-    
-    // Filter out invalid data rows
-    const validRealData = realData.filter(row => row && Array.isArray(row) && row.length > 0);
-    const validSyntheticData = syntheticData.filter(row => row && Array.isArray(row) && row.length > 0);
-    
-    if (validRealData.length === 0 && validSyntheticData.length === 0) return null;
-    
-    const realLabels = Array(validRealData.length).fill('Real');
-    const syntheticLabels = Array(validSyntheticData.length).fill('Synthetic');
-    
-    return {
-      data: [...validRealData, ...validSyntheticData],
-      labels: [...realLabels, ...syntheticLabels],
-      headers: metadata.realData.headers || []
-    };
+    return null;
   }, [metadata]);
+
+  // Calculate optimal plot dimensions based on screen characteristics
+  const calculatePlotDimensions = useCallback((containerWidth, containerHeight, sidebarVisible) => {
+    const availableWidth = sidebarVisible && !sidebarCollapsed ? 
+      containerWidth * ((100 - sidebarWidth) / 100) : containerWidth;
+    
+    // Get screen characteristics
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const screenRatio = viewportWidth / viewportHeight;
+    const containerRatio = availableWidth / containerHeight;
+    
+    // Calculate optimal plot dimensions based on screen type and ratio
+    let plotWidth, plotHeight;
+    
+    // Screen-aware aspect ratio selection
+    if (viewportWidth < 768) {
+      // Mobile: Portrait-friendly ratios
+      if (screenRatio < 0.75) {
+        // Very tall phones (iPhone X, etc.)
+        plotWidth = availableWidth;
+        plotHeight = availableWidth * 0.85; // Slightly wider than square
+      } else {
+        // Standard mobile
+        plotWidth = availableWidth;
+        plotHeight = availableWidth * 0.75; // 4:3 ratio
+      }
+    } else if (viewportWidth < 1024) {
+      // Tablet: Balanced ratios that work in both orientations
+      if (screenRatio > 1.3) {
+        // Landscape tablet
+        plotWidth = Math.min(availableWidth, containerHeight * 1.4);
+        plotHeight = plotWidth / 1.4; // 7:5 ratio
+      } else {
+        // Portrait tablet or square-ish
+        plotWidth = availableWidth;
+        plotHeight = availableWidth / 1.2; // 6:5 ratio
+      }
+    } else if (viewportWidth < 1440) {
+      // Desktop: Optimize for common screen ratios
+      if (screenRatio > 1.7) {
+        // Wide screens (16:9, 16:10)
+        plotWidth = Math.min(availableWidth, containerHeight * 1.6);
+        plotHeight = plotWidth / 1.6; // 8:5 ratio (golden-like)
+      } else if (screenRatio > 1.4) {
+        // Standard desktop (4:3, 5:4)
+        plotWidth = Math.min(availableWidth, containerHeight * 1.3);
+        plotHeight = plotWidth / 1.3; // 13:10 ratio
+      } else {
+        // Tall or square screens
+        plotWidth = availableWidth;
+        plotHeight = availableWidth / 1.1; // Nearly square
+      }
+    } else {
+      // Large screens: Premium aspect ratios
+      if (screenRatio > 2.0) {
+        // Ultra-wide screens (21:9, 32:9)
+        plotWidth = Math.min(availableWidth, containerHeight * 1.8);
+        plotHeight = plotWidth / 1.8; // 9:5 ratio
+      } else if (screenRatio > 1.6) {
+        // Wide screens (16:9, 16:10)
+        plotWidth = Math.min(availableWidth, containerHeight * 1.618);
+        plotHeight = plotWidth / 1.618; // Golden ratio
+      } else {
+        // Standard or tall screens
+        plotWidth = Math.min(availableWidth, containerHeight * 1.4);
+        plotHeight = plotWidth / 1.4; // 7:5 ratio
+      }
+    }
+    
+    // Ensure the plot fits within the container
+    if (plotWidth > availableWidth) {
+      plotWidth = availableWidth;
+      plotHeight = plotWidth / (plotWidth / plotHeight); // Maintain ratio
+    }
+    if (plotHeight > containerHeight) {
+      plotHeight = containerHeight;
+      plotWidth = plotHeight * (plotWidth / plotHeight); // Maintain ratio
+    }
+    
+    // Apply reasonable minimum and maximum constraints
+    const minDimension = Math.min(viewportWidth * 0.2, viewportHeight * 0.2);
+    const maxDimension = Math.min(viewportWidth * 0.8, viewportHeight * 0.8);
+    
+    plotWidth = Math.max(plotWidth, Math.max(350, minDimension));
+    plotHeight = Math.max(plotHeight, Math.max(280, minDimension));
+    
+    plotWidth = Math.min(plotWidth, maxDimension);
+    plotHeight = Math.min(plotHeight, maxDimension);
+    
+    // Final ratio adjustment to prevent extreme ratios
+    const finalRatio = plotWidth / plotHeight;
+    if (finalRatio > 2.5) {
+      plotHeight = plotWidth / 2.5;
+    } else if (finalRatio < 0.6) {
+      plotWidth = plotHeight * 0.6;
+    }
+    
+    return { plotWidth, plotHeight };
+  }, [sidebarWidth, sidebarCollapsed]);
 
   // Generate histogram data for selected points
   const generateHistogramData = useCallback(() => {
@@ -72,22 +249,46 @@ const EmbeddingPlot = ({
     if (!originalData || histogramColumn >= originalData.headers.length) return null;
 
     const selectedData = selectedPoints
-      .filter(index => {
-        // More permissive validation with debugging
-        const isValidIndex = index >= 0 && index < originalData.data.length;
-        const hasData = originalData.data[index];
-        const isDataArray = hasData && Array.isArray(originalData.data[index]);
-        const hasEnoughColumns = isDataArray && originalData.data[index].length > histogramColumn;
-        const hasLabel = originalData.labels[index];
-        
-        const isValid = isValidIndex && hasData && isDataArray && hasEnoughColumns && hasLabel;
-        return isValid;
+      .filter(embeddingIndex => {
+        // Validate embedding index
+        const isValidEmbeddingIndex = embeddingIndex >= 0 && embeddingIndex < data.length;
+        const hasEmbeddingLabel = metadata.labels[embeddingIndex];
+        return isValidEmbeddingIndex && hasEmbeddingLabel;
       })
-      .map(index => ({
-        value: originalData.data[index][histogramColumn],
-        label: originalData.labels[index],
-        index: index
-      }));
+      .map(embeddingIndex => {
+        const pointLabel = metadata.labels[embeddingIndex];
+        
+        // Try direct mapping first
+        if (embeddingIndex >= 0 && embeddingIndex < originalData.data.length && 
+            originalData.labels[embeddingIndex] === pointLabel) {
+          
+          const originalDataPoint = originalData.data[embeddingIndex];
+          if (originalDataPoint && Array.isArray(originalDataPoint) && originalDataPoint.length > histogramColumn) {
+            return {
+              value: originalDataPoint[histogramColumn],
+              label: pointLabel,
+              index: embeddingIndex
+            };
+          }
+        }
+        
+        // Fallback: find matching data in original dataset
+        for (let i = 0; i < originalData.data.length; i++) {
+          if (originalData.labels[i] === pointLabel && 
+              originalData.data[i] && 
+              Array.isArray(originalData.data[i]) && 
+              originalData.data[i].length > histogramColumn) {
+            return {
+              value: originalData.data[i][histogramColumn],
+              label: pointLabel,
+              index: i
+            };
+          }
+        }
+        
+        return null; // Invalid data point
+      })
+      .filter(item => item !== null); // Remove invalid entries
     
     const realValues = selectedData.filter(d => d.label === 'Real').map(d => d.value);
     const syntheticValues = selectedData.filter(d => d.label === 'Synthetic').map(d => d.value);
@@ -106,7 +307,7 @@ const EmbeddingPlot = ({
       dataType,
       availablePlotTypes
     };
-  }, [selectedPoints, histogramColumn, getOriginalData]);
+  }, [selectedPoints, histogramColumn, getOriginalData, data, metadata]);
 
   // Clear selection
   const clearSelection = useCallback(() => {
@@ -137,17 +338,59 @@ const EmbeddingPlot = ({
     const selectedRealData = [];
     const selectedSyntheticData = [];
 
-    selectedPoints.forEach(index => {
-      const isValidIndex = index >= 0 && index < originalData.data.length;
-      const hasData = originalData.data[index];
-      const isDataArray = hasData && Array.isArray(originalData.data[index]);
-      const hasLabel = originalData.labels[index];
+    // FIXED: Map embedding indices to original data indices correctly
+    selectedPoints.forEach(embeddingIndex => {
+      // Check if this is a valid embedding index
+      if (embeddingIndex < 0 || embeddingIndex >= data.length || !metadata.labels[embeddingIndex]) {
+        return;
+      }
+
+      // Get the label for this embedding point
+      const pointLabel = metadata.labels[embeddingIndex];
       
-      if (isValidIndex && hasData && isDataArray && hasLabel) {
-        if (originalData.labels[index] === 'Real') {
-          selectedRealData.push(originalData.data[index]);
-        } else {
-          selectedSyntheticData.push(originalData.data[index]);
+      // Get the coordinates for this embedding point
+      const embeddingCoords = data[embeddingIndex];
+      if (!embeddingCoords || !Array.isArray(embeddingCoords)) {
+        return;
+      }
+
+      // Now we need to find this point in the original data
+      // Since embedding coordinates correspond to original data points,
+      // we need to map back to the original data structure
+      
+      // The embedding data should maintain the same order as the combined original data
+      // But let's be more robust and find the corresponding original data point
+      
+      // For now, use the embedding index directly but validate it exists in original data
+      if (embeddingIndex >= 0 && embeddingIndex < originalData.data.length && 
+          originalData.labels[embeddingIndex] === pointLabel) {
+        
+        const originalDataPoint = originalData.data[embeddingIndex];
+        if (originalDataPoint && Array.isArray(originalDataPoint)) {
+          if (pointLabel === 'Real') {
+            selectedRealData.push(originalDataPoint);
+          } else if (pointLabel === 'Synthetic') {
+            selectedSyntheticData.push(originalDataPoint);
+          }
+        }
+      } else {
+        // If direct mapping fails, we need to find the correct original data point
+        // This happens when there's a mismatch between embedding and original data ordering
+        console.warn(`Index mismatch detected for embedding point ${embeddingIndex} with label ${pointLabel}`);
+        
+        // As a fallback, try to find matching data in the original dataset
+        // This is less efficient but more robust
+        let foundInOriginal = false;
+        for (let i = 0; i < originalData.data.length && !foundInOriginal; i++) {
+          if (originalData.labels[i] === pointLabel && originalData.data[i] && Array.isArray(originalData.data[i])) {
+            // Additional validation could go here if needed
+            if (pointLabel === 'Real') {
+              selectedRealData.push(originalData.data[i]);
+            } else if (pointLabel === 'Synthetic') {
+              selectedSyntheticData.push(originalData.data[i]);
+            }
+            foundInOriginal = true;
+          }
         }
       }
     });
@@ -155,10 +398,18 @@ const EmbeddingPlot = ({
     // Check if we have any data to send
     if (selectedRealData.length === 0 && selectedSyntheticData.length === 0) {
       console.error('No valid data to send to API');
+      console.log('Debug info:', {
+        selectedPointsCount: selectedPoints.length,
+        originalDataLength: originalData.data.length,
+        embeddingDataLength: data.length,
+        labelsLength: metadata.labels.length
+      });
       setPlotError('No valid data points found for the selected column');
       setPlotLoading(false);
       return;
     }
+
+    console.log(`Selected data: ${selectedRealData.length} real, ${selectedSyntheticData.length} synthetic`);
 
     // Use the same API as DistributionPlot.js
     const requestData = {
@@ -213,7 +464,7 @@ const EmbeddingPlot = ({
         setPlotLoading(false);
       }
     }
-  }, [selectedPoints, histogramColumn, histogramPlotType, generateHistogramData, getOriginalData]);
+  }, [selectedPoints, histogramColumn, histogramPlotType, generateHistogramData, getOriginalData, data, metadata]);
 
   // Auto-set plot type when column changes (using same logic as DistributionPlot.js)
   useEffect(() => {
@@ -247,71 +498,170 @@ const EmbeddingPlot = ({
         const originalData = getOriginalData();
         const isDiscrete = originalData ? isDiscreteVariable(histogramColumn, originalData) : false;
         
-                 if (isDiscrete) {
-           // Render discrete histogram with gaps - separate side by side plots
-           return (
-             <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
-               <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
-                 <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
-                   Real Data
-                 </Typography>
-                 <Plot
-                   data={[
-                     {
-                       x: plotData.real_values,
-                       type: 'histogram',
-                       name: 'Real',
-                       marker: { color: '#2563eb' },
-                       opacity: 0.7
-                     }
-                   ]}
-                   layout={{
-                     margin: { l: 40, r: 20, t: 20, b: 40 },
-                     showlegend: false,
-                     xaxis: { 
-                       title: '',
-                       type: 'category'  // Treat as categories to add gaps
-                     },
-                     yaxis: { title: 'Count' },
-                     bargap: 0.1  // Add gaps between bars
-                   }}
-                   style={{ width: '100%', height: '260px' }}
-                   config={{ displayModeBar: false }}
-                 />
-               </Box>
-               <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
-                 <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
-                   Synthetic Data
-                 </Typography>
-                 <Plot
-                   data={[
-                     {
-                       x: plotData.synthetic_values,
-                       type: 'histogram',
-                       name: 'Synthetic',
-                       marker: { color: '#dc2626' },
-                       opacity: 0.7
-                     }
-                   ]}
-                   layout={{
-                     margin: { l: 40, r: 20, t: 20, b: 40 },
-                     showlegend: false,
-                     xaxis: { 
-                       title: '',
-                       type: 'category'  // Treat as categories to add gaps
-                     },
-                     yaxis: { title: 'Count' },
-                     bargap: 0.1  // Add gaps between bars
-                   }}
-                   style={{ width: '100%', height: '260px' }}
-                   config={{ displayModeBar: false }}
-                 />
-               </Box>
-             </Box>
-           );
-         }
+        if (isDiscrete) {
+          // Render discrete histogram with gaps - separate side by side plots
+          // Convert to percentages for discrete variables
+          const realValueCounts = {};
+          plotData.real_values.forEach(val => {
+            realValueCounts[val] = (realValueCounts[val] || 0) + 1;
+          });
+          
+          const syntheticValueCounts = {};
+          plotData.synthetic_values.forEach(val => {
+            syntheticValueCounts[val] = (syntheticValueCounts[val] || 0) + 1;
+          });
+          
+          const realTotal = plotData.real_values.length;
+          const syntheticTotal = plotData.synthetic_values.length;
+          
+          // Convert counts to percentages
+          const realValuesWithPercentages = [];
+          const realPercentages = [];
+          Object.entries(realValueCounts).forEach(([value, count]) => {
+            realValuesWithPercentages.push(value);
+            realPercentages.push((count / realTotal) * 100);
+          });
+          
+          const syntheticValuesWithPercentages = [];
+          const syntheticPercentages = [];
+          Object.entries(syntheticValueCounts).forEach(([value, count]) => {
+            syntheticValuesWithPercentages.push(value);
+            syntheticPercentages.push((count / syntheticTotal) * 100);
+          });
+          
+          return (
+            <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
+              <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
+                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
+                  Real Data
+                </Typography>
+                <Plot
+                  data={[
+                    {
+                      x: realValuesWithPercentages,
+                      y: realPercentages,
+                      type: 'bar',
+                      name: 'Real',
+                      marker: { color: '#2563eb' },
+                      opacity: 0.7
+                    }
+                  ]}
+                  layout={{
+                    margin: { l: 40, r: 20, t: 20, b: 40 },
+                    showlegend: false,
+                    xaxis: { 
+                      title: '',
+                      type: 'category'  // Treat as categories to add gaps
+                    },
+                    yaxis: { title: 'Percentage (%)' },
+                    bargap: 0.1  // Add gaps between bars
+                  }}
+                  style={{ width: '100%', height: '260px' }}
+                  config={{ displayModeBar: false }}
+                />
+              </Box>
+              
+              <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
+                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
+                  Synthetic Data
+                </Typography>
+                <Plot
+                  data={[
+                    {
+                      x: syntheticValuesWithPercentages,
+                      y: syntheticPercentages,
+                      type: 'bar',
+                      name: 'Synthetic',
+                      marker: { color: '#dc2626' },
+                      opacity: 0.7
+                    }
+                  ]}
+                  layout={{
+                    margin: { l: 40, r: 20, t: 20, b: 40 },
+                    showlegend: false,
+                    xaxis: { 
+                      title: '',
+                      type: 'category'  // Treat as categories to add gaps
+                    },
+                    yaxis: { title: 'Percentage (%)' },
+                    bargap: 0.1  // Add gaps between bars
+                  }}
+                  style={{ width: '100%', height: '260px' }}
+                  config={{ displayModeBar: false }}
+                />
+              </Box>
+            </Box>
+          );
+        }
         
         // Regular continuous histogram with overlay
+        // Calculate shared bins and range for proper overlay comparison
+        const combinedValues = [...plotData.real_values, ...plotData.synthetic_values];
+        
+        // Handle edge cases
+        if (combinedValues.length === 0) {
+          return <Typography>No data available for histogram</Typography>;
+        }
+        
+        const minValue = Math.min(...combinedValues);
+        const maxValue = Math.max(...combinedValues);
+        const range = maxValue - minValue;
+        
+        // Handle case where all values are identical
+        if (range === 0) {
+          const singleValue = minValue;
+          const sharedXBins = {
+            start: singleValue - 0.5,
+            end: singleValue + 0.5,
+            size: 1
+          };
+          
+          return (
+            <Plot
+              data={[
+                {
+                  x: plotData.real_values,
+                  type: 'histogram',
+                  name: 'Real',
+                  marker: { color: '#2563eb' },
+                  opacity: 0.5,
+                  histnorm: 'count',
+                  xbins: sharedXBins
+                },
+                {
+                  x: plotData.synthetic_values,
+                  type: 'histogram',
+                  name: 'Synthetic',
+                  marker: { color: '#dc2626' },
+                  opacity: 0.5,
+                  histnorm: 'count',
+                  xbins: sharedXBins
+                }
+              ]}
+              layout={{
+                margin: { l: 60, r: 20, t: 20, b: 40 },
+                barmode: 'overlay',
+                xaxis: { 
+                  title: '',
+                  range: [singleValue - 1, singleValue + 1]
+                },
+                yaxis: { title: 'Count' },
+                legend: { x: 0.7, y: 0.9 }
+              }}
+              style={{ width: '100%', height: '300px' }}
+              config={{ displayModeBar: false }}
+            />
+          );
+        }
+        
+        const binSize = range / 30; // 30 bins total
+        
+        const sharedXBins = {
+          start: minValue,
+          end: maxValue,
+          size: binSize
+        };
+        
         return (
           <Plot
             data={[
@@ -322,7 +672,7 @@ const EmbeddingPlot = ({
                 marker: { color: '#2563eb' },
                 opacity: 0.5,
                 histnorm: 'probability density',
-                nbinsx: 30
+                xbins: sharedXBins
               },
               {
                 x: plotData.synthetic_values,
@@ -331,13 +681,16 @@ const EmbeddingPlot = ({
                 marker: { color: '#dc2626' },
                 opacity: 0.5,
                 histnorm: 'probability density',
-                nbinsx: 30
+                xbins: sharedXBins
               }
             ]}
             layout={{
               margin: { l: 60, r: 20, t: 20, b: 40 },
               barmode: 'overlay',
-              xaxis: { title: '' },
+              xaxis: { 
+                title: '',
+                range: [minValue - range * 0.05, maxValue + range * 0.05] // Add 5% padding
+              },
               yaxis: { title: 'Probability Density' },
               legend: { x: 0.7, y: 0.9 }
             }}
@@ -384,12 +737,24 @@ const EmbeddingPlot = ({
         );
 
       case 'bar':
+        // Convert counts to percentages
+        const realTotal = plotData.real_counts.reduce((sum, count) => sum + count, 0);
+        const syntheticTotal = plotData.synthetic_counts.reduce((sum, count) => sum + count, 0);
+        
+        const realPercentages = realTotal > 0 
+          ? plotData.real_counts.map(count => (count / realTotal) * 100)
+          : plotData.real_counts.map(() => 0);
+          
+        const syntheticPercentages = syntheticTotal > 0
+          ? plotData.synthetic_counts.map(count => (count / syntheticTotal) * 100)
+          : plotData.synthetic_counts.map(() => 0);
+          
         return (
           <Plot
             data={[
               {
                 x: plotData.categories,
-                y: plotData.real_counts,
+                y: realPercentages,
                 type: 'bar',
                 name: 'Real',
                 marker: { color: '#2563eb' },
@@ -397,7 +762,7 @@ const EmbeddingPlot = ({
               },
               {
                 x: plotData.categories,
-                y: plotData.synthetic_counts,
+                y: syntheticPercentages,
                 type: 'bar',
                 name: 'Synthetic',
                 marker: { color: '#dc2626' },
@@ -408,7 +773,7 @@ const EmbeddingPlot = ({
               margin: { l: 40, r: 20, t: 20, b: 40 },
               barmode: 'group',
               xaxis: { title: '' },
-              yaxis: { title: 'Count' },
+              yaxis: { title: 'Percentage (%)' },
               legend: { x: 0.7, y: 0.9 }
             }}
             style={{ width: '100%', height: '300px' }}
@@ -494,25 +859,15 @@ const EmbeddingPlot = ({
 
     // Get container dimensions and use available space efficiently
     const rect = container.getBoundingClientRect();
-    const containerWidth = rect.width > 0 ? rect.width : width;
-    const containerHeight = rect.height > 0 ? rect.height : height;
+    const containerWidth = rect.width > 0 ? rect.width : 800;
+    const containerHeight = rect.height > 0 ? rect.height : 600;
     
     // Calculate responsive plot area based on sidebar state
     const shouldShowSidebar = selectedPoints.length > 0;
-    const plotAreaWidth = shouldShowSidebar && !sidebarCollapsed ? 
-      containerWidth * ((100 - sidebarWidth) / 100) : containerWidth;
+    const { plotWidth, plotHeight } = calculatePlotDimensions(containerWidth, containerHeight, shouldShowSidebar);
     
-
-    
-    // Use full available space with intelligent aspect ratio
-    const plotWidth = plotAreaWidth;
-    const plotHeight = containerHeight;
-    
-    // Ensure minimum reasonable dimensions
-    const minWidth = 300;
-    const minHeight = 250;
-    
-    if (plotWidth < minWidth || plotHeight < minHeight) {
+    // Early return if dimensions are too small
+    if (plotWidth < 350 || plotHeight < 280) {
       console.warn('Container too small for embedding plot');
       return;
     }
@@ -545,6 +900,10 @@ const EmbeddingPlot = ({
     const adjustedOpacity = baseOpacity * opacityFactor;
 
     // Clear previous plot
+    if (!svgRef.current) {
+      console.warn('SVG ref is null, skipping D3 visualization');
+      return;
+    }
     d3.select(svgRef.current).selectAll("*").remove();
 
     // Create SVG with enhanced sharpness configuration
@@ -563,15 +922,17 @@ const EmbeddingPlot = ({
     const scaledPlotWidth = plotWidth * devicePixelRatio;
     const scaledPlotHeight = plotHeight * devicePixelRatio;
     
-    // Responsive margins accounting for sidebar state and legend space
+    // Enhanced responsive margins for proper axis label display
     const baseMargin = {
-      top: Math.max(30, Math.min(50, plotHeight * 0.08)),
+      top: Math.max(25, Math.min(40, plotHeight * 0.06)),
       // Increase right margin when sidebar is visible to ensure legend fits
       right: shouldShowSidebar && !sidebarCollapsed ? 
         Math.max(140, Math.min(180, plotWidth * 0.18)) : 
         Math.max(120, Math.min(160, plotWidth * 0.16)),
-      bottom: Math.max(40, Math.min(60, plotHeight * 0.1)),
-      left: Math.max(40, Math.min(60, plotWidth * 0.08))
+      // Increased bottom margin for x-axis label
+      bottom: Math.max(60, Math.min(80, plotHeight * 0.12)),
+      // Increased left margin for y-axis label
+      left: Math.max(60, Math.min(80, plotWidth * 0.1))
     };
     
     const margin = { 
@@ -611,49 +972,91 @@ const EmbeddingPlot = ({
       .domain(["Real", "Synthetic"])
       .range(["#2563eb", "#dc2626"]);
 
-    // Add axes
+    // Calculate responsive font sizes and spacing
+    const baseFontSize = Math.max(10, Math.min(14, plotWidth / 60));
+    const labelFontSize = Math.max(12, Math.min(16, plotWidth / 50));
+    const axisSpacing = Math.max(30, Math.min(50, plotHeight / 15));
+    
+    // Add axes with proper tick formatting
     const xAxis = g.append("g")
       .attr("transform", `translate(0,${innerHeight})`)
-      .attr("class", "axis")
+      .attr("class", "axis x-axis")
       .style("shape-rendering", "crispEdges")
-      .call(d3.axisBottom(xScale).ticks(8));
+      .call(d3.axisBottom(xScale)
+        .ticks(Math.max(4, Math.min(8, Math.floor(plotWidth / 100))))
+        .tickFormat(d3.format(".2f")));
 
+    // X-axis label with better positioning
     xAxis.append("text")
       .attr("x", innerWidth / 2)
-      .attr("y", 45 * devicePixelRatio)
-      .attr("fill", "black")
+      .attr("y", axisSpacing * devicePixelRatio)
+      .attr("text-anchor", "middle")
+      .attr("fill", "#1f2937")
       .attr("font-weight", "600")
-      .style("font-size", `${14 * devicePixelRatio}px`)
-      .style("text-rendering", "geometricPrecision")
-      .text(`${metadata.method.toUpperCase()}_1`);
+      .style("font-size", `${labelFontSize}px`)
+      .style("font-family", "system-ui, -apple-system, BlinkMacSystemFont, sans-serif")
+      .style("text-rendering", "optimizeLegibility")
+      .text(`${(metadata?.method || 'Embedding').toUpperCase()} Component 1`);
 
     const yAxis = g.append("g")
-      .attr("class", "axis")
+      .attr("class", "axis y-axis")
       .style("shape-rendering", "crispEdges")
-      .call(d3.axisLeft(yScale).ticks(8));
+      .call(d3.axisLeft(yScale)
+        .ticks(Math.max(4, Math.min(8, Math.floor(plotHeight / 80))))
+        .tickFormat(d3.format(".2f")));
 
+    // Y-axis label with better positioning
     yAxis.append("text")
       .attr("transform", "rotate(-90)")
-      .attr("y", -45 * devicePixelRatio)
+      .attr("y", -axisSpacing * devicePixelRatio)
       .attr("x", -innerHeight / 2)
       .attr("text-anchor", "middle")
-      .attr("fill", "black")
+      .attr("fill", "#1f2937")
       .attr("font-weight", "600")
-      .style("font-size", `${14 * devicePixelRatio}px`)
-      .style("text-rendering", "geometricPrecision")
-      .text(`${metadata.method.toUpperCase()}_2`);
+      .style("font-size", `${labelFontSize}px`)
+      .style("font-family", "system-ui, -apple-system, BlinkMacSystemFont, sans-serif")
+      .style("text-rendering", "optimizeLegibility")
+      .text(`${(metadata?.method || 'Embedding').toUpperCase()} Component 2`);
 
-    // Style axes
+    // Style axes with better visibility
     svg.selectAll(".axis line, .axis path")
-      .style("stroke", "#e5e7eb")
-      .style("stroke-width", `${1 * devicePixelRatio}px`)
+      .style("stroke", "#d1d5db")
+      .style("stroke-width", `${Math.max(1, devicePixelRatio)}px`)
       .style("shape-rendering", "crispEdges");
 
+    // Style axis tick labels
     svg.selectAll(".axis text")
-      .style("font-size", `${12 * devicePixelRatio}px`)
-      .style("font-family", "system-ui, -apple-system, sans-serif")
-      .style("fill", "#374151")
-      .style("text-rendering", "geometricPrecision");
+      .style("font-size", `${baseFontSize}px`)
+      .style("font-family", "system-ui, -apple-system, BlinkMacSystemFont, sans-serif")
+      .style("fill", "#6b7280")
+      .style("text-rendering", "optimizeLegibility");
+
+    // Add subtle grid lines for better readability
+    g.selectAll(".grid-line-x")
+      .data(xScale.ticks(Math.max(4, Math.min(8, Math.floor(plotWidth / 100)))))
+      .enter()
+      .append("line")
+      .attr("class", "grid-line-x")
+      .attr("x1", d => xScale(d))
+      .attr("x2", d => xScale(d))
+      .attr("y1", 0)
+      .attr("y2", innerHeight)
+      .style("stroke", "#f3f4f6")
+      .style("stroke-width", "1px")
+      .style("opacity", 0.5);
+
+    g.selectAll(".grid-line-y")
+      .data(yScale.ticks(Math.max(4, Math.min(8, Math.floor(plotHeight / 80)))))
+      .enter()
+      .append("line")
+      .attr("class", "grid-line-y")
+      .attr("x1", 0)
+      .attr("x2", innerWidth)
+      .attr("y1", d => yScale(d))
+      .attr("y2", d => yScale(d))
+      .style("stroke", "#f3f4f6")
+      .style("stroke-width", "1px")
+      .style("opacity", 0.5);
 
     // Add data points
     const points = g.selectAll("circle")
@@ -815,7 +1218,7 @@ const EmbeddingPlot = ({
             <div>Index: ${originalIndex}</div>
             <div>Coordinates: (${d[0].toFixed(3)}, ${d[1].toFixed(3)})</div>
             <div style="margin-top: 4px; font-size: 10px; opacity: 0.8;">
-              Click to select • ${metadata.method.toUpperCase()} embedding
+              Click to select • ${(metadata?.method || 'Embedding').toUpperCase()} embedding
             </div>
           `)
           .style("left", (event.pageX + 10) + "px")
@@ -1098,22 +1501,74 @@ const EmbeddingPlot = ({
     };
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
-  // 🎯 CLEAN AUTO-RESIZE LOGIC - Simple and predictable
+  // 🎯 SIMPLIFIED AUTO-RESIZE LOGIC - Fully automatic
   useEffect(() => {
     // Don't auto-resize if user has manually collapsed the sidebar
     if (sidebarCollapsed) return;
     
-    // Simple auto-resize logic without complex dependencies
-    if (selectedPoints.length > 0 && plotData && sidebarWidth === 35) {
-      // Auto-expand sidebar when plots are generated for better visibility
-      setSidebarWidth(45);
-    } else if (selectedPoints.length === 0 && sidebarWidth > 35) {
-      // Return to compact size when no selection
-      setSidebarWidth(35);
+    // Get current viewport dimensions
+    const viewportWidth = window.innerWidth;
+    
+    // Calculate ideal sidebar width based on viewport size only
+    const calculateIdealSidebarWidth = () => {
+      let idealWidth;
+      if (viewportWidth < 768) {
+        idealWidth = 40; // Mobile: reasonable sidebar for touch
+      } else if (viewportWidth < 1024) {
+        idealWidth = 35; // Tablet: balanced
+      } else if (viewportWidth < 1440) {
+        idealWidth = 30; // Desktop: more plot space
+      } else {
+        idealWidth = 25; // Large screens: maximize plot area
+      }
+      
+      // Adjust based on selection state - expand when data is available
+      if (selectedPoints.length > 0 && plotData) {
+        idealWidth = Math.min(idealWidth + 5, 45); // Expand for better plot visibility
+      }
+      
+      return idealWidth;
+    };
+    
+    const idealWidth = calculateIdealSidebarWidth();
+    
+    // Only adjust if there's a meaningful difference (avoid constant small adjustments)
+    if (Math.abs(sidebarWidth - idealWidth) > 3) {
+      setSidebarWidth(idealWidth);
     }
   }, [selectedPoints.length, plotData, sidebarWidth, sidebarCollapsed]);
 
-  // Toggle sidebar collapse/expand
+  // Responsive sidebar adjustments on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (sidebarCollapsed) return;
+      
+      const viewportWidth = window.innerWidth;
+      let newWidth;
+      
+      if (viewportWidth < 768) {
+        newWidth = 40;
+      } else if (viewportWidth < 1024) {
+        newWidth = 35;
+      } else if (viewportWidth < 1440) {
+        newWidth = 30;
+      } else {
+        newWidth = 25;
+      }
+      
+      // Expand if there's active data
+      if (selectedPoints.length > 0 && plotData) {
+        newWidth = Math.min(newWidth + 5, 45);
+      }
+      
+      setSidebarWidth(newWidth);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [sidebarCollapsed, selectedPoints.length, plotData]);
+
+  // Toggle sidebar collapse/expand with intelligent width restoration
   const toggleSidebarExpansion = useCallback(() => {
     const newCollapsedState = !sidebarCollapsed;
     setSidebarCollapsed(newCollapsedState);
@@ -1121,9 +1576,28 @@ const EmbeddingPlot = ({
     if (newCollapsedState) {
       setSidebarWidth(0);
     } else {
-      setSidebarWidth(45);
+      // Restore to intelligent width based on current viewport
+      const viewportWidth = window.innerWidth;
+      let restoredWidth;
+      
+      if (viewportWidth < 768) {
+        restoredWidth = 40;
+      } else if (viewportWidth < 1024) {
+        restoredWidth = 35;
+      } else if (viewportWidth < 1440) {
+        restoredWidth = 30;
+      } else {
+        restoredWidth = 25;
+      }
+      
+      // Expand if there's active data
+      if (selectedPoints.length > 0 && plotData) {
+        restoredWidth = Math.min(restoredWidth + 5, 45);
+      }
+      
+      setSidebarWidth(restoredWidth);
     }
-  }, [sidebarCollapsed, sidebarWidth]);
+  }, [sidebarCollapsed, selectedPoints.length, plotData]);
 
   // Early validation after all hooks are declared
   if (!data || !metadata) {
@@ -1164,6 +1638,9 @@ const EmbeddingPlot = ({
           borderRadius: '8px',
           padding: '8px',
           position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           transition: isResizing ? 'none' : shouldShowSidebar ? 'flex 0.3s ease' : 'none'
         }}
       >
@@ -1200,6 +1677,7 @@ const EmbeddingPlot = ({
             <span>
               <IconButton 
                 size="small" 
+                aria-label="Clear selection"
                 onClick={clearSelection}
                 disabled={selectedPoints.length === 0}
                 sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
@@ -1212,6 +1690,7 @@ const EmbeddingPlot = ({
           <Tooltip title="Select All">
             <IconButton 
               size="small" 
+              aria-label="Select all"
               onClick={selectAllPoints}
               sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
             >
@@ -1220,14 +1699,43 @@ const EmbeddingPlot = ({
           </Tooltip>
         </Box>
 
+                {/* Plot Info Status */}
+        <Box sx={{ 
+          position: 'absolute', 
+          bottom: 16, 
+          left: 16, 
+          zIndex: 10,
+          display: 'flex',
+          gap: 1,
+          flexWrap: 'wrap'
+        }}>
+          <Chip
+            label={`${data?.length || 0} points`}
+            size="small"
+            variant="outlined"
+            sx={{ 
+              bgcolor: 'rgba(255, 255, 255, 0.9)',
+              fontSize: '11px'
+            }}
+          />
+          {/* Removed aspect ratio display chip - keeping logic for background calculations */}
+        </Box>
+
+        {/* Removed aspect ratio controls - now fully automatic */}
+
         <svg 
           ref={svgRef} 
           style={{ 
             width: '100%', 
             height: '100%',
+            maxWidth: '100%',
+            maxHeight: '100%',
             display: 'block',
             touchAction: 'none', // Prevent touch zoom/pan
-            userSelect: 'none'   // Prevent text selection
+            userSelect: 'none',   // Prevent text selection
+            transition: 'all 0.3s ease', // Smooth transitions for aspect ratio changes
+            borderRadius: '4px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
           }}
         />
       </Box>
@@ -1366,148 +1874,171 @@ const EmbeddingPlot = ({
 
           <Divider />
 
-          {/* Column Selection */}
-          <FormControl fullWidth size="small">
-            <InputLabel>Column for Analysis</InputLabel>
-            <Select
-              value={histogramColumn}
-              label="Column for Analysis"
-              onChange={(e) => {
-                setHistogramColumn(e.target.value);
-              }}
-            >
-              {originalData?.headers?.map((header, index) => {
-                const columnDataType = classifyColumnType(index, originalData);
-                return (
-                  <MenuItem key={index} value={index}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                      <Typography variant="body2" sx={{ flex: 1 }}>
-                        {header || `Column ${index + 1}`}
-                      </Typography>
-                      <Chip 
-                        label={columnDataType} 
-                        size="small" 
-                        color={columnDataType === 'numeric' ? 'primary' : 'secondary'}
-                        variant="outlined"
-                        sx={{ fontSize: '0.7rem', height: '20px' }}
-                      />
-                    </Box>
-                  </MenuItem>
-                );
-              })}
-            </Select>
-          </FormControl>
+          {/* Distribution Controls - Show when we have original data available */}
+          {originalData && originalData.headers && originalData.headers.length > 0 ? (
+            <>
+              {/* Column Selection */}
+              <FormControl fullWidth size="small">
+                <InputLabel>Column for Analysis</InputLabel>
+                <Select
+                  value={histogramColumn}
+                  label="Column for Analysis"
+                  onChange={(e) => {
+                    setHistogramColumn(e.target.value);
+                  }}
+                >
+                  {originalData?.headers?.map((header, index) => {
+                    const columnDataType = classifyColumnType(index, originalData);
+                    return (
+                      <MenuItem key={index} value={index}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                          <Typography variant="body2" sx={{ flex: 1 }}>
+                            {header || `Column ${index + 1}`}
+                          </Typography>
+                          <Chip 
+                            label={columnDataType} 
+                            size="small" 
+                            color={columnDataType === 'numeric' ? 'primary' : 'secondary'}
+                            variant="outlined"
+                            sx={{ fontSize: '0.7rem', height: '20px' }}
+                          />
+                        </Box>
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
 
-          {/* Plot Type Selection */}
-          {histogramData && histogramData.availablePlotTypes && (
-            <FormControl fullWidth size="small">
-              <InputLabel>Plot Type</InputLabel>
-              <Select
-                value={histogramPlotType}
-                label="Plot Type"
-                onChange={(e) => {
-                  setHistogramPlotType(e.target.value);
-                }}
-              >
-                {histogramData.availablePlotTypes.map((plotType) => (
-                  <MenuItem key={plotType.value} value={plotType.value}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2">
-                        {plotType.label}
-                      </Typography>
-                      {((histogramData.dataType === 'numeric' && plotType.value === 'histogram') ||
-                        (histogramData.dataType === 'categorical' && plotType.value === 'bar')) && (
-                        <Chip 
-                          label="default" 
-                          size="small" 
-                          color="primary"
-                          variant="outlined"
-                          sx={{ fontSize: '0.6rem', height: '16px' }}
-                        />
-                      )}
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
+              {/* Plot Type Selection */}
+              {histogramData && histogramData.availablePlotTypes && (
+                <FormControl fullWidth size="small">
+                  <InputLabel>Plot Type</InputLabel>
+                  <Select
+                    value={histogramPlotType}
+                    label="Plot Type"
+                    onChange={(e) => {
+                      setHistogramPlotType(e.target.value);
+                    }}
+                  >
+                    {histogramData.availablePlotTypes.map((plotType) => (
+                      <MenuItem key={plotType.value} value={plotType.value}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2">
+                            {plotType.label}
+                          </Typography>
+                          {((histogramData.dataType === 'numeric' && plotType.value === 'histogram') ||
+                            (histogramData.dataType === 'categorical' && plotType.value === 'bar')) && (
+                            <Chip 
+                              label="default" 
+                              size="small" 
+                              color="primary"
+                              variant="outlined"
+                              sx={{ fontSize: '0.6rem', height: '16px' }}
+                            />
+                          )}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
 
-          {/* Data Type Indicator */}
-          {histogramData && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                Data Type:
-              </Typography>
-              <Chip 
-                label={histogramData.dataType} 
-                size="small" 
-                color={histogramData.dataType === 'numeric' ? 'primary' : 'secondary'}
-                variant="outlined"
-              />
-            </Box>
-          )}
-
-          {/* Plot Display */}
-          <Box>
-            <Typography variant="subtitle2" gutterBottom>
-              Distribution: {histogramData?.columnName}
-            </Typography>
-            
-            {plotLoading && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '200px', gap: 1 }}>
-                <CircularProgress size={40} />
-                <Typography variant="caption" color="text.secondary">
-                  Generating plot...
-                </Typography>
-              </Box>
-            )}
-            
-            {plotError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                <Typography variant="body2" component="div">
-                  <strong>Plot Generation Error:</strong>
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  {plotError}
-                </Typography>
-                {plotError.includes('categorical') && plotError.includes('numeric') && (
-                  <Typography variant="caption" sx={{ mt: 1, display: 'block', fontStyle: 'italic' }}>
-                    💡 Tip: The system should auto-correct plot types, but you can manually select a compatible plot type above.
+              {/* Data Type Indicator */}
+              {histogramData && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Data Type:
                   </Typography>
+                  <Chip 
+                    label={histogramData.dataType} 
+                    size="small" 
+                    color={histogramData.dataType === 'numeric' ? 'primary' : 'secondary'}
+                    variant="outlined"
+                  />
+                </Box>
+              )}
+
+              {/* Plot Display */}
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Distribution: {histogramData?.columnName}
+                </Typography>
+                
+                {plotLoading && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '200px', gap: 1 }}>
+                    <CircularProgress size={40} />
+                    <Typography variant="caption" color="text.secondary">
+                      Generating plot...
+                    </Typography>
+                  </Box>
                 )}
-              </Alert>
-            )}
-            
-            {!plotLoading && !plotError && plotData && (
-              <Box sx={{ 
-                width: '100%',
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                bgcolor: 'background.paper',
-                p: 1
-              }}>
-                {renderPlot()}
+                
+                {plotError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    <Typography variant="body2" component="div">
+                      <strong>Plot Generation Error:</strong>
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      {plotError}
+                    </Typography>
+                    {plotError.includes('categorical') && plotError.includes('numeric') && (
+                      <Typography variant="caption" sx={{ mt: 1, display: 'block', fontStyle: 'italic' }}>
+                        💡 Tip: The system should auto-correct plot types, but you can manually select a compatible plot type above.
+                      </Typography>
+                    )}
+                  </Alert>
+                )}
+                
+                {!plotLoading && !plotError && plotData && (
+                  <Box sx={{ 
+                    width: '100%',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    bgcolor: 'background.paper',
+                    p: 1
+                  }}>
+                    {renderPlot()}
+                  </Box>
+                )}
+                
+                {!plotLoading && !plotError && !plotData && selectedPoints.length > 0 && (
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    minHeight: '200px',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    bgcolor: 'grey.50'
+                  }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Select points to view distribution
+                    </Typography>
+                  </Box>
+                )}
               </Box>
-            )}
-            
-            {!plotLoading && !plotError && !plotData && selectedPoints.length > 0 && (
+            </>
+          ) : (
+            /* Simple message when no data available for distribution plots */
+            selectedPoints.length > 0 && (
               <Box sx={{ 
                 display: 'flex', 
                 justifyContent: 'center', 
                 alignItems: 'center', 
-                minHeight: '200px',
+                minHeight: '100px',
                 border: '1px solid',
                 borderColor: 'divider',
                 borderRadius: 1,
                 bgcolor: 'grey.50'
               }}>
                 <Typography variant="body2" color="text.secondary">
-                  Select points to view distribution
+                  Distribution analysis not available for this embedding
                 </Typography>
               </Box>
-            )}
-          </Box>
+            )
+          )}
 
           {/* Legend */}
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
