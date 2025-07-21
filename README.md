@@ -14,10 +14,166 @@ A full-stack web application for visualizing and comparing real and synthetic da
   - Distribution comparisons between real and synthetic data
   - Histogram and violin plot visualizations
   - Categorical and continuous variable analysis
+- **Data Validation & Quality Assessment**:
+  - Comprehensive synthetic data validation
+  - Range, distribution, correlation, and statistical tests
+  - Quality scoring and recommendations
+  - Critical issue detection and alerts
+- **Performance Monitoring**:
+  - Real-time performance dashboard
+  - API call tracking and response time analysis
+  - Memory usage monitoring
+  - User interaction analytics
+- **Job Management & History**:
+  - Background processing with progress tracking
+  - Job history with filtering and search
+  - Favorites and job management
+  - Export capabilities for results
 - **Modern UI/UX**: 
   - Material-UI components with responsive design
   - Clean, professional interface optimized for data exploration
   - Full-screen visualization capabilities
+  - Authentication system with role-based access
+
+## 📋 Functional Requirements & Rationale
+
+MAVIS is designed to address critical challenges in synthetic data evaluation and visualization. Each functional requirement serves a specific purpose in the synthetic data analysis workflow:
+
+### 🔍 **Data Upload & Processing Requirements**
+
+**Requirement**: Support for multiple file formats (CSV, Excel, JSON)
+- **Why Needed**: Synthetic data comes from various sources and tools (GANs, VAEs, synthetic data generators) that export in different formats. Researchers need flexibility to work with their existing data pipelines.
+- **Rationale**: Eliminates data format barriers and enables seamless integration with existing synthetic data generation workflows.
+
+**Requirement**: Automatic data type detection and preprocessing
+- **Why Needed**: Synthetic data often contains mixed data types (categorical, numerical, datetime) that require different handling strategies for visualization and analysis.
+- **Rationale**: Ensures optimal processing for each data type and prevents errors in statistical analysis and visualization.
+
+**Requirement**: Large dataset handling (>100k samples)
+- **Why Needed**: Modern synthetic data generation produces large datasets that traditional visualization tools cannot handle efficiently.
+- **Rationale**: Enables analysis of production-scale synthetic datasets without performance degradation.
+
+### 🎯 **Dimensionality Reduction Requirements**
+
+**Requirement**: UMAP implementation with configurable parameters
+- **Why Needed**: UMAP preserves both local and global structure better than PCA, making it ideal for synthetic data quality assessment where both fine details and broad patterns matter.
+- **Rationale**: Helps identify if synthetic data maintains the complex relationships present in real data, which is crucial for synthetic data quality evaluation.
+
+**Requirement**: t-SNE as alternative dimensionality reduction
+- **Why Needed**: Different algorithms reveal different aspects of data structure. t-SNE excels at preserving local clusters, providing complementary insights to UMAP.
+- **Rationale**: Enables comprehensive analysis by comparing results across multiple dimensionality reduction techniques.
+
+**Requirement**: Real-time parameter tuning with live preview
+- **Why Needed**: Synthetic data quality assessment requires iterative exploration to find optimal visualization parameters that reveal quality issues.
+- **Rationale**: Accelerates the analysis process by providing immediate feedback on parameter changes.
+
+### 📊 **Visualization Requirements**
+
+**Requirement**: Interactive scatter plots with zoom/pan capabilities
+- **Why Needed**: Synthetic data analysis requires detailed examination of specific regions to identify quality issues, outliers, or structural problems.
+- **Rationale**: Enables researchers to drill down into specific areas of concern and examine individual data points.
+
+**Requirement**: Point selection and filtering functionality
+- **Why Needed**: Researchers need to isolate specific subsets of data (e.g., outliers, specific categories) for detailed analysis and comparison.
+- **Rationale**: Facilitates targeted analysis of problematic areas in synthetic data.
+
+**Requirement**: Real vs synthetic data toggle visualization
+- **Why Needed**: Direct comparison between real and synthetic data distributions is essential for quality assessment.
+- **Rationale**: Enables immediate visual identification of differences between real and synthetic datasets.
+
+### 📈 **Statistical Analysis Requirements**
+
+**Requirement**: Distribution comparison (histograms, violin plots)
+- **Why Needed**: Statistical distribution analysis is fundamental to synthetic data quality assessment, revealing whether synthetic data preserves the statistical properties of real data.
+- **Rationale**: Provides quantitative evidence of synthetic data quality beyond visual inspection.
+
+**Requirement**: Kolmogorov-Smirnov and Chi-square statistical tests
+- **Why Needed**: Formal statistical testing is required to determine if differences between real and synthetic data are statistically significant or just random variation.
+- **Rationale**: Provides rigorous statistical validation of synthetic data quality with interpretable p-values and effect sizes.
+
+**Requirement**: Correlation preservation analysis
+- **Why Needed**: Synthetic data must preserve the relationships between variables to be useful for downstream applications like machine learning.
+- **Rationale**: Ensures synthetic data maintains the multivariate structure necessary for realistic applications.
+
+### ✅ **Data Validation Requirements**
+
+**Requirement**: Comprehensive validation framework (range, distribution, correlation tests)
+- **Why Needed**: Synthetic data can have subtle quality issues that aren't immediately visible but affect downstream model performance.
+- **Rationale**: Provides systematic quality assessment that catches issues before synthetic data is used in production systems.
+
+**Requirement**: Quality scoring system with severity levels
+- **Why Needed**: Researchers need objective metrics to compare different synthetic data generation methods and track improvements over time.
+- **Rationale**: Enables quantitative comparison of synthetic data quality and supports iterative improvement processes.
+
+**Requirement**: Automated issue detection and recommendations
+- **Why Needed**: Manual analysis of large synthetic datasets is time-consuming and error-prone. Automated detection identifies issues that might be missed.
+- **Rationale**: Reduces analysis time and ensures consistent quality assessment across different datasets and researchers.
+
+### 📊 **Performance Monitoring Requirements**
+
+**Requirement**: Real-time performance dashboard
+- **Why Needed**: Large-scale synthetic data analysis can be computationally intensive. Performance monitoring helps optimize analysis workflows and identify bottlenecks.
+- **Rationale**: Ensures efficient analysis of large datasets and helps researchers optimize their workflows.
+
+**Requirement**: API response time tracking
+- **Why Needed**: Web-based analysis tools need to provide responsive user experience even with large datasets and complex computations.
+- **Rationale**: Maintains good user experience and helps identify when system resources are insufficient.
+
+**Requirement**: Memory usage monitoring
+- **Why Needed**: Dimensionality reduction and visualization of large datasets can consume significant memory, potentially causing system crashes.
+- **Rationale**: Prevents system failures and helps optimize memory usage for large-scale analysis.
+
+### 💼 **Job Management Requirements**
+
+**Requirement**: Background processing with progress tracking
+- **Why Needed**: Large synthetic datasets require significant computation time for dimensionality reduction and analysis. Users need to track progress and continue other work.
+- **Rationale**: Enables efficient workflow management and prevents data loss during long-running analyses.
+
+**Requirement**: Job history with filtering and search
+- **Why Needed**: Researchers often analyze multiple synthetic datasets and need to compare results or revisit previous analyses.
+- **Rationale**: Supports iterative research workflows and enables comparison across different synthetic data generation methods.
+
+**Requirement**: Export capabilities for results
+- **Why Needed**: Analysis results need to be shared with collaborators, included in reports, or used in other tools.
+- **Rationale**: Enables integration with existing research workflows and documentation processes.
+
+### 🔐 **Security & Access Requirements**
+
+**Requirement**: Authentication system with role-based access
+- **Why Needed**: Synthetic data may contain sensitive information or be part of proprietary research that requires controlled access.
+- **Rationale**: Protects sensitive data and enables collaborative research with appropriate access controls.
+
+**Requirement**: Secure file upload and processing
+- **Why Needed**: Data security is critical when working with potentially sensitive datasets, even if they are synthetic.
+- **Rationale**: Ensures data privacy and compliance with institutional security requirements.
+
+### 🎨 **User Experience Requirements**
+
+**Requirement**: Responsive design for different screen sizes
+- **Why Needed**: Researchers work on various devices (desktops, laptops, tablets) and need consistent experience across platforms.
+- **Rationale**: Ensures accessibility and usability across different work environments.
+
+**Requirement**: Intuitive interface optimized for data exploration
+- **Why Needed**: Synthetic data analysis requires complex workflows that should be accessible to researchers with varying technical backgrounds.
+- **Rationale**: Reduces learning curve and enables broader adoption of synthetic data quality assessment practices.
+
+**Requirement**: Full-screen visualization capabilities
+- **Why Needed**: Detailed analysis of complex visualizations requires maximum screen real estate to identify subtle patterns and quality issues.
+- **Rationale**: Enables thorough examination of synthetic data quality through detailed visual inspection.
+
+### 🔧 **Technical Requirements**
+
+**Requirement**: Scalable architecture supporting large datasets
+- **Why Needed**: Modern synthetic data generation produces increasingly large datasets that traditional tools cannot handle.
+- **Rationale**: Future-proofs the tool for growing dataset sizes and enables analysis of production-scale synthetic data.
+
+**Requirement**: Modular design for extensibility
+- **Why Needed**: Synthetic data generation techniques evolve rapidly, requiring the tool to adapt to new validation methods and visualization techniques.
+- **Rationale**: Enables continuous improvement and adaptation to emerging synthetic data research needs.
+
+**Requirement**: Comprehensive testing framework
+- **Why Needed**: Synthetic data analysis tools must be reliable and produce consistent results for research reproducibility.
+- **Rationale**: Ensures tool reliability and supports reproducible research practices.
 
 ## 🏗️ Architecture Overview
 
@@ -36,10 +192,14 @@ graph TB
     Frontend --> DistPlot[📈 DistributionPlot<br/>Statistical Comparisons]
     Frontend --> History[📜 History<br/>Job Management]
     Frontend --> Results[📄 ResultsPane<br/>Analysis Results]
+    Frontend --> SummaryTab[📋 SummaryTab<br/>Validation & Reports]
+    Frontend --> ValidationPopup[⚠️ ValidationPopup<br/>Issue Alerts]
+    Frontend --> PerformanceDashboard[📊 PerformanceDashboard<br/>Monitoring]
     
     %% Frontend Hooks & Services
     Frontend --> DataHook[🔄 useDataUpload<br/>File Processing]
     Frontend --> EmbedHook[🔄 useEmbedding<br/>Visualization Logic]
+    Frontend --> ValidationHook[🔄 useValidation<br/>Data Validation]
     Frontend --> API[🌐 API Service<br/>HTTP Client]
     
     %% Backend Entry Point
@@ -108,7 +268,7 @@ graph TB
     classDef external fill:#fce4ec,stroke:#880e4f,stroke-width:2px
     classDef infra fill:#f1f8e9,stroke:#33691e,stroke-width:2px
     
-    class Frontend,Auth,Header,Sidebar,EmbedPlot,DistPlot,History,Results,DataHook,EmbedHook,API,FrontendTests frontend
+    class Frontend,Auth,Header,Sidebar,EmbedPlot,DistPlot,History,Results,SummaryTab,ValidationPopup,PerformanceDashboard,DataHook,EmbedHook,ValidationHook,API,FrontendTests frontend
     class Backend,EmbedRoute,DistRoute,HistRoute,HealthRoute,BackendTests backend
     class EmbedService,JobService,DataPreproc,Monitoring,Logging service
     class Database,FileSystem,Config,EnvFile data
@@ -152,17 +312,24 @@ The numbered data flow shows the typical user journey from data upload through p
 │   │   │   ├── LandingPage.js      # Welcome page
 │   │   │   ├── Login.js            # Authentication
 │   │   │   ├── ResultsPane.js      # Results display
-│   │   │   └── Sidebar.js          # Navigation sidebar
+│   │   │   ├── Sidebar.js          # Navigation sidebar
+│   │   │   ├── SummaryTab.js       # Validation & reports
+│   │   │   ├── ValidationPopup.js  # Issue alerts
+│   │   │   ├── PerformanceDashboard.js # Performance monitoring
+│   │   │   └── History.js          # Job management
 │   │   ├── services/     # API communication
 │   │   │   └── api.js
 │   │   ├── hooks/        # Custom React hooks
 │   │   │   ├── useDataUpload.js
-│   │   │   └── useEmbedding.js
+│   │   │   ├── useEmbedding.js
+│   │   │   └── useValidation.js
 │   │   ├── contexts/     # React contexts
 │   │   │   └── AuthContext.js
 │   │   └── utils/        # Frontend utilities
 │   │       ├── dataUtils.js
 │   │       ├── fileReader.js
+│   │       ├── embeddingUtils.js
+│   │       ├── logger.js
 │   │       └── security.js
 │   └── package.json      # Node.js dependencies
 ├── notebooks/             # Jupyter notebooks for development
@@ -249,7 +416,19 @@ npm run build
    - Use the interactive scatter plot to explore data distribution
    - Toggle the distribution sidebar to view statistical comparisons
    - Select points to analyze specific data subsets
-5. **Export Results**: Save visualizations and analysis reports
+5. **Validate Data Quality**: 
+   - Run comprehensive validation analysis on the Summary tab
+   - Review quality scores and recommendations
+   - Address critical issues identified by the validation system
+6. **Monitor Performance**: 
+   - Access the performance dashboard for real-time metrics
+   - Track API response times and memory usage
+   - Analyze user interaction patterns
+7. **Manage Jobs**: 
+   - View job history and manage completed embeddings
+   - Export results in multiple formats
+   - Organize favorites and delete old jobs
+8. **Export Results**: Save visualizations and analysis reports
 
 ## 🎯 UMAP Configuration & Parameters
 
@@ -295,6 +474,56 @@ UMAP (Uniform Manifold Approximation and Projection) is a powerful dimensionalit
 - **Point Selection**: Click and drag to select data subsets
 - **Hover Information**: Detailed tooltips showing original data values
 - **Real vs Synthetic Toggle**: Switch between dataset visualizations
+
+## 🔍 Data Validation & Quality Assessment
+
+MAVIS includes a comprehensive data validation system that automatically assesses the quality of synthetic datasets compared to real data. This feature helps identify potential issues and provides actionable recommendations for improving synthetic data generation.
+
+### Validation Test Categories
+
+**Range Validation:**
+- **Bounds Checking**: Ensures synthetic data stays within realistic value ranges
+- **Outlier Detection**: Identifies unrealistic values that may indicate generation issues
+- **Data Type Consistency**: Validates that categorical and numerical data types match
+
+**Distribution Validation:**
+- **Statistical Similarity**: Compares distribution shapes using Kolmogorov-Smirnov tests
+- **Percentile Analysis**: Ensures key percentiles (25th, 50th, 75th) are preserved
+- **Density Estimation**: Uses kernel density estimation for smooth distribution comparison
+
+**Correlation Validation:**
+- **Feature Relationships**: Preserves correlation patterns between variables
+- **Covariance Analysis**: Ensures multivariate relationships are maintained
+- **Dependency Structure**: Validates that conditional dependencies are preserved
+
+**Statistical Validation:**
+- **Mean and Variance**: Compares central tendency and spread measures
+- **Skewness and Kurtosis**: Validates distribution shape characteristics
+- **Sample Size Adequacy**: Ensures sufficient data for reliable comparisons
+
+### Quality Scoring System
+
+The validation system provides a comprehensive quality score based on:
+- **Pass Rate**: Percentage of tests that pass validation criteria
+- **Severity Levels**: Critical, High, Medium, and Low priority issues
+- **Overall Status**: EXCELLENT (90%+), GOOD (70-89%), FAIR (50-69%), POOR (<50%)
+
+### Issue Detection & Alerts
+
+**Critical Issues:**
+- Significant distribution mismatches (>80% difference)
+- Out-of-bounds values that violate domain constraints
+- Missing critical categories in categorical data
+
+**High Priority Issues:**
+- Moderate distribution differences (50-80%)
+- Correlation pattern violations
+- Statistical measure discrepancies
+
+**Recommendations Engine:**
+- Provides specific suggestions for improving synthetic data generation
+- Identifies problematic columns and suggests parameter adjustments
+- Offers best practices for maintaining data quality
 
 ## 📈 Distribution Analysis & Chart Functionalities
 
@@ -396,6 +625,50 @@ MAVIS automatically selects appropriate chart types based on your data:
 - **Key Metrics Dashboard**: Mean, std, skewness, kurtosis comparisons
 - **Similarity Scores**: Overall distribution similarity percentages
 - **Recommendation Engine**: Automated suggestions for data generation improvement
+
+## 📊 Performance Monitoring & Analytics
+
+MAVIS includes a comprehensive performance monitoring system that provides real-time insights into application performance and user behavior.
+
+### Performance Dashboard Features
+
+**Real-time Metrics:**
+- **Render Performance**: Tracks component render times and optimization opportunities
+- **API Performance**: Monitors response times, success rates, and error patterns
+- **Memory Usage**: Tracks memory consumption and identifies potential leaks
+- **User Interactions**: Analyzes user behavior patterns and interaction frequency
+
+**Performance Analytics:**
+- **Response Time Tracking**: Historical analysis of API call performance
+- **Memory Usage Trends**: Long-term memory consumption patterns
+- **User Activity Analysis**: Interaction patterns and feature usage statistics
+- **Error Rate Monitoring**: Tracks and categorizes application errors
+
+**Optimization Insights:**
+- **Bottleneck Identification**: Highlights performance-critical areas
+- **Resource Usage Analysis**: CPU and memory utilization patterns
+- **User Experience Metrics**: Page load times and interaction responsiveness
+- **System Health Monitoring**: Overall application stability and reliability
+
+### Monitoring Capabilities
+
+**Client-side Monitoring:**
+- Component render time tracking
+- User interaction logging
+- Memory usage monitoring
+- Error boundary tracking
+
+**Server-side Metrics:**
+- API response time analysis
+- Database query performance
+- Background job processing metrics
+- System resource utilization
+
+**Export & Reporting:**
+- Performance data export in multiple formats
+- Customizable reporting periods
+- Trend analysis and forecasting
+- Comparative performance analysis
 
 ## 🔧 API Documentation
 
