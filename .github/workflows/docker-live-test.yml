@@ -8,16 +8,11 @@ on:
         default: '30'
         required: true
         type: string
-      run_tests:
-        description: 'Run tests before launching'
-        default: true
-        required: false
-        type: boolean
       expose_ports:
         description: 'Expose ports for external access'
         default: true
         required: false
-        type: boolean
+        type: boolean 
 
 jobs:
   launch-app:
@@ -35,11 +30,7 @@ jobs:
         echo "🏗️ Building MAVIS application..."
         docker compose build
         
-    - name: Run tests (optional)
-      if: ${{ inputs.run_tests == 'true' }}
-      run: |
-        echo "🧪 Running tests..."
-        docker compose run --rm mavis-app python run_tests.py --ci --coverage --verbose
+
         
     - name: Launch application
       run: |

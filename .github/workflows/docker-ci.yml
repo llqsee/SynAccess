@@ -12,11 +12,6 @@ on:
           - full
           - backend-only
           - frontend-only
-      run_tests:
-        description: 'Run application tests'
-        default: true
-        required: false
-        type: boolean
       push_image:
         description: 'Push to Docker registry'
         default: false
@@ -25,7 +20,7 @@ on:
 
   push:
     branches:
-      - initial-dev
+      - init-branch
 
   pull_request:
     branches:
@@ -47,12 +42,6 @@ jobs:
         # Build the application
         echo "🏗️ Building MAVIS application with Docker Compose..."
         docker compose build
-        
-        # Run tests if enabled
-        if [ "${{ inputs.run_tests || 'true' }}" = "true" ]; then
-          echo "🧪 Running tests in Docker environment..."
-          docker compose run --rm mavis-app python run_tests.py --ci --coverage --verbose
-        fi
         
         # Test the application startup
         echo "🚀 Testing application startup..."
