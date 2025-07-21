@@ -1,10 +1,7 @@
 name: Frontend and Backend Tests
 
-# Controls when the action will run. Workflow runs when manually triggered using the UI
-# or API.
 on:
   workflow_dispatch:
-    # Inputs the workflow accepts.
     inputs:
       test_type:
         description: 'Type of tests to run'
@@ -26,6 +23,14 @@ on:
         default: true
         required: false
         type: boolean
+
+  push:
+    branches:
+      - initial-dev
+
+  pull_request:
+    branches:
+      - main
 
 jobs:
   manual-test:
@@ -52,38 +57,39 @@ jobs:
       with:
         auto-update-conda: true
         python-version: '3.10'
-        
-    - name: Install Python dependencies
+
+    - name: Create Conda environment
+      shell: bash -l {0}
       run: |
         conda env create -f environment.yml
-        conda activate mavis
-        
+
     - name: Install Node.js dependencies
       run: |
         cd frontend
         npm ci
         
     - name: Run manual tests
+      shell: bash -l {0}
       run: |
         conda activate mavis
         python run_tests.py \
-          --${{ inputs.test_type }} \
-          ${{ inputs.coverage && '--coverage' || '' }} \
-          ${{ inputs.verbose && '--verbose' || '' }} \
+          --${{ inputs.test_type || 'all' }} \
+          ${{ (inputs.coverage || 'true') == 'true' && '--coverage' || '' }} \
+          ${{ (inputs.verbose || 'true') == 'true' && '--verbose' || '' }} \
           --ci
-        
+
     - name: Upload coverage reports (if generated)
       uses: codecov/codecov-action@v3
       with:
         file: ./backend/htmlcov/coverage.xml
         flags: backend
         name: backend-coverage
-      if: inputs.coverage
-        
+      if: ${{ inputs.coverage == 'true' || github.event_name != 'workflow_dispatch' }}
+
     - name: Upload frontend coverage (if generated)
       uses: codecov/codecov-action@v3
       with:
         file: ./frontend/coverage/lcov.info
         flags: frontend
         name: frontend-coverage
-      if: inputs.coverage 
+      if: ${{ inputs.coverage == 'true' || github.event_name != 'workflow_dispatch' }}
