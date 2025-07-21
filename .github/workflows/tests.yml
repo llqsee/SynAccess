@@ -1,0 +1,89 @@
+name: Frontend and Backend Tests
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+    # Inputs the workflow accepts.
+    inputs:
+      test_type:
+        description: 'Type of tests to run'
+        default: 'all'
+        required: true
+        type: choice
+        options:
+          - all
+          - frontend
+          - backend
+          - lint
+      coverage:
+        description: 'Generate coverage reports'
+        default: true
+        required: false
+        type: boolean
+      verbose:
+        description: 'Verbose output'
+        default: true
+        required: false
+        type: boolean
+
+jobs:
+  manual-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: '3.10'
+        
+    - name: Install Python dependencies
+      run: |
+        conda env create -f environment.yml
+        conda activate mavis
+        
+    - name: Install Node.js dependencies
+      run: |
+        cd frontend
+        npm ci
+        
+    - name: Run manual tests
+      run: |
+        conda activate mavis
+        python run_tests.py \
+          --${{ inputs.test_type }} \
+          ${{ inputs.coverage && '--coverage' || '' }} \
+          ${{ inputs.verbose && '--verbose' || '' }} \
+          --ci
+        
+    - name: Upload coverage reports (if generated)
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/htmlcov/coverage.xml
+        flags: backend
+        name: backend-coverage
+      if: inputs.coverage
+        
+    - name: Upload frontend coverage (if generated)
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./frontend/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+      if: inputs.coverage 
