@@ -26,6 +26,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build", 
     "test": "react-scripts test",
+    "test:fast": "react-scripts test --watchAll=false --passWithNoTests --maxWorkers=2 --testTimeout=10000",
     "test:ci": "react-scripts test --coverage --ci --watchAll=false --passWithNoTests",
     "test:coverage": "react-scripts test --coverage --watchAll=false",
     "test:watch": "react-scripts test --watch",
