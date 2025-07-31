@@ -2,9 +2,11 @@ version: '3.8'
 
 services:
   mavis-app:
-    build: 
+    build:
       context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}
+      dockerfile: Dockerfile
+      args:
+        ENV_FILE: ${ENV_FILE:-environment.yml}  # Use environment-gpu.yml for GPU build
     ports:
       - "8000:8000"
       - "3000:3000"
@@ -35,4 +37,12 @@ services:
       - mavis-app
     restart: unless-stopped
     profiles:
-      - production 
+      - production
+
+# ---
+# To build for CPU (default):
+#   docker compose up --build
+#
+# To build for GPU:
+#   ENV_FILE=environment-gpu.yml docker compose up --build
+# --- 

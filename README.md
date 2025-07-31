@@ -7,13 +7,112 @@ A full-stack web application for visualizing and comparing real and synthetic da
 ## 🚀 Features
 - **Interactive Data Upload**: CSV, Excel, and JSON support
 - **Advanced Dimensionality Reduction**: UMAP and t-SNE with live parameter tuning
+- **GPU Acceleration**: Optional GPU support for faster UMAP computations
 - **Interactive Visualizations**: D3.js and Plotly-based, zoom/pan, point selection, real vs synthetic toggle
 - **Statistical Analysis**: Distribution comparisons, histograms, violin plots, categorical/continuous analysis
 - **Data Validation & Quality Assessment**: Range, distribution, correlation, and statistical tests with scoring and recommendations
+- **AI-Powered Analysis**: Claude AI integration for expert data quality assessment and recommendations
 - **Performance Monitoring**: Real-time dashboard, API/memory/user analytics
 - **Job Management & History**: Background processing, job history, export, favorites
 - **Modern UI/UX**: Material-UI, responsive, dark mode, authentication
 - **Comprehensive Documentation**: Located in `docs/docs/`, with dark mode and logo support
+
+---
+
+## 🔐 Environment Setup
+
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- Conda (recommended for environment management)
+
+### 1. Clone and Setup
+```bash
+git clone <your-repo-url>
+cd Scalable-Visualization-and-Explainability-of-Synthetic-Datasets
+```
+
+### 2. Environment Variables Setup
+Create a `.env` file in the project root (copy from `.env.example`):
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit the .env file with your actual values
+# Most importantly, add your Anthropic API key:
+ANTHROPIC_API_KEY=sk-ant-api03-your-actual-api-key-here
+```
+
+**⚠️ Security Note**: Never commit your `.env` file to version control. It's already in `.gitignore`.
+
+### 3. Backend Setup
+```bash
+# Create and activate conda environment
+conda env create -f environment.yml
+conda activate mavis
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Initialize database
+python backend/setup_database.py
+
+# Start backend server
+python backend/main.py
+```
+
+### 4. Frontend Setup
+```bash
+cd frontend
+npm install
+npm start
+```
+
+### 5. Access the Application
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+
+---
+
+## 🚀 GPU Acceleration
+
+MAVIS supports optional GPU acceleration for UMAP computations, significantly speeding up dimensionality reduction on large datasets.
+
+### GPU Features
+- **Automatic Detection**: GPU availability is automatically detected
+- **Fallback Support**: Gracefully falls back to CPU if GPU is unavailable
+- **Performance Boost**: 2-10x faster UMAP computations on supported hardware
+- **Memory Efficient**: Optimized for large datasets with GPU memory management
+
+### GPU Requirements
+- **NVIDIA GPU** with CUDA 11.x or higher
+- **CUDA Toolkit** installed on the system
+- **CuPy** library for GPU array operations
+
+### Using GPU Acceleration
+1. **Install GPU environment:**
+   ```bash
+   conda env create -f environment-gpu.yml
+   conda activate mavis-gpu
+   ```
+
+2. **Enable GPU in API calls:**
+   ```json
+   {
+     "method": "umap",
+     "params": {
+       "use_gpu": true,
+       "n_neighbors": 15,
+       "min_dist": 0.1
+     }
+   }
+   ```
+
+3. **Monitor GPU usage:**
+   - GPU utilization is tracked in the API response metadata
+   - Performance metrics show speedup compared to CPU
 
 ---
 

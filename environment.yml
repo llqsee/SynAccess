@@ -20,6 +20,10 @@ dependencies:
   # Dimensionality reduction
   - umap-learn
   - openTSNE
+  # GPU acceleration
+  - cudatoolkit
+  - cudnn
+  - cupy
   # Code quality
   - black
   - flake8
@@ -46,12 +50,14 @@ dependencies:
   - pyarrow  # Required for parquet format support
   # ZeroMQ for asynchronous task queuing
   - pyzmq
-  - pip:
+      - pip:
     - python-dotenv
     - plotly
     - jupyter-black
     - pydantic  # For FastAPI request/response models
     - pydantic-settings  # For settings management
+    - umap-learn[gpu]  # GPU-accelerated UMAP
+    - anthropic  # For Claude API integration
     - awscli
     - mkdocs
     - mkdocs-material

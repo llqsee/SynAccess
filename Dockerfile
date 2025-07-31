@@ -8,8 +8,11 @@ RUN npm ci --omit=dev
 COPY frontend/ ./
 RUN npm run build
 
-# Python backend stage
+# Backend stage (CPU or GPU)
 FROM continuumio/miniconda3:latest
+
+# --- Build ARG to select environment file ---
+ARG ENV_FILE=environment.yml
 
 # Install system dependencies and Node.js
 RUN apt-get update && apt-get install -y \
@@ -18,19 +21,16 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs
 
-# Create working directory
-WORKDIR /app
-
-# Copy environment file and install dependencies
-COPY environment.yml .
-RUN conda env create -f environment.yml && \
+# Copy and install the selected environment file
+COPY ${ENV_FILE} /tmp/environment.yml
+RUN conda env create -f /tmp/environment.yml && \
     conda clean -afy
 
 # Copy backend code
+WORKDIR /app
 COPY backend/ ./backend/
 COPY setup_database.py ./
 
@@ -44,14 +44,8 @@ source /opt/conda/etc/profile.d/conda.sh\n\
 conda activate mavis\n\
 cd /app\n\
 python setup_database.py\n\
-if [ "$NODE_ENV" = "development" ]; then\n\
-  cd frontend && npm install && npm start &\n\
-  cd /app/backend\n\
-  exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload\n\
-else\n\
-  cd backend\n\
-  exec uvicorn main:app --host 0.0.0.0 --port 8000\n\
-fi' > start.sh && \
+cd backend\n\
+exec uvicorn main:app --host 0.0.0.0 --port 8000' > start.sh && \
     chmod +x start.sh
 
 EXPOSE 8000
@@ -60,4 +54,12 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-CMD ["./start.sh"] 
+CMD ["./start.sh"]
+
+# ---
+# Build for CPU:
+# docker build --build-arg ENV_FILE=environment.yml -t mavis:cpu .
+#
+# Build for GPU:
+# docker build --build-arg ENV_FILE=environment-gpu.yml -t mavis:gpu .
+# --- 
