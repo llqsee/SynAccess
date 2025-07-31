@@ -240,7 +240,7 @@ random_state: 42
 
 **Upload Fails**:
 - Check file format (CSV, Excel, JSON)
-- Verify file size (max 100MB)
+- Verify file size
 - Ensure consistent column names
 
 **Processing Slow**:

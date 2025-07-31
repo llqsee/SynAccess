@@ -10,7 +10,7 @@ This page will contain detailed information about MAVIS's data upload capabiliti
 
 ## File Size Limits
 
-- Maximum file size: 100MB per file
+- Maximum file size: No file size Limit
 - Recommended: Clean, preprocessed data
 
 ## Data Requirements

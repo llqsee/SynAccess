@@ -1,0 +1,67 @@
+name: mavis-gpu
+channels:
+  - conda-forge
+  - nvidia
+dependencies:
+  - python=3.10
+  - pip
+  - typer
+  - loguru
+  - tqdm
+  - ipython
+  - jupyterlab
+  - matplotlib
+  - seaborn  
+  - notebook
+  # Core data science libraries
+  - numpy
+  - pandas
+  - scikit-learn
+  - scipy  # Required for statistical tests in distribution analysis
+  # Dimensionality reduction
+  - umap-learn
+  - openTSNE
+  # GPU acceleration
+  - cudatoolkit
+  - cudnn
+  - cupy
+  # Code quality
+  - black
+  - flake8
+  - isort
+  # Testing
+  - pytest
+  - pytest-asyncio
+  - pytest-cov
+  - pytest-mock
+  # Web framework
+  - fastapi
+  - uvicorn
+  # Database
+  - sqlalchemy
+  # HTTP requests
+  - requests
+  # YAML parsing
+  - pyyaml
+  # Additional statistical packages for distribution analysis
+  - statsmodels
+  # Compression libraries for data storage
+  - lz4
+  - zstandard
+  - pyarrow  # Required for parquet format support
+  # ZeroMQ for asynchronous task queuing
+  - pyzmq
+  - pip:
+    - python-dotenv
+    - plotly
+    - jupyter-black
+    - pydantic  # For FastAPI request/response models
+    - pydantic-settings  # For settings management
+    - umap-learn[gpu]  # GPU-accelerated UMAP
+    - cupy-cuda11x  # CUDA 11.x compatible CuPy
+    - awscli
+    - mkdocs
+    - mkdocs-material
+    - mkdocs-material-extensions
+    - mkdocs-git-revision-date-localized-plugin
+    - mkdocs-minify-plugin 
