@@ -34,6 +34,7 @@ class EmbeddingTask:
     n_samples: Optional[int] = None
     real_headers: Optional[List[str]] = None
     synthetic_headers: Optional[List[str]] = None
+    pretrained_model: Optional[Any] = None  # Pre-trained model object
     priority: int = 0  # Higher number = higher priority
     created_at: str = None
     
@@ -297,8 +298,29 @@ class TaskQueueManager:
                         progress.queue_position = None
                         
                         # Send task to worker
-                        task_data = json.dumps(asdict(task)).encode()
-                        self.frontend.send_multipart([identity, b"", task_data])
+                        # Create a serializable version of the task (excluding pretrained_model)
+                        task_dict = asdict(task)
+                        pretrained_model = task_dict.pop('pretrained_model', None)
+                        
+                        # Serialize the task data
+                        task_data = json.dumps(task_dict).encode()
+                        
+                        # Send task data and pretrained model separately
+                        if pretrained_model is not None:
+                            # For pretrained models, we need to handle them differently
+                            # since they can't be JSON serialized
+                            import pickle
+                            import base64
+                            model_data = base64.b64encode(pickle.dumps(pretrained_model)).decode()
+                            task_data_with_model = json.dumps({
+                                'task_data': task_dict,
+                                'pretrained_model_data': model_data
+                            }).encode()
+                            self.frontend.send_multipart([identity, b"", task_data_with_model])
+                        else:
+                            # Regular task without pretrained model
+                            self.frontend.send_multipart([identity, b"", task_data])
+                        
                         self._publish_status_update(progress)
                         
                         self.logger.info(f"Dispatched task {task.task_id} to worker {identity.decode()}")
@@ -393,21 +415,33 @@ class TaskQueueManager:
     
     def _start_workers(self):
         """Start worker processes."""
-        for i in range(self.max_workers):
-            worker_id = f"worker_{i}"
-            process = mp.Process(
-                target=embedding_worker,
-                args=(worker_id, self.frontend_port, self.status_port),
-                daemon=True
-            )
-            process.start()
-            self.workers.append(process)
-            self.worker_status[worker_id] = "idle"
+        try:
+            self.logger.info(f"Starting {self.max_workers} worker processes...")
+            for i in range(self.max_workers):
+                worker_id = f"worker_{i}"
+                self.logger.info(f"Starting worker {worker_id}...")
+                process = mp.Process(
+                    target=embedding_worker,
+                    args=(worker_id, self.frontend_port, self.status_port),
+                    daemon=True
+                )
+                process.start()
+                self.workers.append(process)
+                self.worker_status[worker_id] = "idle"
+                
+                # Add longer delay between worker starts to reduce connection conflicts
+                time.sleep(1.0)
+                
+            self.logger.info(f"Started {len(self.workers)} worker processes")
             
-            # Add small delay between worker starts to reduce connection conflicts
-            time.sleep(0.2)
+            # Check if workers are alive after a short delay
+            time.sleep(2.0)
+            alive_workers = [w for w in self.workers if w.is_alive()]
+            self.logger.info(f"Workers still alive after startup: {len(alive_workers)}/{len(self.workers)}")
             
-        self.logger.info(f"Started {len(self.workers)} worker processes")
+        except Exception as e:
+            self.logger.error(f"Error starting workers: {e}")
+            # Continue without workers - the system can still function
     
     def _stop_workers(self):
         """Stop all worker processes."""
@@ -484,6 +518,7 @@ def embedding_worker(worker_id: str, frontend_port: int, status_port: int):
     
     for attempt in range(max_retries):
         try:
+            logger.info(f"Worker {worker_id} attempting to connect to frontend port {frontend_port} (attempt {attempt + 1})")
             # Socket to receive tasks (connect to frontend for work requests)
             receiver = context.socket(zmq.REQ)
             receiver.connect(f"tcp://localhost:{frontend_port}")
@@ -550,7 +585,33 @@ def embedding_worker(worker_id: str, frontend_port: int, status_port: int):
                 else:
                     # Assume this is task data
                     try:
-                        task_dict = json.loads(message.decode())
+                        task_data = json.loads(message.decode())
+                        
+                        # Handle new format with pretrained model data
+                        if "pretrained_model_data" in task_data:
+                            # This is a task with pretrained model
+                            task_dict = task_data["task_data"]
+                            pretrained_model_data = task_data["pretrained_model_data"]
+                            
+                            # Decode the pretrained model
+                            import pickle
+                            import base64
+                            model_bytes = base64.b64decode(pretrained_model_data)
+                            
+                            # Check model format and use appropriate deserialization
+                            model_format = task_dict.get("params", {}).get("model_format", "pickle")
+                            if model_format == "joblib":
+                                import joblib
+                                pretrained_model = joblib.loads(model_bytes)
+                            else:
+                                pretrained_model = pickle.loads(model_bytes)
+                            
+                            # Add the model to the task dict
+                            task_dict["pretrained_model"] = pretrained_model
+                        else:
+                            # Regular task without pretrained model
+                            task_dict = task_data
+                        
                         if "task_id" not in task_dict:
                             logger.warning(f"Worker {worker_id} received invalid task data")
                             continue
@@ -560,6 +621,9 @@ def embedding_worker(worker_id: str, frontend_port: int, status_port: int):
                         
                     except json.JSONDecodeError:
                         logger.warning(f"Worker {worker_id} received non-JSON message: {message}")
+                        continue
+                    except Exception as e:
+                        logger.error(f"Worker {worker_id} error processing task data: {e}")
                         continue
                     
                     try:
@@ -575,32 +639,62 @@ def embedding_worker(worker_id: str, frontend_port: int, status_port: int):
                         # Send progress update
                         _send_progress_update(status_sender, task_id, worker_id, 0.1, "starting")
                         
-                        # Compute embedding with progress reporting
-                        embeddings, metadata = embedding_service.compute_embedding(
-                            real_data=task_dict["real_data"],
-                            synthetic_data=task_dict["synthetic_data"],
-                            method=task_dict["method"],
-                            params=task_dict["params"],
-                            n_samples=task_dict.get("n_samples"),
-                            real_headers=task_dict.get("real_headers"),
-                            synthetic_headers=task_dict.get("synthetic_headers"),
-                            progress_callback=lambda p: _send_progress_update(
-                                status_sender, task_id, worker_id, 0.1 + (p * 0.8), "computing"
+                        # Check if using pre-trained model
+                        if task_dict.get("pretrained_model") is not None:
+                            logger.info(f"Worker {worker_id} starting pre-trained model processing for task {task_id}")
+                            # Use pre-trained model
+                            embeddings, metadata = embedding_service.compute_embedding_with_pretrained_model(
+                                real_data=task_dict["real_data"],
+                                synthetic_data=task_dict["synthetic_data"],
+                                pretrained_model=task_dict["pretrained_model"],
+                                method=task_dict["method"],
+                                real_headers=task_dict.get("real_headers"),
+                                synthetic_headers=task_dict.get("synthetic_headers"),
+                                fine_tune=task_dict.get("params", {}).get("fine_tune", False),
+                                progress_callback=lambda p: _send_progress_update(
+                                    status_sender, task_id, worker_id, 0.1 + (p * 0.8), "computing"
+                                )
                             )
-                        )
+                            logger.info(f"Worker {worker_id} completed pre-trained model processing for task {task_id}")
+                        else:
+                            logger.info(f"Worker {worker_id} starting regular embedding processing for task {task_id}")
+                            # Compute embedding with progress reporting
+                            embeddings, metadata = embedding_service.compute_embedding(
+                                real_data=task_dict["real_data"],
+                                synthetic_data=task_dict["synthetic_data"],
+                                method=task_dict["method"],
+                                params=task_dict["params"],
+                                n_samples=task_dict.get("n_samples"),
+                                real_headers=task_dict.get("real_headers"),
+                                synthetic_headers=task_dict.get("synthetic_headers"),
+                                progress_callback=lambda p: _send_progress_update(
+                                    status_sender, task_id, worker_id, 0.1 + (p * 0.8), "computing"
+                                )
+                            )
+                            logger.info(f"Worker {worker_id} completed regular embedding processing for task {task_id}")
                         
-                        # Save results to database
-                        JobService.update_job_results(
+                        # Save results to database (including model if available)
+                        model = metadata.get("model")
+                        
+                        logger.info(f"Calling update_job_results for job {job_id}")
+                        success = JobService.update_job_results(
                             job_id=job_id,
                             embedding_real=embeddings["real"],
                             embedding_synthetic=embeddings["synthetic"],
                             runtime_seconds=metadata["runtime"],
                             preprocessing_info=metadata,
                             real_processed_samples=metadata.get("real_samples"),
-                            synthetic_processed_samples=metadata.get("synthetic_samples")
+                            synthetic_processed_samples=metadata.get("synthetic_samples"),
+                            model=model
                         )
+                        if not success:
+                            logger.error(f"Failed to update job results for {job_id}")
+                            # Don't set status to completed if results failed to save
+                            raise Exception(f"Failed to save job results for {job_id}")
+                        else:
+                            logger.info(f"Successfully updated job results for {job_id}")
                         
-                        # Update job status
+                        # Update job status only if results were saved successfully
                         JobService.update_job_async_info(
                             job_id=job_id,
                             status="completed",

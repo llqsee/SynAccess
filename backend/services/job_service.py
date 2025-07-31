@@ -69,7 +69,8 @@ class JobService:
         status: Optional[str] = None,
         method: Optional[str] = None,
         date_from: Optional[datetime] = None,
-        date_to: Optional[datetime] = None
+        date_to: Optional[datetime] = None,
+        favorites_only: bool = False
     ) -> List[Job]:
         """Get jobs with optional filtering."""
         try:
@@ -84,6 +85,8 @@ class JobService:
                 query = query.filter(Job.created_at >= date_from)
             if date_to:
                 query = query.filter(Job.created_at <= date_to)
+            if favorites_only:
+                query = query.filter(Job.is_favorite == True)
             
             return query.order_by(desc(Job.created_at)).offset(offset).limit(limit).all()
             
@@ -96,7 +99,8 @@ class JobService:
         status: Optional[str] = None,
         method: Optional[str] = None,
         date_from: Optional[datetime] = None,
-        date_to: Optional[datetime] = None
+        date_to: Optional[datetime] = None,
+        favorites_only: bool = False
     ) -> int:
         """Get total count of jobs with optional filtering."""
         try:
@@ -111,6 +115,8 @@ class JobService:
                 query = query.filter(Job.created_at >= date_from)
             if date_to:
                 query = query.filter(Job.created_at <= date_to)
+            if favorites_only:
+                query = query.filter(Job.is_favorite == True)
             
             return query.count()
             
@@ -161,17 +167,21 @@ class JobService:
         runtime_seconds: float,
         preprocessing_info: Dict[str, Any],
         real_processed_samples: Optional[int] = None,
-        synthetic_processed_samples: Optional[int] = None
+        synthetic_processed_samples: Optional[int] = None,
+        model: Optional[object] = None
     ) -> bool:
         """Update job with embedding results."""
         try:
+            logger.info(f"Starting to update job results for {job_id}")
             db = next(get_db())
             
             # Update job status
             job = db.query(Job).filter(Job.job_id == job_id).first()
             if not job:
+                logger.error(f"Job {job_id} not found in database")
                 return False
             
+            logger.info(f"Found job {job_id}, updating status to completed")
             job.status = "completed"
             job.completed_at = datetime.utcnow()
             job.runtime_seconds = runtime_seconds
@@ -180,17 +190,86 @@ class JobService:
             # Create or update job results
             job_result = db.query(JobResult).filter(JobResult.job_id == job_id).first()
             if not job_result:
+                logger.info(f"Creating new job result record for {job_id}")
                 job_result = JobResult(job_id=job_id)
                 db.add(job_result)
+            else:
+                logger.info(f"Updating existing job result record for {job_id}")
             
+            logger.info(f"Saving embeddings for job {job_id} - real: {len(embedding_real)} samples, synthetic: {len(embedding_synthetic)} samples")
             job_result.embedding_real = json.dumps(embedding_real)
             job_result.embedding_synthetic = json.dumps(embedding_synthetic)
-            job_result.preprocessing_info = json.dumps(preprocessing_info)
+            
+            # Filter out non-serializable objects from preprocessing_info
+            serializable_preprocessing_info = {}
+            for key, value in preprocessing_info.items():
+                try:
+                    # Test if the value can be serialized to JSON
+                    json.dumps(value)
+                    serializable_preprocessing_info[key] = value
+                except (TypeError, ValueError):
+                    # Skip non-serializable objects (like model objects)
+                    logger.info(f"Skipping non-serializable key '{key}' in preprocessing_info for job {job_id}")
+                    continue
+            
+            job_result.preprocessing_info = json.dumps(serializable_preprocessing_info)
             job_result.real_processed_samples = real_processed_samples
             job_result.synthetic_processed_samples = synthetic_processed_samples
             
+            # Store model if provided (re-enabled with proper error handling)
+            if model is not None:
+                try:
+                    import pickle
+                    import base64
+                    
+                    logger.info(f"Attempting to store model for job {job_id}")
+                    logger.info(f"Model type: {type(model).__name__}")
+                    logger.info(f"Model attributes: {[attr for attr in dir(model) if not attr.startswith('_')]}")
+                    
+                    # Special handling for t-SNE models (openTSNE has serialization issues with pickle)
+                    model_type = type(model).__name__
+                    if "TSNEEmbedding" in model_type or "TSNE" in model_type:
+                        logger.info(f"Detected t-SNE model, using joblib for serialization")
+                        import joblib
+                        import io
+                        
+                        # Use joblib for t-SNE models (handles complex objects better)
+                        buffer = io.BytesIO()
+                        joblib.dump(model, buffer)
+                        model_bytes = buffer.getvalue()
+                        buffer.close()
+                        
+                        logger.info(f"t-SNE model serialized with joblib. Size: {len(model_bytes)} bytes")
+                        job_result.model_format = 'joblib'
+                    else:
+                        # Use pickle for other models (UMAP, etc.)
+                        model_bytes = pickle.dumps(model)
+                        logger.info(f"Model pickled successfully. Size: {len(model_bytes)} bytes")
+                        job_result.model_format = 'pickle'
+                    
+                    model_b64 = base64.b64encode(model_bytes).decode('utf-8')
+                    logger.info(f"Model base64 encoded successfully. Size: {len(model_b64)} characters")
+                    
+                    job_result.model_data = model_b64
+                    job.has_model = True
+                    
+                    logger.info(f"Stored model for job {job_id}")
+                except Exception as model_error:
+                    logger.warning(f"Failed to store model for job {job_id}: {model_error}")
+                    logger.warning(f"Model error type: {type(model_error)}")
+                    # Continue without storing the model - don't fail the entire operation
+                    job.has_model = False
+                    job_result.model_data = None
+                    job_result.model_format = None
+            else:
+                logger.info(f"No model provided for job {job_id}")
+                job.has_model = False
+                job_result.model_data = None
+                job_result.model_format = None
+            
+            logger.info(f"About to commit results for job {job_id}")
             db.commit()
-            logger.info(f"Updated results for job {job_id}")
+            logger.info(f"Successfully committed results for job {job_id}")
             return True
             
         except Exception as e:
@@ -207,13 +286,17 @@ class JobService:
             if not job_result:
                 return None
             
-            return {
+            result = {
                 "embedding_real": json.loads(job_result.embedding_real),
                 "embedding_synthetic": json.loads(job_result.embedding_synthetic),
                 "preprocessing_info": json.loads(job_result.preprocessing_info),
                 "real_processed_samples": job_result.real_processed_samples,
-                "synthetic_processed_samples": job_result.synthetic_processed_samples
+                "synthetic_processed_samples": job_result.synthetic_processed_samples,
+                "has_model": job_result.model_data is not None,
+                "model_format": job_result.model_format
             }
+            
+            return result
             
         except Exception as e:
             logger.error(f"Error getting job results for {job_id}: {e}")
@@ -253,15 +336,41 @@ class JobService:
             # Delete compressed data
             db.query(CompressedData).filter(CompressedData.job_id == job_id).delete()
             
-            # Delete job
-            db.query(Job).filter(Job.job_id == job_id).delete()
-            
-            db.commit()
-            logger.info(f"Deleted job {job_id}")
-            return True
+            # Delete the job
+            job = db.query(Job).filter(Job.job_id == job_id).first()
+            if job:
+                db.delete(job)
+                db.commit()
+                logger.info(f"Deleted job {job_id}")
+                return True
+            else:
+                logger.warning(f"Job {job_id} not found for deletion")
+                return False
             
         except Exception as e:
             logger.error(f"Error deleting job {job_id}: {e}")
+            return False
+    
+    @staticmethod
+    def toggle_job_favorite(job_id: str) -> bool:
+        """Toggle the favorite status of a job."""
+        try:
+            db = next(get_db())
+            job = db.query(Job).filter(Job.job_id == job_id).first()
+            
+            if not job:
+                logger.warning(f"Job {job_id} not found for favorite toggle")
+                return False
+            
+            # Toggle the favorite status
+            job.is_favorite = not job.is_favorite
+            db.commit()
+            
+            logger.info(f"Toggled favorite status for job {job_id} to {job.is_favorite}")
+            return True
+                
+        except Exception as e:
+            logger.error(f"Error toggling favorite for job {job_id}: {e}")
             return False
     
     @staticmethod
@@ -356,6 +465,29 @@ class JobService:
             logger.error(f"Error compressing data for job {job_id}: {e}")
             return False
     
+    @staticmethod
+    def get_model(job_id: str) -> Optional[Dict[str, Any]]:
+        """Get model data for download."""
+        try:
+            db = next(get_db())
+            job_result = db.query(JobResult).filter(JobResult.job_id == job_id).first()
+            
+            if not job_result or not job_result.model_data:
+                return None
+            
+            import base64
+            
+            # Return model data and metadata
+            return {
+                "model_data": job_result.model_data,
+                "model_format": job_result.model_format,
+                "job_id": job_id
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting model for {job_id}: {e}")
+            return None
+
     @staticmethod
     def get_compressed_data(job_id: str) -> Optional[Dict[str, Any]]:
         """Get compressed data for a job."""
