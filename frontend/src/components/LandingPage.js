@@ -25,7 +25,9 @@ import {
   Alert,
   IconButton,
   Tooltip,
-  LinearProgress
+  LinearProgress,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import {
   CloudUpload,
@@ -64,6 +66,8 @@ const LandingPage = ({
   const [nSynthSamples, setNSynthSamples] = useState(1000);
   const [showParameters, setShowParameters] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [useGpu, setUseGpu] = useState(false);
+
 
   const handleFileSelection = async (event, isReal) => {
     const file = event.target.files[0];
@@ -79,6 +83,8 @@ const LandingPage = ({
     }
   };
 
+
+
   const handleGenerate = () => {
     const params = {
       method,
@@ -87,7 +93,8 @@ const LandingPage = ({
             n_neighbors: nNeighbors, 
             min_dist: minDist,
             n_real_samples: nRealSamples,
-            n_synth_samples: nSynthSamples
+            n_synth_samples: nSynthSamples,
+            use_gpu: useGpu
           }
         : { 
             perplexity: perplexity, 
@@ -100,6 +107,8 @@ const LandingPage = ({
   };
 
   const isReadyToGenerate = realDataLoaded && syntheticDataLoaded && backendConnected && !loading;
+  
+
 
   return (
     <Box sx={{ 
@@ -354,11 +363,12 @@ const LandingPage = ({
                                   </Box>
                                 </Box>
                               </MenuItem>
+
                             </Select>
                           </FormControl>
 
                           {/* Method-specific parameters */}
-                          {method === 'umap' ? (
+                          {method === 'umap' && (
                             <>
                               <Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -397,8 +407,22 @@ const LandingPage = ({
                                   sx={{ color: '#7c3aed' }}
                                 />
                               </Box>
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    checked={useGpu}
+                                    onChange={e => setUseGpu(e.target.checked)}
+                                    color="primary"
+                                    disabled={!showParameters}
+                                  />
+                                }
+                                label="Use GPU (if available)"
+                                sx={{ mt: 1 }}
+                              />
                             </>
-                          ) : (
+                          )}
+                          
+                          {method === 'tsne' && (
                             <>
                               <Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -438,6 +462,8 @@ const LandingPage = ({
                               </Box>
                             </>
                           )}
+
+
 
                           {/* Sample Size Controls */}
                           <Box>

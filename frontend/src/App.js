@@ -146,6 +146,9 @@ function AppContent() {
     getValidationSummary
   } = useValidation();
 
+  // Manual validation trigger - removed automatic validation
+  // Users must now click "Run Validation" button in Summary tab
+
   const error = uploadError || embeddingError || validationError;
   
   const setError = useCallback((error) => {
@@ -233,10 +236,8 @@ function AppContent() {
             {validationResults && !validating && (
               <Chip
                 icon={<CheckCircle />}
-                label={`Validation Complete (${getValidationSummary()?.score || 0}% quality score)`}
-                color={getValidationSummary()?.overallStatus === 'EXCELLENT' ? 'success' : 
-                       getValidationSummary()?.overallStatus === 'GOOD' ? 'info' :
-                       getValidationSummary()?.overallStatus === 'FAIR' ? 'warning' : 'error'}
+                label="Validation Complete"
+                color="success"
                 size="small"
                 variant="outlined"
               />

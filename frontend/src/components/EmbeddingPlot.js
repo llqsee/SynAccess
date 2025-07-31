@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { Box, Typography, Paper, Chip, IconButton, Tooltip, Divider, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
-import { Clear, SelectAll, BarChart, CropFree, UnfoldMore, UnfoldLess } from '@mui/icons-material';
+import { Clear, SelectAll, BarChart, CropFree, UnfoldLess, Warning, Download } from '@mui/icons-material';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
 import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
+import anomalyDetectionService from '../services/anomalyDetectionService';
 
 const EmbeddingPlot = ({ 
   data, 
@@ -16,7 +17,6 @@ const EmbeddingPlot = ({
   const svgRef = useRef();
   const containerRef = useRef();
   const [selectedPoints, setSelectedPoints] = useState([]);
-  const [selectionMode, setSelectionMode] = useState('circle'); // Only circle selection
   const [histogramColumn, setHistogramColumn] = useState(0);
   const [histogramPlotType, setHistogramPlotType] = useState('histogram');
 
@@ -24,65 +24,41 @@ const EmbeddingPlot = ({
   const [plotLoading, setPlotLoading] = useState(false);
   const [plotError, setPlotError] = useState(null);
   
-  // Enhanced layout state with intelligent defaults
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    // Smart initial sidebar width based on viewport
-    if (typeof window !== 'undefined') {
-      const viewportWidth = window.innerWidth;
-      if (viewportWidth < 768) return 40; // Mobile: reasonable sidebar
-      if (viewportWidth < 1024) return 35; // Tablet: balanced
-      if (viewportWidth < 1440) return 30; // Desktop: more plot space
-      return 25; // Large screens: maximize plot area
-    }
-    return 30;
-  });
-  const [isResizing, setIsResizing] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // Removed aspect ratio mode - now fully automatic
+  // Anomaly detection state
+  const [anomalyResults, setAnomalyResults] = useState(null);
+  const [anomalyLoading, setAnomalyLoading] = useState(false);
+  const [anomalyError, setAnomalyError] = useState(null);
+  const [showAnomalies, setShowAnomalies] = useState(false);
+  const [contamination, setContamination] = useState('auto');
   
-  // Refs for smooth resizing and API management
-  const resizeTimeoutRef = useRef(null);
-  const lastResizeTimeRef = useRef(0);
-  const abortControllerRef = useRef(null);
-  const plotGenerationTimeoutRef = useRef(null);
-  const lastRequestParamsRef = useRef(null);
-
-  // Check if this embedding is loaded from history (no original data available)
-  const isFromHistory = useMemo(() => {
-    // The key question is: do we have the original data to generate distribution plots?
-    // This is now mainly for internal tracking since both fresh and history embeddings work
-    if (!metadata) return true;
-    
-    // Check if we have original data structure for distribution plots in metadata
-    const hasOriginalDataInMetadata = metadata.realData?.data && 
-                                    metadata.syntheticData?.data &&
-                                    Array.isArray(metadata.realData.data) &&
-                                    Array.isArray(metadata.syntheticData.data) &&
-                                    metadata.realData.data.length > 0 &&
-                                    metadata.syntheticData.data.length > 0;
-    
-    // Check if we have original data structure in session state
-    let hasOriginalDataInSession = false;
-    try {
-      const sessionRealData = window.sessionStorage.getItem('realData');
-      const sessionSyntheticData = window.sessionStorage.getItem('syntheticData');
-      
-      if (sessionRealData && sessionSyntheticData) {
-        const realData = JSON.parse(sessionRealData);
-        const syntheticData = JSON.parse(sessionSyntheticData);
-        
-        hasOriginalDataInSession = realData.data && syntheticData.data && 
-                                 Array.isArray(realData.data) && Array.isArray(syntheticData.data) &&
-                                 realData.data.length > 0 && syntheticData.data.length > 0;
-      }
-    } catch (error) {
-      console.warn('Failed to check session state data:', error);
-    }
-    
-    // If we have original data in either place, we can generate plots
-    return !(hasOriginalDataInMetadata || hasOriginalDataInSession);
-  }, [metadata]);
-
+  // Interactive filtering state
+  const [showSyntheticNormal, setShowSyntheticNormal] = useState(true);
+  const [showSyntheticAnomalies, setShowSyntheticAnomalies] = useState(true);
+  const [showRealNormal, setShowRealNormal] = useState(true);
+  const [showRealAnomalies, setShowRealAnomalies] = useState(true);
+  
+  // Helper functions for filter controls - Fixed null reference issues
+  const showAllData = useCallback(() => {
+    setShowRealNormal(true);
+    setShowRealAnomalies(true);
+    setShowSyntheticNormal(true);
+    setShowSyntheticAnomalies(true);
+  }, []);
+  
+  const hideAllData = useCallback(() => {
+    setShowRealNormal(false);
+    setShowRealAnomalies(false);
+    setShowSyntheticNormal(false);
+    setShowSyntheticAnomalies(false);
+  }, []);
+  
+  const showOnlyAnomalies = useCallback(() => {
+    setShowRealNormal(false);
+    setShowRealAnomalies(true);
+    setShowSyntheticNormal(false);
+    setShowSyntheticAnomalies(true);
+  }, []);
+  
   // Get original data for histogram generation
   const getOriginalData = useCallback(() => {
     // Try to get data from metadata first (for history embeddings)
@@ -140,6 +116,147 @@ const EmbeddingPlot = ({
     
     return null;
   }, [metadata]);
+  
+  // Helper function to get anomaly information for tooltip
+  const getAnomalyInfo = useCallback((originalIndex, label) => {
+    if (!anomalyResults) return '';
+    
+    const originalData = getOriginalData();
+    if (!originalData) return '';
+    
+    if (label === 'Real' && anomalyResults.real_data) {
+      let realIndexInOriginal = 0;
+      for (let j = 0; j < originalIndex; j++) {
+        if (originalData.labels[j] === 'Real') {
+          realIndexInOriginal++;
+        }
+      }
+      
+      if (realIndexInOriginal < anomalyResults.real_data.length) {
+        const realPoint = anomalyResults.real_data[realIndexInOriginal];
+        if (realPoint) {
+          return `Score: ${realPoint.score?.toFixed(3) || 'N/A'}<br/>Status: ${realPoint.is_anomaly ? '🔴 Anomalous' : '🟢 Normal'}`;
+        }
+      }
+    } else if (label === 'Synthetic' && anomalyResults.synthetic_data) {
+      let syntheticIndexInOriginal = 0;
+      for (let j = 0; j < originalIndex; j++) {
+        if (originalData.labels[j] === 'Synthetic') {
+          syntheticIndexInOriginal++;
+        }
+      }
+      
+      if (syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+        const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+        if (syntheticPoint) {
+          return `Score: ${syntheticPoint.score?.toFixed(3) || 'N/A'}<br/>Status: ${syntheticPoint.is_anomaly ? '🔴 Anomalous' : '🟢 Normal'}`;
+        }
+      }
+    }
+    
+    return '';
+  }, [anomalyResults, getOriginalData]);
+  
+  // Get only visible points based on current filter state
+  const getVisiblePoints = useCallback(() => {
+    if (!data || !metadata) return [];
+    
+    const visibleIndices = [];
+    
+    data.forEach((point, embeddingIndex) => {
+      const label = metadata.labels[embeddingIndex];
+      
+      // Check if this point should be visible based on current filters
+      let shouldBeVisible = false;
+      
+      if (label === 'Real') {
+        // For real data, check if we have anomaly results
+        if (anomalyResults && anomalyResults.real_data) {
+          const originalData = getOriginalData();
+          if (originalData) {
+            let realIndexInOriginal = 0;
+            for (let j = 0; j < embeddingIndex; j++) {
+              if (originalData.labels[j] === 'Real') {
+                realIndexInOriginal++;
+              }
+            }
+            
+            if (realIndexInOriginal < anomalyResults.real_data.length) {
+              const realPoint = anomalyResults.real_data[realIndexInOriginal];
+              if (realPoint && realPoint.is_anomaly) {
+                shouldBeVisible = showRealAnomalies;
+              } else {
+                shouldBeVisible = showRealNormal;
+              }
+            } else {
+              shouldBeVisible = showRealNormal; // Fallback
+            }
+          } else {
+            shouldBeVisible = showRealNormal; // Fallback
+          }
+        } else {
+          shouldBeVisible = showRealNormal; // No anomaly data, treat as normal
+        }
+      } else if (label === 'Synthetic') {
+        // For synthetic data, check if we have anomaly results
+        if (anomalyResults && anomalyResults.synthetic_data) {
+          const originalData = getOriginalData();
+          if (originalData) {
+            let syntheticIndexInOriginal = 0;
+            for (let j = 0; j < embeddingIndex; j++) {
+              if (originalData.labels[j] === 'Synthetic') {
+                syntheticIndexInOriginal++;
+              }
+            }
+            
+            if (syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+              const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+              if (syntheticPoint && syntheticPoint.is_anomaly) {
+                shouldBeVisible = showSyntheticAnomalies;
+              } else {
+                shouldBeVisible = showSyntheticNormal;
+              }
+            } else {
+              shouldBeVisible = showSyntheticNormal; // Fallback
+            }
+          } else {
+            shouldBeVisible = showSyntheticNormal; // Fallback
+          }
+        } else {
+          shouldBeVisible = showSyntheticNormal; // No anomaly data, treat as normal
+        }
+      }
+      
+      if (shouldBeVisible) {
+        visibleIndices.push(embeddingIndex);
+      }
+    });
+    
+    return visibleIndices;
+  }, [data, metadata, anomalyResults, showRealNormal, showRealAnomalies, showSyntheticNormal, showSyntheticAnomalies, getOriginalData]);
+  
+  // Enhanced layout state with intelligent defaults
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    // Smart initial sidebar width based on viewport
+    if (typeof window !== 'undefined') {
+      const viewportWidth = window.innerWidth;
+      if (viewportWidth < 768) return 40; // Mobile: reasonable sidebar
+      if (viewportWidth < 1024) return 35; // Tablet: balanced
+      if (viewportWidth < 1440) return 30; // Desktop: more plot space
+      return 25; // Large screens: maximize plot area
+    }
+    return 30;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Removed aspect ratio mode - now fully automatic
+  
+  // Refs for smooth resizing and API management
+  const resizeTimeoutRef = useRef(null);
+  const lastResizeTimeRef = useRef(0);
+  const abortControllerRef = useRef(null);
+  const plotGenerationTimeoutRef = useRef(null);
+  const lastRequestParamsRef = useRef(null);
 
   // Calculate optimal plot dimensions based on screen characteristics
   const calculatePlotDimensions = useCallback((containerWidth, containerHeight, sidebarVisible) => {
@@ -152,92 +269,54 @@ const EmbeddingPlot = ({
     const screenRatio = viewportWidth / viewportHeight;
     const containerRatio = availableWidth / containerHeight;
     
-    // Calculate optimal plot dimensions based on screen type and ratio
+    // More aggressive space utilization - use most of the available container
     let plotWidth, plotHeight;
     
-    // Screen-aware aspect ratio selection
-    if (viewportWidth < 768) {
-      // Mobile: Portrait-friendly ratios
-      if (screenRatio < 0.75) {
-        // Very tall phones (iPhone X, etc.)
-        plotWidth = availableWidth;
-        plotHeight = availableWidth * 0.85; // Slightly wider than square
-      } else {
-        // Standard mobile
-        plotWidth = availableWidth;
-        plotHeight = availableWidth * 0.75; // 4:3 ratio
-      }
-    } else if (viewportWidth < 1024) {
-      // Tablet: Balanced ratios that work in both orientations
-      if (screenRatio > 1.3) {
-        // Landscape tablet
-        plotWidth = Math.min(availableWidth, containerHeight * 1.4);
-        plotHeight = plotWidth / 1.4; // 7:5 ratio
-      } else {
-        // Portrait tablet or square-ish
-        plotWidth = availableWidth;
-        plotHeight = availableWidth / 1.2; // 6:5 ratio
-      }
-    } else if (viewportWidth < 1440) {
-      // Desktop: Optimize for common screen ratios
-      if (screenRatio > 1.7) {
-        // Wide screens (16:9, 16:10)
-        plotWidth = Math.min(availableWidth, containerHeight * 1.6);
-        plotHeight = plotWidth / 1.6; // 8:5 ratio (golden-like)
-      } else if (screenRatio > 1.4) {
-        // Standard desktop (4:3, 5:4)
-        plotWidth = Math.min(availableWidth, containerHeight * 1.3);
-        plotHeight = plotWidth / 1.3; // 13:10 ratio
-      } else {
-        // Tall or square screens
-        plotWidth = availableWidth;
-        plotHeight = availableWidth / 1.1; // Nearly square
-      }
+    // Use container ratio to determine optimal dimensions - maximize space utilization
+    if (containerRatio > 2.5) {
+      // Extremely wide container - prioritize height to match sidebar
+      plotHeight = containerHeight * 0.98; // Use 98% of available height
+      plotWidth = Math.min(availableWidth * 0.98, plotHeight * 2.0); // Increased width constraint to 2.0:1 ratio
+    } else if (containerRatio > 1.5) {
+      // Wide container - prioritize height to match sidebar
+      plotHeight = containerHeight * 0.98; // Use 98% of available height
+      plotWidth = Math.min(availableWidth * 0.98, plotHeight * 1.8); // Increased width constraint to 1.8:1 ratio
+    } else if (containerRatio < 0.8) {
+      // Tall container - maximize both dimensions
+      plotWidth = availableWidth * 0.98; // Use 98% of available width
+      plotHeight = containerHeight * 0.98; // Use 98% of available height
     } else {
-      // Large screens: Premium aspect ratios
-      if (screenRatio > 2.0) {
-        // Ultra-wide screens (21:9, 32:9)
-        plotWidth = Math.min(availableWidth, containerHeight * 1.8);
-        plotHeight = plotWidth / 1.8; // 9:5 ratio
-      } else if (screenRatio > 1.6) {
-        // Wide screens (16:9, 16:10)
-        plotWidth = Math.min(availableWidth, containerHeight * 1.618);
-        plotHeight = plotWidth / 1.618; // Golden ratio
-      } else {
-        // Standard or tall screens
-        plotWidth = Math.min(availableWidth, containerHeight * 1.4);
-        plotHeight = plotWidth / 1.4; // 7:5 ratio
-      }
+      // Balanced container - maximize both dimensions
+      plotWidth = availableWidth * 0.98; // Use 98% of available width
+      plotHeight = containerHeight * 0.98; // Use 98% of available height
     }
     
-    // Ensure the plot fits within the container
-    if (plotWidth > availableWidth) {
-      plotWidth = availableWidth;
-      plotHeight = plotWidth / (plotWidth / plotHeight); // Maintain ratio
+    // Ensure the plot fits within the container with minimal safety margin
+    if (plotWidth > availableWidth * 0.995) {
+      plotWidth = availableWidth * 0.995;
     }
-    if (plotHeight > containerHeight) {
-      plotHeight = containerHeight;
-      plotWidth = plotHeight * (plotWidth / plotHeight); // Maintain ratio
+    if (plotHeight > containerHeight * 0.995) {
+      plotHeight = containerHeight * 0.995;
     }
     
-    // Apply reasonable minimum and maximum constraints
-    const minDimension = Math.min(viewportWidth * 0.2, viewportHeight * 0.2);
-    const maxDimension = Math.min(viewportWidth * 0.8, viewportHeight * 0.8);
+    // Apply minimum constraints only (remove overly restrictive maximum constraints)
+    const minWidth = Math.max(400, viewportWidth * 0.15);
+    const minHeight = Math.max(400, viewportHeight * 0.20); // Increased minimum height
     
-    plotWidth = Math.max(plotWidth, Math.max(350, minDimension));
-    plotHeight = Math.max(plotHeight, Math.max(280, minDimension));
+    plotWidth = Math.max(plotWidth, minWidth);
+    plotHeight = Math.max(plotHeight, minHeight);
     
-    plotWidth = Math.min(plotWidth, maxDimension);
-    plotHeight = Math.min(plotHeight, maxDimension);
-    
-    // Final ratio adjustment to prevent extreme ratios
+    // Final ratio adjustment to prevent extreme ratios - allow wider plots when sidebar is present
     const finalRatio = plotWidth / plotHeight;
-    if (finalRatio > 2.5) {
-      plotHeight = plotWidth / 2.5;
-    } else if (finalRatio < 0.6) {
-      plotWidth = plotHeight * 0.6;
+    const maxRatio = shouldShowSidebar && !sidebarCollapsed ? 2.8 : 2.5; // Allow wider plots when sidebar is present
+    if (finalRatio > maxRatio) {
+      // For extremely wide plots, constrain to maxRatio:1 ratio
+      plotHeight = plotWidth / maxRatio;
+    } else if (finalRatio < 0.4) {
+      plotWidth = plotHeight * 0.4;
     }
     
+    console.log('Calculated plot dimensions:', { plotWidth, plotHeight, ratio: plotWidth / plotHeight });
     return { plotWidth, plotHeight };
   }, [sidebarWidth, sidebarCollapsed]);
 
@@ -248,7 +327,29 @@ const EmbeddingPlot = ({
     const originalData = getOriginalData();
     if (!originalData || histogramColumn >= originalData.headers.length) return null;
 
-    const selectedData = selectedPoints
+    // Get visible points based on current filter state
+    const visiblePoints = getVisiblePoints();
+    
+    // Filter selectedPoints to only include visible points
+    const visibleSelectedPoints = selectedPoints.filter(pointIndex => 
+      visiblePoints.includes(pointIndex)
+    );
+    
+    if (visibleSelectedPoints.length === 0) {
+      return {
+        realValues: [],
+        syntheticValues: [],
+        columnName: originalData.headers[histogramColumn] || `Column ${histogramColumn + 1}`,
+        totalSelected: 0,
+        realSelected: 0,
+        syntheticSelected: 0,
+        dataType: 'categorical',
+        availablePlotTypes: ['bar'],
+        dataTypeFilter: 'mixed' // 'real-only', 'synthetic-only', or 'mixed'
+      };
+    }
+
+    const selectedData = visibleSelectedPoints
       .filter(embeddingIndex => {
         // Validate embedding index
         const isValidEmbeddingIndex = embeddingIndex >= 0 && embeddingIndex < data.length;
@@ -288,10 +389,18 @@ const EmbeddingPlot = ({
         
         return null; // Invalid data point
       })
-      .filter(item => item !== null); // Remove invalid entries
+      .filter(item => item !== null);
     
     const realValues = selectedData.filter(d => d.label === 'Real').map(d => d.value);
     const syntheticValues = selectedData.filter(d => d.label === 'Synthetic').map(d => d.value);
+    
+    // Determine if we have only one type of data selected
+    let dataTypeFilter = 'mixed';
+    if (realValues.length > 0 && syntheticValues.length === 0) {
+      dataTypeFilter = 'real-only';
+    } else if (syntheticValues.length > 0 && realValues.length === 0) {
+      dataTypeFilter = 'synthetic-only';
+    }
     
     // Classify data type for this column
     const dataType = classifyColumnType(histogramColumn, originalData);
@@ -301,13 +410,14 @@ const EmbeddingPlot = ({
       realValues,
       syntheticValues,
       columnName: originalData.headers[histogramColumn] || `Column ${histogramColumn + 1}`,
-      totalSelected: selectedPoints.length,
+      totalSelected: visibleSelectedPoints.length,
       realSelected: realValues.length,
       syntheticSelected: syntheticValues.length,
       dataType,
-      availablePlotTypes
+      availablePlotTypes,
+      dataTypeFilter
     };
-  }, [selectedPoints, histogramColumn, getOriginalData, data, metadata]);
+  }, [selectedPoints, histogramColumn, getOriginalData, data, metadata, getVisiblePoints]);
 
   // Clear selection
   const clearSelection = useCallback(() => {
@@ -334,12 +444,20 @@ const EmbeddingPlot = ({
       abortControllerRef.current.abort();
     }
 
+    // Get visible points based on current filter state
+    const visiblePoints = getVisiblePoints();
+    
+    // Filter selectedPoints to only include visible points
+    const visibleSelectedPoints = selectedPoints.filter(pointIndex => 
+      visiblePoints.includes(pointIndex)
+    );
+
     // Prepare selected data in the same format as the full dataset
     const selectedRealData = [];
     const selectedSyntheticData = [];
 
     // FIXED: Map embedding indices to original data indices correctly
-    selectedPoints.forEach(embeddingIndex => {
+    visibleSelectedPoints.forEach(embeddingIndex => {
       // Check if this is a valid embedding index
       if (embeddingIndex < 0 || embeddingIndex >= data.length || !metadata.labels[embeddingIndex]) {
         return;
@@ -400,6 +518,7 @@ const EmbeddingPlot = ({
       console.error('No valid data to send to API');
       console.log('Debug info:', {
         selectedPointsCount: selectedPoints.length,
+        visibleSelectedPointsCount: visibleSelectedPoints.length,
         originalDataLength: originalData.data.length,
         embeddingDataLength: data.length,
         labelsLength: metadata.labels.length
@@ -411,6 +530,9 @@ const EmbeddingPlot = ({
 
     console.log(`Selected data: ${selectedRealData.length} real, ${selectedSyntheticData.length} synthetic`);
 
+    // Determine the data type filter based on what's selected
+    const dataTypeFilter = histogramData?.dataTypeFilter || 'mixed';
+
     // Use the same API as DistributionPlot.js
     const requestData = {
       real_data: selectedRealData,
@@ -418,14 +540,16 @@ const EmbeddingPlot = ({
       column: originalData.headers[histogramColumn],
       plot_type: histogramPlotType,
       real_headers: originalData.headers,
-      synthetic_headers: originalData.headers
+      synthetic_headers: originalData.headers,
+      data_type_filter: dataTypeFilter // Add the data type filter to the request
     };
 
     // Check if this is the same request as last time (avoid duplicate API calls)
     const requestKey = JSON.stringify({
-      selectedPoints: selectedPoints.sort(),
+      selectedPoints: visibleSelectedPoints.sort(),
       column: histogramColumn,
-      plotType: histogramPlotType
+      plotType: histogramPlotType,
+      dataTypeFilter: dataTypeFilter
     });
 
     if (lastRequestParamsRef.current === requestKey) {
@@ -486,11 +610,28 @@ const EmbeddingPlot = ({
         setHistogramPlotType(defaultPlotType);
       }
     }
-  }, [histogramColumn, getOriginalData, histogramPlotType]);
+  }, [metadata, getOriginalData, histogramColumn, histogramPlotType]);
 
   // Render plot using Plotly (same logic as DistributionPlot.js)
   const renderPlot = () => {
     if (!plotData) return null;
+    
+    // Get the data type filter from the response
+    const dataTypeFilter = plotData.data_type_filter || 'mixed';
+    
+    // Generate appropriate title based on data type filter
+    const getPlotTitle = () => {
+      const columnName = plotData.column_name || `Column ${histogramColumn + 1}`;
+      switch (dataTypeFilter) {
+        case 'real-only':
+          return `Real Data Distribution - ${columnName}`;
+        case 'synthetic-only':
+          return `Synthetic Data Distribution - ${columnName}`;
+        case 'mixed':
+        default:
+          return `Data Distribution Comparison - ${columnName}`;
+      }
+    };
     
     switch (plotData.plot_type) {
       case 'histogram': {
@@ -529,11 +670,12 @@ const EmbeddingPlot = ({
             syntheticPercentages.push((count / syntheticTotal) * 100);
           });
           
-          return (
-            <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
-              <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
-                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
-                  Real Data
+          // Handle single data type cases
+          if (dataTypeFilter === 'real-only') {
+            return (
+              <Box sx={{ height: '300px' }}>
+                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+                  {getPlotTitle()}
                 </Typography>
                 <Plot
                   data={[
@@ -547,51 +689,118 @@ const EmbeddingPlot = ({
                     }
                   ]}
                   layout={{
-                    margin: { l: 40, r: 20, t: 20, b: 40 },
+                    margin: { l: 40, r: 20, t: 40, b: 40 },
                     showlegend: false,
                     xaxis: { 
                       title: '',
-                      type: 'category'  // Treat as categories to add gaps
+                      type: 'category'
                     },
                     yaxis: { title: 'Percentage (%)' },
-                    bargap: 0.1  // Add gaps between bars
+                    bargap: 0.1
                   }}
                   style={{ width: '100%', height: '260px' }}
                   config={{ displayModeBar: false }}
                 />
               </Box>
-              
-              <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
-                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
-                  Synthetic Data
-                </Typography>
-                <Plot
-                  data={[
-                    {
-                      x: syntheticValuesWithPercentages,
-                      y: syntheticPercentages,
-                      type: 'bar',
-                      name: 'Synthetic',
-                      marker: { color: '#dc2626' },
-                      opacity: 0.7
-                    }
-                  ]}
+            );
+          } else if (dataTypeFilter === 'synthetic-only') {
+            return (
+              <Box sx={{ height: '300px' }}>
+                              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+                {getPlotTitle()}
+              </Typography>
+              <Plot
+                data={[
+                  {
+                    x: syntheticValuesWithPercentages,
+                    y: syntheticPercentages,
+                    type: 'bar',
+                    name: 'Synthetic',
+                    marker: { color: '#dc2626' },
+                    opacity: 0.7
+                  }
+                ]}
                   layout={{
-                    margin: { l: 40, r: 20, t: 20, b: 40 },
+                    margin: { l: 40, r: 20, t: 40, b: 40 },
                     showlegend: false,
                     xaxis: { 
                       title: '',
-                      type: 'category'  // Treat as categories to add gaps
+                      type: 'category'
                     },
                     yaxis: { title: 'Percentage (%)' },
-                    bargap: 0.1  // Add gaps between bars
+                    bargap: 0.1
                   }}
                   style={{ width: '100%', height: '260px' }}
                   config={{ displayModeBar: false }}
                 />
               </Box>
-            </Box>
-          );
+            );
+          } else {
+            // Mixed data - show side by side
+            return (
+              <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
+                <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
+                  <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
+                    Real Data
+                  </Typography>
+                  <Plot
+                    data={[
+                      {
+                        x: realValuesWithPercentages,
+                        y: realPercentages,
+                        type: 'bar',
+                        name: 'Real',
+                        marker: { color: '#2563eb' },
+                        opacity: 0.7
+                      }
+                    ]}
+                    layout={{
+                      margin: { l: 40, r: 20, t: 20, b: 40 },
+                      showlegend: false,
+                      xaxis: { 
+                        title: '',
+                        type: 'category'
+                      },
+                      yaxis: { title: 'Percentage (%)' },
+                      bargap: 0.1
+                    }}
+                    style={{ width: '100%', height: '260px' }}
+                    config={{ displayModeBar: false }}
+                  />
+                </Box>
+                
+                <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
+                  <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
+                    Synthetic Data
+                  </Typography>
+                  <Plot
+                    data={[
+                      {
+                        x: syntheticValuesWithPercentages,
+                        y: syntheticPercentages,
+                        type: 'bar',
+                        name: 'Synthetic',
+                        marker: { color: '#dc2626' },
+                        opacity: 0.7
+                      }
+                    ]}
+                    layout={{
+                      margin: { l: 40, r: 20, t: 20, b: 40 },
+                      showlegend: false,
+                      xaxis: { 
+                        title: '',
+                        type: 'category'
+                      },
+                      yaxis: { title: 'Percentage (%)' },
+                      bargap: 0.1
+                    }}
+                    style={{ width: '100%', height: '260px' }}
+                    config={{ displayModeBar: false }}
+                  />
+                </Box>
+              </Box>
+            );
+          }
         }
         
         // Regular continuous histogram with overlay
@@ -616,6 +825,182 @@ const EmbeddingPlot = ({
             size: 1
           };
           
+          // Handle single data type cases
+          if (dataTypeFilter === 'real-only') {
+            return (
+              <Box>
+                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+                  {getPlotTitle()}
+                </Typography>
+                <Plot
+                  data={[
+                    {
+                      x: plotData.real_values,
+                      type: 'histogram',
+                      name: 'Real',
+                      marker: { color: '#2563eb' },
+                      opacity: 0.7,
+                      histnorm: 'count',
+                      xbins: sharedXBins
+                    }
+                  ]}
+                  layout={{
+                    margin: { l: 60, r: 20, t: 40, b: 40 },
+                    xaxis: { 
+                      title: plotData.column_name || `Column ${histogramColumn + 1}`
+                    },
+                    yaxis: { title: 'Count' },
+                    showlegend: false
+                  }}
+                  style={{ width: '100%', height: '300px' }}
+                  config={{ displayModeBar: false }}
+                />
+              </Box>
+            );
+          } else if (dataTypeFilter === 'synthetic-only') {
+            return (
+              <Box>
+                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+                  {getPlotTitle()}
+                </Typography>
+                <Plot
+                  data={[
+                    {
+                      x: plotData.synthetic_values,
+                      type: 'histogram',
+                      name: 'Synthetic',
+                      marker: { color: '#dc2626' },
+                      opacity: 0.7,
+                      histnorm: 'count',
+                      xbins: sharedXBins
+                    }
+                  ]}
+                  layout={{
+                    margin: { l: 60, r: 20, t: 40, b: 40 },
+                    xaxis: { 
+                      title: plotData.column_name || `Column ${histogramColumn + 1}`
+                    },
+                    yaxis: { title: 'Count' },
+                    showlegend: false
+                  }}
+                  style={{ width: '100%', height: '300px' }}
+                  config={{ displayModeBar: false }}
+                />
+              </Box>
+            );
+          } else {
+            // Mixed data
+            return (
+              <Plot
+                data={[
+                  {
+                    x: plotData.real_values,
+                    type: 'histogram',
+                    name: 'Real',
+                    marker: { color: '#2563eb' },
+                    opacity: 0.5,
+                    histnorm: 'count',
+                    xbins: sharedXBins
+                  },
+                  {
+                    x: plotData.synthetic_values,
+                    type: 'histogram',
+                    name: 'Synthetic',
+                    marker: { color: '#dc2626' },
+                    opacity: 0.5,
+                    histnorm: 'count',
+                    xbins: sharedXBins
+                  }
+                ]}
+                layout={{
+                  margin: { l: 60, r: 20, t: 20, b: 40 },
+                  barmode: 'overlay',
+                  xaxis: { 
+                    title: plotData.column_name || `Column ${histogramColumn + 1}`
+                  },
+                  yaxis: { title: 'Count' }
+                }}
+                style={{ width: '100%', height: '300px' }}
+                config={{ displayModeBar: false }}
+              />
+            );
+          }
+        }
+        
+        // Normal case with range > 0
+        const binCount = Math.min(30, Math.ceil(Math.sqrt(combinedValues.length)));
+        const binSize = range / binCount;
+        const sharedXBins = {
+          start: minValue - binSize * 0.1,
+          end: maxValue + binSize * 0.1,
+          size: binSize
+        };
+        
+        // Handle single data type cases
+        if (dataTypeFilter === 'real-only') {
+          return (
+            <Box>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+                {getPlotTitle()}
+              </Typography>
+              <Plot
+                data={[
+                  {
+                    x: plotData.real_values,
+                    type: 'histogram',
+                    name: 'Real',
+                    marker: { color: '#2563eb' },
+                    opacity: 0.7,
+                    histnorm: 'count',
+                    xbins: sharedXBins
+                  }
+                ]}
+                layout={{
+                  margin: { l: 60, r: 20, t: 40, b: 40 },
+                  xaxis: { 
+                    title: plotData.column_name || `Column ${histogramColumn + 1}`
+                  },
+                  yaxis: { title: 'Count' },
+                  showlegend: false
+                }}
+                style={{ width: '100%', height: '300px' }}
+                config={{ displayModeBar: false }}
+              />
+            </Box>
+          );
+        } else if (dataTypeFilter === 'synthetic-only') {
+          return (
+            <Box>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+                {getPlotTitle()}
+              </Typography>
+              <Plot
+                data={[
+                  {
+                    x: plotData.synthetic_values,
+                    type: 'histogram',
+                    name: 'Synthetic',
+                    marker: { color: '#dc2626' },
+                    opacity: 0.7,
+                    histnorm: 'count',
+                    xbins: sharedXBins
+                  }
+                ]}
+                layout={{
+                  margin: { l: 60, r: 20, t: 40, b: 40 },
+                  xaxis: { 
+                    title: plotData.column_name || `Column ${histogramColumn + 1}`
+                  },
+                  yaxis: { title: 'Count' },
+                  showlegend: false
+                }}
+                style={{ width: '100%', height: '300px' }}
+                config={{ displayModeBar: false }}
+              />
+            </Box>
+          );
+        } else {
+          // Mixed data
           return (
             <Plot
               data={[
@@ -642,99 +1027,122 @@ const EmbeddingPlot = ({
                 margin: { l: 60, r: 20, t: 20, b: 40 },
                 barmode: 'overlay',
                 xaxis: { 
-                  title: '',
-                  range: [singleValue - 1, singleValue + 1]
+                  title: plotData.column_name || `Column ${histogramColumn + 1}`
                 },
-                yaxis: { title: 'Count' },
-                legend: { x: 0.7, y: 0.9 }
+                yaxis: { title: 'Count' }
               }}
               style={{ width: '100%', height: '300px' }}
               config={{ displayModeBar: false }}
             />
           );
         }
-        
-        const binSize = range / 30; // 30 bins total
-        
-        const sharedXBins = {
-          start: minValue,
-          end: maxValue,
-          size: binSize
-        };
-        
-        return (
-          <Plot
-            data={[
-              {
-                x: plotData.real_values,
-                type: 'histogram',
-                name: 'Real',
-                marker: { color: '#2563eb' },
-                opacity: 0.5,
-                histnorm: 'probability density',
-                xbins: sharedXBins
-              },
-              {
-                x: plotData.synthetic_values,
-                type: 'histogram',
-                name: 'Synthetic',
-                marker: { color: '#dc2626' },
-                opacity: 0.5,
-                histnorm: 'probability density',
-                xbins: sharedXBins
-              }
-            ]}
-            layout={{
-              margin: { l: 60, r: 20, t: 20, b: 40 },
-              barmode: 'overlay',
-              xaxis: { 
-                title: '',
-                range: [minValue - range * 0.05, maxValue + range * 0.05] // Add 5% padding
-              },
-              yaxis: { title: 'Probability Density' },
-              legend: { x: 0.7, y: 0.9 }
-            }}
-            style={{ width: '100%', height: '300px' }}
-            config={{ displayModeBar: false }}
-          />
-        );
       }
 
 
 
       case 'violin':
-        return (
-          <Plot
-            data={[
-              {
-                y: plotData.real_values,
-                type: 'violin',
-                name: 'Real',
-                fillcolor: 'rgba(37, 99, 235, 0.5)',
-                line: { color: '#2563eb' },
-                box: { visible: true },
-                meanline: { visible: true }
-              },
-              {
-                y: plotData.synthetic_values,
-                type: 'violin',
-                name: 'Synthetic',
-                fillcolor: 'rgba(220, 38, 38, 0.5)',
-                line: { color: '#dc2626' },
-                box: { visible: true },
-                meanline: { visible: true }
-              }
-            ]}
-            layout={{
-              margin: { l: 40, r: 20, t: 20, b: 40 },
-              yaxis: { title: '' },
-              showlegend: true,
-              legend: { x: 0.7, y: 0.9 }
-            }}
-            style={{ width: '100%', height: '300px' }}
-            config={{ displayModeBar: false }}
-          />
-        );
+        // Handle single data type cases
+        if (dataTypeFilter === 'real-only') {
+          return (
+            <Box>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+                {getPlotTitle()}
+              </Typography>
+              <Plot
+                data={[
+                  {
+                    y: plotData.real_values,
+                    type: 'violin',
+                    name: 'Real',
+                    marker: { color: '#2563eb' },
+                    opacity: 0.7,
+                    box: { visible: true },
+                    meanline: { visible: true }
+                  }
+                ]}
+                layout={{
+                  margin: { l: 60, r: 20, t: 40, b: 40 },
+                  xaxis: { 
+                    title: plotData.column_name || `Column ${histogramColumn + 1}`,
+                    showticklabels: false
+                  },
+                  yaxis: { title: 'Value' },
+                  showlegend: false
+                }}
+                style={{ width: '100%', height: '300px' }}
+                config={{ displayModeBar: false }}
+              />
+            </Box>
+          );
+        } else if (dataTypeFilter === 'synthetic-only') {
+          return (
+            <Box>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+                {getPlotTitle()}
+              </Typography>
+              <Plot
+                data={[
+                  {
+                    y: plotData.synthetic_values,
+                    type: 'violin',
+                    name: 'Synthetic',
+                    marker: { color: '#dc2626' },
+                    opacity: 0.7,
+                    box: { visible: true },
+                    meanline: { visible: true }
+                  }
+                ]}
+                layout={{
+                  margin: { l: 60, r: 20, t: 40, b: 40 },
+                  xaxis: { 
+                    title: plotData.column_name || `Column ${histogramColumn + 1}`,
+                    showticklabels: false
+                  },
+                  yaxis: { title: 'Value' },
+                  showlegend: false
+                }}
+                style={{ width: '100%', height: '300px' }}
+                config={{ displayModeBar: false }}
+              />
+            </Box>
+          );
+        } else {
+          // Mixed data
+          return (
+            <Plot
+              data={[
+                {
+                  y: plotData.real_values,
+                  type: 'violin',
+                  name: 'Real',
+                  marker: { color: '#2563eb' },
+                  opacity: 0.5,
+                  box: { visible: true },
+                  meanline: { visible: true }
+                },
+                {
+                  y: plotData.synthetic_values,
+                  type: 'violin',
+                  name: 'Synthetic',
+                  marker: { color: '#dc2626' },
+                  opacity: 0.5,
+                  box: { visible: true },
+                  meanline: { visible: true }
+                }
+              ]}
+              layout={{
+                margin: { l: 60, r: 20, t: 20, b: 40 },
+                xaxis: { 
+                  title: plotData.column_name || `Column ${histogramColumn + 1}`,
+                  showticklabels: false
+                },
+                yaxis: { title: 'Value' }
+              }}
+              style={{ width: '100%', height: '300px' }}
+              config={{ displayModeBar: false }}
+            />
+          );
+        }
 
       case 'bar':
         // Convert counts to percentages
@@ -748,38 +1156,102 @@ const EmbeddingPlot = ({
         const syntheticPercentages = syntheticTotal > 0
           ? plotData.synthetic_counts.map(count => (count / syntheticTotal) * 100)
           : plotData.synthetic_counts.map(() => 0);
-          
-        return (
-          <Plot
-            data={[
-              {
-                x: plotData.categories,
-                y: realPercentages,
-                type: 'bar',
-                name: 'Real',
-                marker: { color: '#2563eb' },
-                opacity: 0.7
-              },
-              {
-                x: plotData.categories,
-                y: syntheticPercentages,
-                type: 'bar',
-                name: 'Synthetic',
-                marker: { color: '#dc2626' },
-                opacity: 0.7
-              }
-            ]}
-            layout={{
-              margin: { l: 40, r: 20, t: 20, b: 40 },
-              barmode: 'group',
-              xaxis: { title: '' },
-              yaxis: { title: 'Percentage (%)' },
-              legend: { x: 0.7, y: 0.9 }
-            }}
-            style={{ width: '100%', height: '300px' }}
-            config={{ displayModeBar: false }}
-          />
-        );
+        
+        // Handle single data type cases
+        if (dataTypeFilter === 'real-only') {
+          return (
+            <Box>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+                {getPlotTitle()}
+              </Typography>
+              <Plot
+                data={[
+                  {
+                    x: plotData.categories,
+                    y: realPercentages,
+                    type: 'bar',
+                    name: 'Real',
+                    marker: { color: '#2563eb' },
+                    opacity: 0.7
+                  }
+                ]}
+                layout={{
+                  margin: { l: 60, r: 20, t: 40, b: 40 },
+                  xaxis: { 
+                    title: plotData.column_name || `Column ${histogramColumn + 1}`
+                  },
+                  yaxis: { title: 'Percentage (%)' },
+                  showlegend: false
+                }}
+                style={{ width: '100%', height: '300px' }}
+                config={{ displayModeBar: false }}
+              />
+            </Box>
+          );
+        } else if (dataTypeFilter === 'synthetic-only') {
+          return (
+            <Box>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+                {getPlotTitle()}
+              </Typography>
+              <Plot
+                data={[
+                  {
+                    x: plotData.categories,
+                    y: syntheticPercentages,
+                    type: 'bar',
+                    name: 'Synthetic',
+                    marker: { color: '#dc2626' },
+                    opacity: 0.7
+                  }
+                ]}
+                layout={{
+                  margin: { l: 60, r: 20, t: 40, b: 40 },
+                  xaxis: { 
+                    title: plotData.column_name || `Column ${histogramColumn + 1}`
+                  },
+                  yaxis: { title: 'Percentage (%)' },
+                  showlegend: false
+                }}
+                style={{ width: '100%', height: '300px' }}
+                config={{ displayModeBar: false }}
+              />
+            </Box>
+          );
+        } else {
+          // Mixed data
+          return (
+            <Plot
+              data={[
+                {
+                  x: plotData.categories,
+                  y: realPercentages,
+                  type: 'bar',
+                  name: 'Real',
+                  marker: { color: '#2563eb' },
+                  opacity: 0.7
+                },
+                {
+                  x: plotData.categories,
+                  y: syntheticPercentages,
+                  type: 'bar',
+                  name: 'Synthetic',
+                  marker: { color: '#dc2626' },
+                  opacity: 0.7
+                }
+              ]}
+              layout={{
+                margin: { l: 40, r: 20, t: 20, b: 40 },
+                barmode: 'group',
+                xaxis: { title: '' },
+                yaxis: { title: 'Percentage (%)' },
+                legend: { x: 0.7, y: 0.9 }
+              }}
+              style={{ width: '100%', height: '300px' }}
+              config={{ displayModeBar: false }}
+            />
+          );
+        }
 
       default:
         return <Typography>Unsupported plot type: {plotData.plot_type}</Typography>;
@@ -857,10 +1329,49 @@ const EmbeddingPlot = ({
     const container = containerRef.current;
     if (!container) return;
 
+    // Add a small delay to ensure DOM updates are complete when sidebar state changes
+    const renderTimeout = setTimeout(() => {
+      renderD3Plot();
+    }, 50);
+
+    return () => clearTimeout(renderTimeout);
+  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed, showAnomalies, anomalyResults, showRealNormal, showRealAnomalies, showSyntheticNormal, showSyntheticAnomalies, getOriginalData, calculatePlotDimensions]);
+
+  // Separate function for the actual D3 plot rendering logic
+  const renderD3Plot = useCallback(() => {
+    if (!data || !metadata || !data.length || !metadata.labels) {
+      return;
+    }
+
+    // Additional validation to ensure data integrity
+    if (data.length !== metadata.labels.length) {
+      console.warn('Data and labels length mismatch:', { dataLength: data.length, labelsLength: metadata.labels.length });
+      return;
+    }
+
+    const container = containerRef.current;
+    if (!container) return;
+
     // Get container dimensions and use available space efficiently
+    // Force a reflow to get updated dimensions after sidebar state changes
+    container.style.display = 'none';
+    void container.offsetHeight; // Force reflow
+    container.style.display = 'flex';
+    
     const rect = container.getBoundingClientRect();
+    // Use the full container dimensions, accounting for padding
     const containerWidth = rect.width > 0 ? rect.width : 800;
     const containerHeight = rect.height > 0 ? rect.height : 600;
+    
+    // Debug logging
+    const containerRatio = containerWidth / containerHeight;
+    console.log('Window dimensions:', { width: window.innerWidth, height: window.innerHeight });
+    console.log('Container dimensions:', { width: containerWidth, height: containerHeight });
+    console.log('Container ratio:', containerRatio);
+    console.log('Available space utilization:', { 
+      widthUtilization: (containerWidth / window.innerWidth * 100).toFixed(1) + '%',
+      heightUtilization: (containerHeight / window.innerHeight * 100).toFixed(1) + '%'
+    });
     
     // Calculate responsive plot area based on sidebar state
     const shouldShowSidebar = selectedPoints.length > 0;
@@ -889,16 +1400,6 @@ const EmbeddingPlot = ({
     const numPoints = sampledData.length;
     const wasDownsampled = sampledData.length < data.length;
 
-    // Advanced point sizing based on dataset size and density
-    const basePointSize = plotWidth < 600 ? 0.8 : 1.2;
-    const densityFactor = Math.max(0.3, Math.min(1.5, 1000 / Math.sqrt(numPoints)));
-    const adjustedPointSize = (basePointSize * densityFactor) * devicePixelRatio;
-
-    // Adaptive opacity based on point density
-    const baseOpacity = 0.7;
-    const opacityFactor = Math.max(0.4, Math.min(0.9, 800 / Math.sqrt(numPoints)));
-    const adjustedOpacity = baseOpacity * opacityFactor;
-
     // Clear previous plot
     if (!svgRef.current) {
       console.warn('SVG ref is null, skipping D3 visualization');
@@ -906,7 +1407,20 @@ const EmbeddingPlot = ({
     }
     d3.select(svgRef.current).selectAll("*").remove();
 
-    // Create SVG with enhanced sharpness configuration
+    const effectivePlotWidth = plotWidth * devicePixelRatio;
+    const effectivePlotHeight = plotHeight * devicePixelRatio;
+
+    // Advanced point sizing based on dataset size and density (no need to multiply by devicePixelRatio since we're scaling the group)
+    const basePointSize = plotWidth < 600 ? 0.8 : 1.2;
+    const densityFactor = Math.max(0.3, Math.min(1.5, 1000 / Math.sqrt(numPoints)));
+    const adjustedPointSize = basePointSize * densityFactor;
+
+    // Adaptive opacity based on point density
+    const baseOpacity = 0.5;
+    const opacityFactor = Math.max(0.4, Math.min(0.9, 800 / Math.sqrt(numPoints)));
+    const adjustedOpacity = baseOpacity * opacityFactor;
+
+    // Create SVG with DPI-aware scaling
     const svg = d3.select(svgRef.current)
       .attr("width", plotWidth * devicePixelRatio)
       .attr("height", plotHeight * devicePixelRatio)
@@ -914,25 +1428,30 @@ const EmbeddingPlot = ({
       .attr("preserveAspectRatio", "xMidYMid meet")
       .style("width", `${plotWidth}px`)
       .style("height", `${plotHeight}px`)
+      .style("max-width", "100%")
+      .style("max-height", "100%")
+      .style("display", "block")
       .style("shape-rendering", "geometricPrecision")
-      .style("text-rendering", "geometricPrecision")
+      .style("text-rendering", "optimizeLegibility")
       .style("cursor", "default");
 
     // Scale everything by device pixel ratio
     const scaledPlotWidth = plotWidth * devicePixelRatio;
     const scaledPlotHeight = plotHeight * devicePixelRatio;
     
-    // Enhanced responsive margins for proper axis label display
+    // Optimized margins to maximize plot area while preventing overshooting
     const baseMargin = {
-      top: Math.max(25, Math.min(40, plotHeight * 0.06)),
-      // Increase right margin when sidebar is visible to ensure legend fits
+      top: Math.max(30, Math.min(50, plotHeight * 0.06)), // Increased top margin for y-axis
+      // Right margin for legend - optimized for sidebar state
       right: shouldShowSidebar && !sidebarCollapsed ? 
-        Math.max(140, Math.min(180, plotWidth * 0.18)) : 
-        Math.max(120, Math.min(160, plotWidth * 0.16)),
-      // Increased bottom margin for x-axis label
-      bottom: Math.max(60, Math.min(80, plotHeight * 0.12)),
-      // Increased left margin for y-axis label
-      left: Math.max(60, Math.min(80, plotWidth * 0.1))
+        Math.max(100, Math.min(140, plotWidth * 0.15)) : 
+        Math.max(140, Math.min(180, plotWidth * 0.20)), // Increased margin when sidebar is collapsed
+      // Aggressive bottom margin to prevent x-axis overshooting
+      bottom: Math.max(80, Math.min(100, plotHeight * 0.15)), // Slightly reduced bottom margin
+      // Left margin for y-axis labels - increased for visibility when sidebar is present
+      left: shouldShowSidebar && !sidebarCollapsed ? 
+        Math.max(50, Math.min(80, plotWidth * 0.12)) : 
+        Math.max(60, Math.min(80, plotWidth * 0.12)) // Standard margin when sidebar is collapsed
     };
     
     const margin = { 
@@ -942,30 +1461,69 @@ const EmbeddingPlot = ({
       left: baseMargin.left * devicePixelRatio 
     };
     
-    const innerWidth = scaledPlotWidth - margin.left - margin.right;
-    const innerHeight = scaledPlotHeight - margin.top - margin.bottom;
+    // Calculate inner dimensions in the scaled coordinate system
+    const innerWidth = plotWidth - (margin.left / devicePixelRatio) - (margin.right / devicePixelRatio);
+    const innerHeight = plotHeight - (margin.top / devicePixelRatio) - (margin.bottom / devicePixelRatio);
 
     // Ensure we have positive dimensions
     if (innerWidth <= 0 || innerHeight <= 0) {
       return;
     }
 
+    // Apply scale transform on the main group to account for devicePixelRatio
     const g = svg.append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
+      .attr("transform", `scale(${devicePixelRatio}) translate(${margin.left / devicePixelRatio},${margin.top / devicePixelRatio})`);
 
     // Extract coordinates and create scales
     const x = sampledData.map(d => d[0]);
     const y = sampledData.map(d => d[1]);
 
+    // Add aggressive padding to scales to ensure points stay well within bounds
+    const xExtent = d3.extent(x);
+    const yExtent = d3.extent(y);
+    
+    // Calculate the actual data range
+    const xRange = xExtent[1] - xExtent[0];
+    const yRange = yExtent[1] - yExtent[0];
+    
+    // Add substantial padding to ensure points stay within bounds
+    const xPadding = xRange * 0.20; // Increased to 20% padding
+    const yPadding = yRange * 0.20; // Increased to 20% padding
+    
+    // Ensure we have a minimum padding even for small ranges
+    const minPadding = 1.0; // Increased minimum padding in data units
+    const finalXPadding = Math.max(xPadding, minPadding);
+    const finalYPadding = Math.max(yPadding, minPadding);
+    
     const xScale = d3.scaleLinear()
-      .domain(d3.extent(x))
+      .domain([xExtent[0] - finalXPadding, xExtent[1] + finalXPadding])
       .range([0, innerWidth])
       .nice();
 
     const yScale = d3.scaleLinear()
-      .domain(d3.extent(y))
+      .domain([yExtent[0] - finalYPadding, yExtent[1] + finalYPadding])
       .range([innerHeight, 0])
       .nice();
+    
+    // Validate that all data points fall within the scale domains
+    const xDomain = xScale.domain();
+    const yDomain = yScale.domain();
+    
+    // Check if any points are outside the domain and adjust if necessary
+    const minX = Math.min(...x);
+    const maxX = Math.max(...x);
+    const minY = Math.min(...y);
+    const maxY = Math.max(...y);
+    
+    if (minX < xDomain[0] || maxX > xDomain[1]) {
+      console.warn('X-axis data points outside domain, adjusting scale');
+      xScale.domain([minX - finalXPadding, maxX + finalXPadding]);
+    }
+    
+    if (minY < yDomain[0] || maxY > yDomain[1]) {
+      console.warn('Y-axis data points outside domain, adjusting scale');
+      yScale.domain([minY - finalYPadding, maxY + finalYPadding]);
+    }
 
     // Enhanced color scheme
     const colorScale = d3.scaleOrdinal()
@@ -989,7 +1547,7 @@ const EmbeddingPlot = ({
     // X-axis label with better positioning
     xAxis.append("text")
       .attr("x", innerWidth / 2)
-      .attr("y", axisSpacing * devicePixelRatio)
+      .attr("y", axisSpacing + 5) // Increased spacing from axis
       .attr("text-anchor", "middle")
       .attr("fill", "#1f2937")
       .attr("font-weight", "600")
@@ -1007,8 +1565,8 @@ const EmbeddingPlot = ({
 
     // Y-axis label with better positioning
     yAxis.append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("y", -axisSpacing * devicePixelRatio)
+      .attr("transform", `rotate(-90)`)
+      .attr("y", shouldShowSidebar && !sidebarCollapsed ? -axisSpacing - 5 : -axisSpacing - 10) // Reduced spacing when sidebar is present to keep label visible
       .attr("x", -innerHeight / 2)
       .attr("text-anchor", "middle")
       .attr("fill", "#1f2937")
@@ -1021,7 +1579,7 @@ const EmbeddingPlot = ({
     // Style axes with better visibility
     svg.selectAll(".axis line, .axis path")
       .style("stroke", "#d1d5db")
-      .style("stroke-width", `${Math.max(1, devicePixelRatio)}px`)
+      .style("stroke-width", "1px")
       .style("shape-rendering", "crispEdges");
 
     // Style axis tick labels
@@ -1058,29 +1616,494 @@ const EmbeddingPlot = ({
       .style("stroke-width", "1px")
       .style("opacity", 0.5);
 
-    // Add data points
+    // Add data points with anomaly detection - clamp coordinates to prevent overshooting
     const points = g.selectAll("circle")
       .data(sampledData)
       .enter()
       .append("circle")
-      .attr("cx", (d) => xScale(d[0]))
-      .attr("cy", (d) => yScale(d[1]))
-      .attr("r", adjustedPointSize)
-      .attr("fill", (_, i) => colorScale(sampledLabels[i]))
+      .attr("cx", (d) => {
+        const x = xScale(d[0]);
+        // Clamp x coordinate to prevent overshooting
+        return Math.max(0, Math.min(innerWidth, x));
+      })
+      .attr("cy", (d) => {
+        const y = yScale(d[1]);
+        // Clamp y coordinate to prevent overshooting
+        return Math.max(0, Math.min(innerHeight, y));
+      })
+      .attr("r", (d, i) => {
+        const originalIndex = indexMap[i];
+        const label = sampledLabels[i];
+        
+        // Early return if anomalyResults is null to prevent errors
+        if (label === 'Synthetic' && (!anomalyResults || !anomalyResults.synthetic_data)) {
+          return adjustedPointSize; // Default size for synthetic without anomaly data
+        }
+        
+        // Make anomalies larger and more visible
+        if (showAnomalies && anomalyResults && anomalyResults.synthetic_data && label === 'Synthetic') {
+          const originalData = getOriginalData();
+          if (originalData) {
+            let syntheticIndexInOriginal = 0;
+            for (let j = 0; j < originalIndex; j++) {
+              if (originalData.labels[j] === 'Synthetic') {
+                syntheticIndexInOriginal++;
+              }
+            }
+            
+            if (anomalyResults && anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+              const anomalyPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+              if (anomalyPoint && anomalyPoint.is_anomaly) {
+                return Math.min(adjustedPointSize * 1.3, 4);
+              }
+            }
+          }
+        }
+        
+        return adjustedPointSize; // Default size
+      })
+      .attr("fill", (d, i) => {
+        const originalIndex = indexMap[i];
+        const label = sampledLabels[i];
+        
+        // Color coding based on anomaly detection results
+        if (showAnomalies && anomalyResults && (anomalyResults.real_data || anomalyResults.synthetic_data)) {
+          const originalData = getOriginalData();
+          if (originalData) {
+            if (label === 'Real') {
+              // Find the real data index in the original dataset
+              let realIndexInOriginal = 0;
+              for (let j = 0; j < originalIndex; j++) {
+                if (originalData.labels[j] === 'Real') {
+                  realIndexInOriginal++;
+                }
+              }
+              
+              // Check if this point corresponds to a real point in anomaly results
+              if (anomalyResults.real_data && realIndexInOriginal < anomalyResults.real_data.length) {
+                const realPoint = anomalyResults.real_data[realIndexInOriginal];
+                if (realPoint && realPoint.is_anomaly) {
+                  return "#ef4444"; // Red for real anomalies
+                } else {
+                  return "#3b82f6"; // Blue for normal real data
+                }
+              }
+            } else if (label === 'Synthetic') {
+              // Find the synthetic data index in the original dataset
+              let syntheticIndexInOriginal = 0;
+              for (let j = 0; j < originalIndex; j++) {
+                if (originalData.labels[j] === 'Synthetic') {
+                  syntheticIndexInOriginal++;
+                }
+              }
+              
+              // Check if this point corresponds to a synthetic point in anomaly results
+              if (anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+                const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+                if (syntheticPoint && syntheticPoint.is_anomaly) {
+                  return "#ef4444"; // Red for synthetic anomalies (same as real anomalies)
+                } else {
+                  return "#dc2626"; // Red for normal synthetic data
+                }
+              }
+            }
+          }
+        }
+        
+        // Default colors (when no anomaly detection or no anomaly data)
+        if (label === 'Real') {
+          return "#3b82f6"; // Blue for real data
+        } else {
+                      return "#dc2626"; // Red for synthetic data
+        }
+      })
       .attr("stroke", (_, i) => {
         const originalIndex = indexMap[i];
+        const label = sampledLabels[i];
+        
+        // Thicker stroke for anomalies (both real and synthetic)
+        if (showAnomalies && anomalyResults && (anomalyResults.real_data || anomalyResults.synthetic_data)) {
+          const originalData = getOriginalData();
+          if (originalData) {
+            if (label === 'Real') {
+              let realIndexInOriginal = 0;
+              for (let j = 0; j < originalIndex; j++) {
+                if (originalData.labels[j] === 'Real') {
+                  realIndexInOriginal++;
+                }
+              }
+              
+              if (anomalyResults.real_data && realIndexInOriginal < anomalyResults.real_data.length) {
+                const realPoint = anomalyResults.real_data[realIndexInOriginal];
+                if (realPoint && realPoint.is_anomaly) {
+                  return "#991b1b"; // Darker red for real anomalies
+                }
+              }
+            } else if (label === 'Synthetic') {
+              let syntheticIndexInOriginal = 0;
+              for (let j = 0; j < originalIndex; j++) {
+                if (originalData.labels[j] === 'Synthetic') {
+                  syntheticIndexInOriginal++;
+                }
+              }
+              
+              if (anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+                const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+                if (syntheticPoint && syntheticPoint.is_anomaly) {
+                  return "#991b1b"; // Darker red for synthetic anomalies
+                }
+              }
+            }
+          }
+        }
+        
         return selectedPoints.includes(originalIndex) ? "#000" : d3.color(colorScale(sampledLabels[i])).darker(0.3);
       })
       .attr("stroke-width", (_, i) => {
         const originalIndex = indexMap[i];
-        return selectedPoints.includes(originalIndex) ? 2 * devicePixelRatio : 0.5 * devicePixelRatio;
+        const label = sampledLabels[i];
+        
+        // Thicker stroke for anomalies (both real and synthetic)
+        if (showAnomalies && anomalyResults && (anomalyResults.real_data || anomalyResults.synthetic_data)) {
+          const originalData = getOriginalData();
+          if (originalData) {
+            if (label === 'Real') {
+              let realIndexInOriginal = 0;
+              for (let j = 0; j < originalIndex; j++) {
+                if (originalData.labels[j] === 'Real') {
+                  realIndexInOriginal++;
+                }
+              }
+              
+              if (anomalyResults.real_data && realIndexInOriginal < anomalyResults.real_data.length) {
+                const realPoint = anomalyResults.real_data[realIndexInOriginal];
+                if (realPoint && realPoint.is_anomaly) {
+                  return 1.5; // Thicker stroke for real anomalies
+                }
+              }
+            } else if (label === 'Synthetic') {
+              let syntheticIndexInOriginal = 0;
+              for (let j = 0; j < originalIndex; j++) {
+                if (originalData.labels[j] === 'Synthetic') {
+                  syntheticIndexInOriginal++;
+                }
+              }
+              
+              if (anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+                const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+                if (syntheticPoint && syntheticPoint.is_anomaly) {
+                  return 1.5; // Thicker stroke for synthetic anomalies
+                }
+              }
+            }
+          }
+        }
+        
+        return selectedPoints.includes(originalIndex) ? 2 : 0.5;
       })
       .attr("opacity", (_, i) => {
         const originalIndex = indexMap[i];
+        const label = sampledLabels[i];
+        
+        // Early return if anomalyResults is null to prevent errors
+        if (label === 'Synthetic' && (!anomalyResults || !anomalyResults.synthetic_data)) {
+          // If no anomaly data available, treat all synthetic as normal
+          if (!showSyntheticNormal) return 0;
+          return selectedPoints.includes(originalIndex) ? 1 : adjustedOpacity;
+        }
+        
+        // Interactive filtering logic
+        if (label === 'Real') {
+          const originalData = getOriginalData();
+          if (originalData) {
+            let realIndexInOriginal = 0;
+            for (let j = 0; j < originalIndex; j++) {
+              if (originalData.labels[j] === 'Real') {
+                realIndexInOriginal++;
+              }
+            }
+            
+            if (anomalyResults && anomalyResults.real_data && realIndexInOriginal < anomalyResults.real_data.length) {
+              const realPoint = anomalyResults.real_data[realIndexInOriginal];
+              if (realPoint && realPoint.is_anomaly) {
+                // This is an anomalous real point
+                if (!showRealAnomalies) return 0; // Hide real anomalies if filter is off
+              } else {
+                // This is a normal real point
+                if (!showRealNormal) return 0; // Hide normal real if filter is off
+              }
+            } else {
+              // Fallback for real points without anomaly data
+              if (!showRealNormal) return 0;
+            }
+          } else {
+            // Fallback for real points without original data
+            if (!showRealNormal) return 0;
+          }
+        } else if (label === 'Synthetic') {
+          const originalData = getOriginalData();
+          if (originalData) {
+            let syntheticIndexInOriginal = 0;
+            for (let j = 0; j < originalIndex; j++) {
+              if (originalData.labels[j] === 'Synthetic') {
+                syntheticIndexInOriginal++;
+              }
+            }
+            
+            if (anomalyResults && anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+              const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+              if (syntheticPoint && syntheticPoint.is_anomaly) {
+                // This is an anomalous synthetic point
+                if (!showSyntheticAnomalies) return 0; // Hide anomalies if filter is off
+              } else {
+                // This is a normal synthetic point
+                if (!showSyntheticNormal) return 0; // Hide normal synthetic if filter is off
+              }
+            } else {
+              // Fallback for synthetic points without anomaly data
+              if (!showSyntheticNormal) return 0;
+            }
+          } else {
+            // Fallback for synthetic points without original data
+            if (!showSyntheticNormal) return 0;
+          }
+        }
+        
+        // Higher opacity for anomalies when shown
+        if (showAnomalies && anomalyResults && anomalyResults.synthetic_data && label === 'Synthetic') {
+          const originalData = getOriginalData();
+          if (originalData) {
+            let syntheticIndexInOriginal = 0;
+            for (let j = 0; j < originalIndex; j++) {
+              if (originalData.labels[j] === 'Synthetic') {
+                syntheticIndexInOriginal++;
+              }
+            }
+            
+            if (anomalyResults && anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+              const anomalyPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+              if (anomalyPoint && anomalyPoint.is_anomaly) {
+                return 0.9; // Higher opacity for anomalies
+              }
+            }
+          }
+        }
+        
         return selectedPoints.includes(originalIndex) ? 1 : adjustedOpacity;
       })
-      .style("shape-rendering", "geometricPrecision")
-      .style("cursor", "pointer");
+      // Add interactive hover effects
+      .style("cursor", "pointer")
+      .on("mouseover", function(event, d, i) {
+        const originalIndex = indexMap[i];
+        const label = sampledLabels[i];
+        
+        // Create tooltip content
+        let tooltipContent = `<strong>${label} Data Point</strong><br/>`;
+        tooltipContent += `Index: ${originalIndex}<br/>`;
+        tooltipContent += `Coordinates: (${d[0].toFixed(3)}, ${d[1].toFixed(3)})<br/>`;
+        
+        // Add anomaly information if available
+        if (showAnomalies && anomalyResults) {
+          const originalData = getOriginalData();
+          if (originalData) {
+            if (label === 'Real' && anomalyResults.real_data) {
+              let realIndexInOriginal = 0;
+              for (let j = 0; j < originalIndex; j++) {
+                if (originalData.labels[j] === 'Real') {
+                  realIndexInOriginal++;
+                }
+              }
+              
+              if (realIndexInOriginal < anomalyResults.real_data.length) {
+                const realPoint = anomalyResults.real_data[realIndexInOriginal];
+                if (realPoint) {
+                  tooltipContent += `Anomaly Score: ${realPoint.score?.toFixed(3) || 'N/A'}<br/>`;
+                  tooltipContent += `Status: ${realPoint.is_anomaly ? 'Anomalous' : 'Normal'}<br/>`;
+                }
+              }
+            } else if (label === 'Synthetic' && anomalyResults.synthetic_data) {
+              let syntheticIndexInOriginal = 0;
+              for (let j = 0; j < originalIndex; j++) {
+                if (originalData.labels[j] === 'Synthetic') {
+                  syntheticIndexInOriginal++;
+                }
+              }
+              
+              if (syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+                const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+                if (syntheticPoint) {
+                  tooltipContent += `Anomaly Score: ${syntheticPoint.score?.toFixed(3) || 'N/A'}<br/>`;
+                  tooltipContent += `Status: ${syntheticPoint.is_anomaly ? 'Anomalous' : 'Normal'}<br/>`;
+                }
+              }
+            }
+          }
+        }
+        
+        // Show tooltip
+        const tooltip = d3.select("body").append("div")
+          .attr("class", "tooltip")
+          .style("position", "absolute")
+          .style("background", "rgba(0, 0, 0, 0.9)")
+          .style("color", "white")
+          .style("padding", "8px 12px")
+          .style("border-radius", "6px")
+          .style("font-size", "12px")
+          .style("font-family", "system-ui, -apple-system, sans-serif")
+          .style("pointer-events", "auto") // Allow interaction with tooltip
+          .style("z-index", "1000")
+          .style("box-shadow", "0 4px 6px rgba(0, 0, 0, 0.1)")
+          .style("max-width", "250px")
+          .style("white-space", "nowrap")
+          .html(`
+            <div style="font-weight: bold; margin-bottom: 6px; color: ${label === 'Real' ? '#3b82f6' : '#dc2626'};">
+              ${label} Data Point
+            </div>
+            <div style="margin-bottom: 4px;">Index: ${originalIndex}</div>
+            <div style="margin-bottom: 4px;">Coordinates: (${d[0].toFixed(3)}, ${d[1].toFixed(3)})</div>
+            ${showAnomalies && anomalyResults ? `
+              <div style="margin-bottom: 6px; padding: 4px; background: rgba(255,255,255,0.1); border-radius: 3px;">
+                ${getAnomalyInfo(originalIndex, label)}
+              </div>
+            ` : ''}
+            <div style="margin-top: 8px; display: flex; gap: 4px;">
+              <button id="select-point-btn" style="
+                background: ${selectedPoints.includes(originalIndex) ? '#ef4444' : '#dc2626'};
+                color: white;
+                border: none;
+                padding: 4px 8px;
+                border-radius: 3px;
+                font-size: 10px;
+                cursor: pointer;
+                font-family: inherit;
+              ">${selectedPoints.includes(originalIndex) ? 'Deselect' : 'Select'}</button>
+              <button id="select-similar-btn" style="
+                background: #3b82f6;
+                color: white;
+                border: none;
+                padding: 4px 8px;
+                border-radius: 3px;
+                font-size: 10px;
+                cursor: pointer;
+                font-family: inherit;
+              ">Select Similar</button>
+            </div>
+          `);
+        
+        // Add event listeners to tooltip buttons
+        tooltip.select("#select-point-btn").on("click", function() {
+          if (selectedPoints.includes(originalIndex)) {
+            setSelectedPoints(prev => prev.filter(idx => idx !== originalIndex));
+          } else {
+            setSelectedPoints(prev => [...prev, originalIndex]);
+          }
+          tooltip.remove();
+        });
+        
+        tooltip.select("#select-similar-btn").on("click", function() {
+          // Select all points of the same type (Real/Synthetic)
+          const similarPoints = sampledData
+            .map((_, i) => ({ index: indexMap[i], label: sampledLabels[i] }))
+            .filter(point => point.label === label)
+            .map(point => point.index);
+          
+          setSelectedPoints(prev => {
+            const newSelection = [...prev];
+            similarPoints.forEach(idx => {
+              if (!newSelection.includes(idx)) {
+                newSelection.push(idx);
+              }
+            });
+            return newSelection;
+          });
+          tooltip.remove();
+        });
+      })
+      .on("mouseout", function() {
+        // Remove tooltip
+        d3.selectAll(".tooltip").remove();
+        
+        // Restore original appearance
+        d3.select(this)
+          .transition()
+          .duration(150)
+          .attr("r", d => {
+            const originalIndex = indexMap[sampledData.indexOf(d)];
+            const label = sampledLabels[sampledData.indexOf(d)];
+            
+            // Restore original size logic
+            if (label === 'Synthetic' && (!anomalyResults || !anomalyResults.synthetic_data)) {
+              return adjustedPointSize;
+            }
+            
+            if (showAnomalies && anomalyResults && anomalyResults.synthetic_data && label === 'Synthetic') {
+              const originalData = getOriginalData();
+              if (originalData) {
+                let syntheticIndexInOriginal = 0;
+                for (let j = 0; j < originalIndex; j++) {
+                  if (originalData.labels[j] === 'Synthetic') {
+                    syntheticIndexInOriginal++;
+                  }
+                }
+                
+                if (anomalyResults && anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+                  const anomalyPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+                  if (anomalyPoint && anomalyPoint.is_anomaly) {
+                    return Math.min(adjustedPointSize * 1.3, 4);
+                  }
+                }
+              }
+            }
+            
+            return adjustedPointSize;
+          })
+          .style("opacity", d => {
+            const originalIndex = indexMap[sampledData.indexOf(d)];
+            return selectedPoints.includes(originalIndex) ? 1 : adjustedOpacity;
+          })
+          .style("stroke-width", d => {
+            const originalIndex = indexMap[sampledData.indexOf(d)];
+            const label = sampledLabels[sampledData.indexOf(d)];
+            
+            // Restore original stroke width logic
+            if (showAnomalies && anomalyResults && (anomalyResults.real_data || anomalyResults.synthetic_data)) {
+              const originalData = getOriginalData();
+              if (originalData) {
+                if (label === 'Real') {
+                  let realIndexInOriginal = 0;
+                  for (let j = 0; j < originalIndex; j++) {
+                    if (originalData.labels[j] === 'Real') {
+                      realIndexInOriginal++;
+                    }
+                  }
+                  
+                  if (anomalyResults.real_data && realIndexInOriginal < anomalyResults.real_data.length) {
+                    const realPoint = anomalyResults.real_data[realIndexInOriginal];
+                    if (realPoint && realPoint.is_anomaly) {
+                      return 1.5 * devicePixelRatio;
+                    }
+                  }
+                } else if (label === 'Synthetic') {
+                  let syntheticIndexInOriginal = 0;
+                  for (let j = 0; j < originalIndex; j++) {
+                    if (originalData.labels[j] === 'Synthetic') {
+                      syntheticIndexInOriginal++;
+                    }
+                  }
+                  
+                  if (anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
+                    const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
+                    if (syntheticPoint && syntheticPoint.is_anomaly) {
+                      return 1.5 * devicePixelRatio; // Thicker stroke for synthetic anomalies
+                    }
+                  }
+                }
+              }
+            }
+            
+            return selectedPoints.includes(originalIndex) ? 2 * devicePixelRatio : 0.5 * devicePixelRatio;
+          });
+      });
 
     // Circular selection logic
     let isDrawing = false;
@@ -1205,9 +2228,9 @@ const EmbeddingPlot = ({
         d3.select(this)
           .transition()
           .duration(100)
-          .attr("r", (adjustedPointSize * 2.5) / devicePixelRatio)
+          .attr("r", Math.min(adjustedPointSize * 1.8, 4))
           .attr("opacity", 0.9)
-          .attr("stroke-width", 2 * devicePixelRatio);
+          .attr("stroke-width", Math.min(2, 3));
 
         tooltip
           .style("visibility", "visible")
@@ -1238,7 +2261,7 @@ const EmbeddingPlot = ({
           .duration(100)
           .attr("r", adjustedPointSize)
           .attr("opacity", isSelected ? 1 : adjustedOpacity)
-          .attr("stroke-width", isSelected ? 2 * devicePixelRatio : 0.5 * devicePixelRatio);
+          .attr("stroke-width", isSelected ? 2 : 0.5);
 
         tooltip.style("visibility", "hidden");
       })
@@ -1258,38 +2281,43 @@ const EmbeddingPlot = ({
         }
       });
 
-    // Responsive legend positioning
-    const legendWidth = 130 * devicePixelRatio;
-    const legendHeight = wasDownsampled ? 85 * devicePixelRatio : 75 * devicePixelRatio;
+    // Responsive legend positioning - ensure it fits properly
+    const showAnomalyLegend = showAnomalies && anomalyResults && anomalyResults.synthetic_data;
+    // Use more space for legend when sidebar is collapsed
+    const legendWidth = showAnomalyLegend ? 
+      (shouldShowSidebar && !sidebarCollapsed ? 220 : 250) : 
+      (shouldShowSidebar && !sidebarCollapsed ? 190 : 220);
+    const legendHeight = wasDownsampled ? 85 :
+                        showAnomalyLegend ? 120 : 75;
     
-          // Calculate optimal legend position
+    // Calculate optimal legend position - ensure it doesn't get cut off
     const legendX = Math.min(
-      scaledPlotWidth - margin.right + (10 * devicePixelRatio),
-      scaledPlotWidth - legendWidth - (5 * devicePixelRatio)
+      plotWidth - (margin.right / devicePixelRatio) + 30,
+      plotWidth - legendWidth - 25
     );
-    const legendY = margin.top + (10 * devicePixelRatio);
+    const legendY = (margin.top / devicePixelRatio) + 10;
     
 
     
     const legend = svg.append("g")
       .attr("transform", `translate(${legendX}, ${legendY})`);
 
-    const legendBg = legend.append("rect")
-      .attr("x", -10 * devicePixelRatio)
-      .attr("y", -10 * devicePixelRatio)
+    legend.append("rect")
+      .attr("x", -10)
+      .attr("y", -10)
       .attr("width", legendWidth)
       .attr("height", legendHeight)
       .attr("fill", "white")
       .attr("stroke", "#e5e7eb")
-      .attr("stroke-width", 1 * devicePixelRatio)
-      .attr("rx", 6 * devicePixelRatio)
+      .attr("stroke-width", 1)
+      .attr("rx", 6)
       .attr("opacity", 0.95);
 
     legend.append("text")
       .attr("x", 0)
-      .attr("y", 8 * devicePixelRatio)
-      .text("Dataset Type")
-      .style("font-size", `${11 * devicePixelRatio}px`)
+      .attr("y", 8)
+      .text(showAnomalyLegend ? "Data Points" : "Dataset Type")
+      .style("font-size", "11px")
       .style("font-weight", "600")
       .style("font-family", "system-ui, -apple-system, sans-serif")
       .style("fill", "#374151");
@@ -1297,43 +2325,227 @@ const EmbeddingPlot = ({
     const realCount = sampledLabels.filter(label => label === "Real").length;
     const syntheticCount = sampledLabels.filter(label => label === "Synthetic").length;
 
-    ["Real", "Synthetic"].forEach((label, i) => {
-      const legendRow = legend.append("g")
-        .attr("transform", `translate(0, ${(i * 22 + 25) * devicePixelRatio})`);
+    // Calculate anomaly counts if available
+    let syntheticAnomalies = 0;
+    let syntheticNormal = 0;
+    if (showAnomalyLegend && anomalyResults && anomalyResults.synthetic_data) {
+      syntheticAnomalies = anomalyResults.synthetic_data.filter(point => point.is_anomaly).length;
+      syntheticNormal = anomalyResults.synthetic_data.filter(point => !point.is_anomaly).length;
+    }
 
-      legendRow.append("circle")
-        .attr("cx", 8 * devicePixelRatio)
+    // Show different legend based on anomaly display
+    if (showAnomalyLegend) {
+      // Real data
+      const realLegendRow = legend.append("g")
+        .attr("transform", `translate(0, 25)`);
+
+      realLegendRow.append("circle")
+        .attr("cx", 8)
         .attr("cy", 0)
-        .attr("r", Math.max(3 * devicePixelRatio, adjustedPointSize * 1.5))
-        .attr("fill", colorScale(label))
-        .attr("stroke", d3.color(colorScale(label)).darker(0.3))
-        .attr("stroke-width", 0.5 * devicePixelRatio)
+        .attr("r", Math.max(3, adjustedPointSize * 1.5))
+        .attr("fill", "#2563eb") // Blue for real
+        .attr("stroke", "#1d4ed8")
+        .attr("stroke-width", 0.5)
         .attr("opacity", 0.85);
 
-      const count = label === "Real" ? realCount : syntheticCount;
-      legendRow.append("text")
-        .attr("x", 20 * devicePixelRatio)
-        .attr("y", 4 * devicePixelRatio)
-        .text(`${label} (${count.toLocaleString()})`)
-        .style("font-size", `${12 * devicePixelRatio}px`)
+      realLegendRow.append("text")
+        .attr("x", 20)
+        .attr("y", 4)
+        .text(`Real (${realCount.toLocaleString()})`)
+        .style("font-size", "10px") // Smaller font to fit better
         .style("font-weight", "500")
         .style("font-family", "system-ui, -apple-system, sans-serif")
         .style("fill", "#374151");
-    });
+
+      // Normal synthetic data
+      const normalLegendRow = legend.append("g")
+        .attr("transform", `translate(0, 47)`);
+
+      normalLegendRow.append("circle")
+        .attr("cx", 8)
+        .attr("cy", 0)
+        .attr("r", Math.max(3, adjustedPointSize * 1.5))
+        .attr("fill", "#9ca3af") // Light gray for normal synthetic
+        .attr("stroke", "#6b7280")
+        .attr("stroke-width", 0.5)
+        .attr("opacity", 0.85);
+
+      normalLegendRow.append("text")
+        .attr("x", 20)
+        .attr("y", 4)
+        .text(`Synthetic Normal (${syntheticNormal.toLocaleString()})`)
+        .style("font-size", "10px") // Smaller font to fit better
+        .style("font-weight", "500")
+        .style("font-family", "system-ui, -apple-system, sans-serif")
+        .style("fill", "#374151");
+
+      // Anomalous synthetic data
+      const anomalyLegendRow = legend.append("g")
+        .attr("transform", `translate(0, 69)`);
+
+      anomalyLegendRow.append("circle")
+        .attr("cx", 8)
+        .attr("cy", 0)
+        .attr("r", Math.max(3, adjustedPointSize * 1.5) * 1.2) // Slightly larger
+        .attr("fill", "#ef4444") // Bright red for anomalies
+        .attr("stroke", "#991b1b")
+        .attr("stroke-width", 1.5)
+        .attr("opacity", 0.9);
+
+      anomalyLegendRow.append("text")
+        .attr("x", 20)
+        .attr("y", 4)
+        .text(`Synthetic Anomalies (${syntheticAnomalies.toLocaleString()})`)
+        .style("font-size", "10px") // Smaller font to fit better
+        .style("font-weight", "600") // Bold for anomalies
+        .style("font-family", "system-ui, -apple-system, sans-serif")
+        .style("fill", "#dc2626"); // Red text for anomalies
+    } else {
+      // Standard legend
+      ["Real", "Synthetic"].forEach((label, i) => {
+        const legendRow = legend.append("g")
+          .attr("transform", `translate(0, ${i * 22 + 25})`);
+
+        legendRow.append("circle")
+          .attr("cx", 8)
+          .attr("cy", 0)
+          .attr("r", Math.max(3, adjustedPointSize * 1.5))
+          .attr("fill", colorScale(label))
+          .attr("stroke", d3.color(colorScale(label)).darker(0.3))
+          .attr("stroke-width", 0.5)
+          .attr("opacity", 0.85);
+
+        const count = label === "Real" ? realCount : syntheticCount;
+        legendRow.append("text")
+          .attr("x", 20)
+          .attr("y", 4)
+          .text(`${label} (${count.toLocaleString()})`)
+          .style("font-size", "10px") // Smaller font to fit better
+          .style("font-weight", "500")
+          .style("font-family", "system-ui, -apple-system, sans-serif")
+          .style("fill", "#374151");
+      });
+    }
 
     if (wasDownsampled) {
       legend.append("text")
         .attr("x", 0)
-        .attr("y", 85 * devicePixelRatio)
+        .attr("y", 85)
         .text("* Intelligently sampled")
-        .style("font-size", `${10 * devicePixelRatio}px`)
+        .style("font-size", "10px")
         .style("font-weight", "400")
         .style("font-family", "system-ui, -apple-system, sans-serif")
         .style("fill", "#6b7280")
         .style("font-style", "italic");
     }
 
-  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed]);
+    // Legend for anomaly detection
+    if (showAnomalyLegend && anomalyResults && (anomalyResults.real_data || anomalyResults.synthetic_data)) {
+      const realAnomalies = anomalyResults.real_data ? anomalyResults.real_data.filter(point => point.is_anomaly).length : 0;
+      const realNormal = anomalyResults.real_data ? anomalyResults.real_data.filter(point => !point.is_anomaly).length : 0;
+      const syntheticAnomalies = anomalyResults.synthetic_data ? anomalyResults.synthetic_data.filter(point => point.is_anomaly).length : 0;
+      const syntheticNormal = anomalyResults.synthetic_data ? anomalyResults.synthetic_data.filter(point => !point.is_anomaly).length : 0;
+      
+      const legendGroup = g.append("g")
+        .attr("class", "legend")
+        .attr("transform", `translate(${scaledPlotWidth - margin.left - margin.right - 200}, ${scaledPlotHeight - margin.top - margin.bottom - 140})`);
+      
+      // Title
+      legendGroup.append("text")
+        .attr("x", 0)
+        .attr("y", 0)
+        .attr("font-size", "12px")
+        .attr("font-weight", "bold")
+        .attr("fill", "#374151")
+        .text("Data Points");
+      
+      // Real normal data
+      legendGroup.append("circle")
+        .attr("cx", 0)
+        .attr("cy", 20)
+        .attr("r", 4)
+        .attr("fill", "#3b82f6")
+        .attr("stroke", "#1e40af")
+        .attr("stroke-width", 1);
+      
+      legendGroup.append("text")
+        .attr("x", 15)
+        .attr("y", 25)
+        .attr("font-size", "11px")
+        .attr("fill", "#374151")
+        .text(`Real Normal (${realNormal})`);
+      
+      // Real anomalous data
+      legendGroup.append("circle")
+        .attr("cx", 0)
+        .attr("cy", 40)
+        .attr("r", 4)
+        .attr("fill", "#ef4444")
+        .attr("stroke", "#991b1b")
+        .attr("stroke-width", 1);
+      
+      legendGroup.append("text")
+        .attr("x", 15)
+        .attr("y", 45)
+        .attr("font-size", "11px")
+        .attr("fill", "#374151")
+        .text(`Real Anomalous (${realAnomalies})`);
+      
+      // Synthetic normal data
+      legendGroup.append("circle")
+        .attr("cx", 0)
+        .attr("cy", 60)
+        .attr("r", 4)
+        .attr("fill", "#dc2626")
+        .attr("stroke", "#15803d")
+        .attr("stroke-width", 1);
+      
+      legendGroup.append("text")
+        .attr("x", 15)
+        .attr("y", 65)
+        .attr("font-size", "11px")
+        .attr("fill", "#374151")
+        .text(`Synthetic Normal (${syntheticNormal})`);
+      
+      // Synthetic anomalous data
+      legendGroup.append("circle")
+        .attr("cx", 0)
+        .attr("cy", 80)
+        .attr("r", 4)
+        .attr("fill", "#ef4444")
+        .attr("stroke", "#991b1b")
+        .attr("stroke-width", 1);
+      
+      legendGroup.append("text")
+        .attr("x", 15)
+        .attr("y", 85)
+        .attr("font-size", "11px")
+        .attr("fill", "#374151")
+        .text(`Synthetic Anomalous (${syntheticAnomalies})`);
+    }
+  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed, showAnomalies, anomalyResults, showRealNormal, showRealAnomalies, showSyntheticNormal, showSyntheticAnomalies, getOriginalData, calculatePlotDimensions, sampleData]);
+
+  // Add resize observer to handle container size changes when sidebar appears/disappears
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Trigger re-render when container size changes (e.g., when sidebar appears/disappears)
+      if (data && metadata && data.length > 0) {
+        // Force a small delay to ensure DOM updates are complete
+        setTimeout(() => {
+          // This will trigger the main useEffect to re-render
+        }, 10);
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [data, metadata]);
 
   // API trigger for distribution plot generation
   useEffect(() => {
@@ -1386,7 +2598,7 @@ const EmbeddingPlot = ({
         clearTimeout(plotGenerationTimeoutRef.current);
       }
     };
-  }, [selectedPoints, histogramColumn, histogramPlotType, generatePlotData, getOriginalData]);
+  }, [selectedPoints, histogramColumn, histogramPlotType, generatePlotData, getOriginalData, data, metadata, getVisiblePoints, plotData]);
 
   // Initialize plot type based on first column's data type (same logic as DistributionPlot.js)
   useEffect(() => {
@@ -1409,6 +2621,280 @@ const EmbeddingPlot = ({
       }
     }
   }, [metadata, getOriginalData, histogramColumn, histogramPlotType]);
+
+  // Anomaly detection functions
+  const runAnomalyDetection = useCallback(async () => {
+    console.log('🔍 Anomaly detection started');
+    console.log('Data:', data);
+    console.log('Metadata:', metadata);
+    
+    if (!data || !metadata || !metadata.labels) {
+      console.error('❌ Missing data or metadata');
+      setAnomalyError('No embedding data available for anomaly detection');
+      return;
+    }
+
+    // Check if we have a job_id in metadata (for history embeddings)
+    const jobId = metadata?.job_id;
+    if (jobId) {
+      console.log('🎯 Using preprocessed data from job:', jobId);
+      
+      setAnomalyLoading(true);
+      setAnomalyError(null);
+      
+      try {
+        const results = await anomalyDetectionService.detectAnomaliesFromJob(
+          jobId, 
+          contamination
+        );
+        console.log('🎉 Anomaly detection from job completed:', results);
+        
+        // Check if results have the expected structure
+        if (results && results.status === 'success' && results.statistics) {
+          setAnomalyResults(results);
+          console.log('📈 Statistics:', results.statistics);
+          console.log('📊 Real data results:', results.real_data?.length || 0);
+          console.log('📊 Synthetic data results:', results.synthetic_data?.length || 0);
+        } else {
+          console.error('❌ Unexpected response structure:', results);
+          setAnomalyError('Unexpected response structure from anomaly detection');
+        }
+      } catch (error) {
+        console.error('❌ Anomaly detection from job failed:', error);
+        const errorMessage = error.message || error.toString() || 'Unknown error occurred';
+        setAnomalyError(errorMessage);
+      } finally {
+        setAnomalyLoading(false);
+      }
+      return;
+    }
+
+    // Fallback to original method for fresh embeddings (using frontend data)
+    console.log('📊 Using frontend data for anomaly detection (fallback method)');
+    
+    // Get preprocessed original data for anomaly detection
+    const originalData = getOriginalData();
+    if (!originalData) {
+      console.error('❌ No preprocessed original data available for anomaly detection');
+      setAnomalyError('Preprocessed original data not available for anomaly detection');
+      return;
+    }
+
+    console.log('📊 Preprocessed original data:', {
+      dataLength: originalData.data.length,
+      labelsLength: originalData.labels.length,
+      headers: originalData.headers,
+      sampleData: originalData.data.slice(0, 3)
+    });
+
+    // Separate real and synthetic data from preprocessed original data
+    const realData = [];
+    const syntheticData = [];
+    
+    originalData.data.forEach((row, index) => {
+      if (originalData.labels[index] === 'Real') {
+        // Convert all values to numbers and filter out invalid data
+        const numericRow = row.map(val => {
+          // Handle both string and number inputs
+          const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+          return isNaN(num) ? null : num;
+        }).filter(val => val !== null);
+        
+        if (numericRow.length > 0) {
+          realData.push(numericRow);
+        }
+      } else if (originalData.labels[index] === 'Synthetic') {
+        // Convert all values to numbers and filter out invalid data
+        const numericRow = row.map(val => {
+          // Handle both string and number inputs
+          const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+          return isNaN(num) ? null : num;
+        }).filter(val => val !== null);
+        
+        if (numericRow.length > 0) {
+          syntheticData.push(numericRow);
+        }
+      }
+    });
+
+    console.log('📊 Separated preprocessed data:', { 
+      realDataLength: realData.length, 
+      syntheticDataLength: syntheticData.length,
+      realDataSample: realData.slice(0, 2),
+      syntheticDataSample: syntheticData.slice(0, 2)
+    });
+    
+    // Debug: Check data types
+    if (realData.length > 0) {
+      console.log('🔍 Real data type check:', {
+        firstRow: realData[0],
+        firstValue: realData[0][0],
+        firstValueType: typeof realData[0][0],
+        allNumbers: realData[0].every(val => typeof val === 'number')
+      });
+    }
+    
+    // Check if we have enough valid data
+    if (realData.length === 0) {
+      console.error('❌ No valid numeric real data found');
+      setAnomalyError('No valid numeric real data available for anomaly detection');
+      return;
+    }
+    
+    if (syntheticData.length === 0) {
+      console.error('❌ No valid numeric synthetic data found');
+      setAnomalyError('No valid numeric synthetic data available for anomaly detection');
+      return;
+    }
+    
+    // Check data dimensions
+    const realDim = realData[0].length;
+    const syntheticDim = syntheticData[0].length;
+    
+    if (realDim !== syntheticDim) {
+      console.error('❌ Dimension mismatch:', { realDim, syntheticDim });
+      setAnomalyError(`Data dimension mismatch: Real data has ${realDim} features, Synthetic data has ${syntheticDim} features`);
+      return;
+    }
+    
+    // Validate data types
+    const validateNumericData = (data, name) => {
+      for (let i = 0; i < Math.min(data.length, 3); i++) {
+        for (let j = 0; j < Math.min(data[i].length, 3); j++) {
+          if (typeof data[i][j] !== 'number' || isNaN(data[i][j])) {
+            throw new Error(`${name}[${i}][${j}] must be a number, got ${typeof data[i][j]}: ${data[i][j]}`);
+          }
+        }
+      }
+    };
+    
+    try {
+      validateNumericData(realData, 'realData');
+      validateNumericData(syntheticData, 'syntheticData');
+    } catch (error) {
+      console.error('❌ Data validation failed:', error.message);
+      setAnomalyError(`Data validation failed: ${error.message}`);
+      return;
+    }
+    
+    // Validate data
+    const validation = anomalyDetectionService.validateData(realData, syntheticData);
+    console.log('✅ Validation result:', validation);
+    
+    if (!validation.isValid) {
+      console.error('❌ Validation failed:', validation.errors);
+      setAnomalyError(validation.errors.join(', '));
+      return;
+    }
+
+    setAnomalyLoading(true);
+    setAnomalyError(null);
+    console.log('🚀 Starting anomaly detection with contamination:', contamination);
+
+    try {
+      const results = await anomalyDetectionService.detectAnomalies(
+        realData, 
+        syntheticData, 
+        contamination
+      );
+      console.log('🎉 Anomaly detection completed:', results);
+      
+      // Check if results have the expected structure
+      if (results && results.status === 'success' && results.statistics) {
+        setAnomalyResults(results);
+        console.log('📈 Statistics:', results.statistics);
+        console.log('📊 Real data results:', results.real_data?.length || 0);
+        console.log('📊 Synthetic data results:', results.synthetic_data?.length || 0);
+      } else {
+        console.error('❌ Unexpected response structure:', results);
+        setAnomalyError('Unexpected response structure from anomaly detection');
+      }
+    } catch (error) {
+      console.error('❌ Anomaly detection failed:', error);
+      // Ensure we have a proper error message string
+      const errorMessage = error.message || error.toString() || 'Unknown error occurred';
+      setAnomalyError(errorMessage);
+    } finally {
+      setAnomalyLoading(false);
+    }
+  }, [data, metadata, contamination, getOriginalData]);
+
+  const downloadAnomalyCSV = useCallback(async () => {
+    if (!data || !metadata || !metadata.labels) {
+      return;
+    }
+
+    // Check if we have a job_id in metadata (for history embeddings)
+    const jobId = metadata?.job_id;
+    if (jobId) {
+      console.log('🎯 Downloading CSV using preprocessed data from job:', jobId);
+      
+      try {
+        const csvResult = await anomalyDetectionService.generateAnomalyCSVFromJob(jobId, contamination);
+        if (csvResult.status === 'success') {
+          anomalyDetectionService.downloadCSV(csvResult.csv_content, csvResult.filename);
+        }
+      } catch (error) {
+        console.error('Failed to download CSV from job:', error);
+      }
+      return;
+    }
+
+    // Fallback to original method for fresh embeddings (using frontend data)
+    console.log('📊 Downloading CSV using frontend data (fallback method)');
+    
+    // Get preprocessed original data for anomaly detection
+    const originalData = getOriginalData();
+    if (!originalData) {
+      console.error('❌ No preprocessed original data available for CSV download');
+      return;
+    }
+
+    // Separate real and synthetic data from preprocessed original data
+    const realData = [];
+    const syntheticData = [];
+    
+    originalData.data.forEach((row, index) => {
+      if (originalData.labels[index] === 'Real') {
+        // Convert all values to numbers and filter out invalid data
+        const numericRow = row.map(val => {
+          // Handle both string and number inputs
+          const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+          return isNaN(num) ? null : num;
+        }).filter(val => val !== null);
+        
+        if (numericRow.length > 0) {
+          realData.push(numericRow);
+        }
+      } else if (originalData.labels[index] === 'Synthetic') {
+        // Convert all values to numbers and filter out invalid data
+        const numericRow = row.map(val => {
+          // Handle both string and number inputs
+          const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+          return isNaN(num) ? null : num;
+        }).filter(val => val !== null);
+        
+        if (numericRow.length > 0) {
+          syntheticData.push(numericRow);
+        }
+      }
+    });
+    
+    // Check if we have enough valid data
+    if (realData.length === 0 || syntheticData.length === 0) {
+      console.error('❌ No valid numeric data available for CSV download');
+      return;
+    }
+    
+    try {
+      const csvResult = await anomalyDetectionService.generateAnomalyCSV(realData, syntheticData, contamination);
+      if (csvResult.status === 'success') {
+        anomalyDetectionService.downloadCSV(csvResult.csv_content, csvResult.filename);
+      }
+    } catch (error) {
+      console.error('Failed to download CSV:', error);
+    }
+  }, [data, metadata, contamination, getOriginalData]);
 
   // Cleanup effect to cancel pending requests on unmount
   useEffect(() => {
@@ -1624,24 +3110,30 @@ const EmbeddingPlot = ({
     );
   }
 
+
+
   return (
-    <Box sx={{ display: 'flex', height: '100%', position: 'relative' }}>
+    <Box sx={{ display: 'flex', height: '100vh', position: 'relative', overflow: 'visible', width: '100%' }}>
       {/* Main Plot Area */}
       <Box 
         ref={containerRef} 
         className="embedding-plot" 
         sx={{ 
-          flex: shouldShowSidebar && !sidebarCollapsed ? `0 0 ${100 - sidebarWidth}%` : 1,
-          height: '100%',
-          minHeight: '400px',
+          flex: shouldShowSidebar && !sidebarCollapsed ? 1 : 1, // Use full available space when sidebar is present
+          width: '100%', // Use full width of parent container
+          marginLeft: shouldShowSidebar && !sidebarCollapsed ? '-80px' : '0px', // Expand 20px to the left when sidebar is present
+          marginRight: shouldShowSidebar && !sidebarCollapsed ? '-80px' : '0px', // Expand 20px to the right when sidebar is present
+          height: '100vh', // Use full viewport height
+          minHeight: '600px', // Increased minimum height
           backgroundColor: 'rgba(248, 250, 252, 0.5)',
           borderRadius: '8px',
-          padding: '8px',
+          padding: '12px', // Increased padding for more margin from parent container
           position: 'relative',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: isResizing ? 'none' : shouldShowSidebar ? 'flex 0.3s ease' : 'none'
+          alignItems: 'stretch',
+          justifyContent: 'center', // Center the plot within its container
+          transition: isResizing ? 'none' : shouldShowSidebar ? 'flex 0.3s ease' : 'none',
+          overflow: 'visible' // Allow overflow to use more space
         }}
       >
 
@@ -1697,6 +3189,176 @@ const EmbeddingPlot = ({
               <SelectAll fontSize="small" />
             </IconButton>
           </Tooltip>
+          
+          {/* Anomaly Detection Controls */}
+          <Tooltip title="Run Anomaly Detection">
+            <IconButton 
+              size="small" 
+              aria-label="Run anomaly detection"
+              onClick={() => {
+                console.log('🔘 Anomaly detection button clicked!');
+                console.log('Current data length:', data?.length);
+                console.log('Current metadata:', metadata);
+                runAnomalyDetection();
+              }}
+              disabled={anomalyLoading}
+              sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
+            >
+              {anomalyLoading ? (
+                <CircularProgress size={16} color="primary" />
+              ) : (
+                <Warning fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
+          
+          {anomalyError && (
+            <Chip
+              label={`Error: ${anomalyError}`}
+              size="small"
+              color="error"
+              variant="filled"
+              sx={{ 
+                bgcolor: 'rgba(220, 38, 38, 0.9)',
+                fontSize: '11px',
+                maxWidth: '200px'
+              }}
+            />
+          )}
+          
+          {anomalyResults && (
+            <Tooltip title="Download Anomaly CSV">
+              <IconButton 
+                size="small" 
+                aria-label="Download anomaly CSV"
+                onClick={downloadAnomalyCSV}
+                sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
+              >
+                <Download fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          
+          {anomalyResults && (
+            <Tooltip title={showAnomalies ? "Hide Anomalies" : "Show Anomalies"}>
+              <IconButton 
+                size="small" 
+                aria-label="Toggle anomaly visualization"
+                onClick={() => setShowAnomalies(!showAnomalies)}
+                sx={{ 
+                  bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.1)' : 'white', 
+                  '&:hover': { bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.2)' : 'grey.100' } 
+                }}
+              >
+                <Warning fontSize="small" color={showAnomalies ? "error" : "inherit"} />
+              </IconButton>
+            </Tooltip>
+          )}
+          
+          {/* Interactive Filter Controls */}
+          <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Tooltip title="Toggle Normal Real Data">
+              <IconButton 
+                size="small" 
+                aria-label="Toggle normal real data visibility"
+                onClick={() => setShowRealNormal(!showRealNormal)}
+                sx={{ 
+                  bgcolor: showRealNormal ? 'rgba(37, 99, 235, 0.1)' : 'white', 
+                  '&:hover': { bgcolor: showRealNormal ? 'rgba(37, 99, 235, 0.2)' : 'grey.100' } 
+                }}
+              >
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#3b82f6' }} />
+              </IconButton>
+            </Tooltip>
+            
+            {anomalyResults && (
+              <Tooltip title="Toggle Anomalous Real Data">
+                <IconButton 
+                  size="small" 
+                  aria-label="Toggle anomalous real data visibility"
+                  onClick={() => setShowRealAnomalies(!showRealAnomalies)}
+                  sx={{ 
+                    bgcolor: showRealAnomalies ? 'rgba(239, 68, 68, 0.1)' : 'white', 
+                    '&:hover': { bgcolor: showRealAnomalies ? 'rgba(239, 68, 68, 0.2)' : 'grey.100' } 
+                  }}
+                >
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#ef4444' }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            
+            <Tooltip title="Toggle Normal Synthetic Data">
+              <IconButton 
+                size="small" 
+                aria-label="Toggle normal synthetic data visibility"
+                onClick={() => setShowSyntheticNormal(!showSyntheticNormal)}
+                sx={{ 
+                  bgcolor: showSyntheticNormal ? 'rgba(220, 38, 38, 0.1)' : 'white', 
+                  '&:hover': { bgcolor: showSyntheticNormal ? 'rgba(220, 38, 38, 0.2)' : 'grey.100' } 
+                }}
+              >
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#dc2626' }} />
+              </IconButton>
+            </Tooltip>
+            
+            {anomalyResults && (
+              <Tooltip title="Toggle Anomalous Synthetic Data">
+                <IconButton 
+                  size="small" 
+                  aria-label="Toggle anomalous synthetic data visibility"
+                  onClick={() => setShowSyntheticAnomalies(!showSyntheticAnomalies)}
+                  sx={{ 
+                    bgcolor: showSyntheticAnomalies ? 'rgba(239, 68, 68, 0.1)' : 'white', 
+                    '&:hover': { bgcolor: showSyntheticAnomalies ? 'rgba(239, 68, 68, 0.2)' : 'grey.100' } 
+                  }}
+                >
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#ef4444' }} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+          
+          {/* Quick Filter Buttons */}
+          <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip title="Show All Data">
+              <IconButton 
+                size="small" 
+                aria-label="Show all data"
+                onClick={showAllData}
+                sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
+              >
+                <SelectAll fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title="Hide All Data">
+              <IconButton 
+                size="small" 
+                aria-label="Hide all data"
+                onClick={hideAllData}
+                sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
+              >
+                <Clear fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            
+            {anomalyResults && (
+              <Tooltip title="Show Only Anomalies">
+                <IconButton 
+                  size="small" 
+                  aria-label="Show only anomalies"
+                  onClick={showOnlyAnomalies}
+                  sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
+                >
+                  <Warning fontSize="small" color="error" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
         </Box>
 
                 {/* Plot Info Status */}
@@ -1718,7 +3380,22 @@ const EmbeddingPlot = ({
               fontSize: '11px'
             }}
           />
-          {/* Removed aspect ratio display chip - keeping logic for background calculations */}
+          
+          {/* Anomaly Detection Status */}
+          {anomalyResults && anomalyResults.statistics && (
+            <Chip
+              icon={<Warning />}
+              label={`${anomalyResults.statistics.real_anomalies || 0} real + ${anomalyResults.statistics.synthetic_anomalies || 0} synthetic anomalies${showAnomalies ? ' (shown)' : ''}`}
+              size="small"
+              color={showAnomalies ? "error" : "default"}
+              variant={showAnomalies ? "filled" : "outlined"}
+              sx={{ 
+                bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                fontSize: '11px',
+                borderColor: showAnomalies ? 'transparent' : 'rgba(220, 38, 38, 0.5)'
+              }}
+            />
+          )}
         </Box>
 
         {/* Removed aspect ratio controls - now fully automatic */}
@@ -1735,7 +3412,9 @@ const EmbeddingPlot = ({
             userSelect: 'none',   // Prevent text selection
             transition: 'all 0.3s ease', // Smooth transitions for aspect ratio changes
             borderRadius: '4px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            objectFit: 'fill',
+            overflow: 'visible' // Allow Y-axis label to be visible
           }}
         />
       </Box>
@@ -1803,7 +3482,8 @@ const EmbeddingPlot = ({
           flex: `0 0 ${sidebarWidth}%`,
           display: 'flex',
           flexDirection: 'column',
-          maxHeight: '100%',
+          height: '100vh', // Use full viewport height
+          maxHeight: '100vh',
           overflow: 'hidden',
           transition: isResizing ? 'none' : 'flex 0.3s ease'
         }}>
@@ -1861,19 +3541,26 @@ const EmbeddingPlot = ({
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
               <Typography variant="body2">
-                Total Points: <strong>{histogramData?.totalSelected || 0}</strong>
+                Total Selected: <strong>{histogramData?.totalSelected || 0}</strong>
+                {selectedPoints.length !== (histogramData?.totalSelected || 0) && (
+                  <span style={{ color: '#dc2626', fontSize: '0.8em' }}>
+                    {' '}({selectedPoints.length} total, {selectedPoints.length - (histogramData?.totalSelected || 0)} hidden by filters)
+                  </span>
+                )}
               </Typography>
-              <Typography variant="body2" sx={{ color: '#2563eb' }}>
+              <Typography variant="body2">
                 Real: <strong>{histogramData?.realSelected || 0}</strong>
               </Typography>
-              <Typography variant="body2" sx={{ color: '#dc2626' }}>
+              <Typography variant="body2">
                 Synthetic: <strong>{histogramData?.syntheticSelected || 0}</strong>
               </Typography>
+              
+              
             </Box>
           </Box>
 
-          <Divider />
-
+                    <Divider />
+          
           {/* Distribution Controls - Show when we have original data available */}
           {originalData && originalData.headers && originalData.headers.length > 0 ? (
             <>

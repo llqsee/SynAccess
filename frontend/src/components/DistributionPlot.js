@@ -295,8 +295,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
               ]}
               layout={{ 
                 xaxis: { 
-                  title: 'Value',
-                  range: [singleValue - 1, singleValue + 1]
+                  title: 'Value'
                 }, 
                 yaxis: { title: 'Count' },
                 barmode: 'overlay',        
@@ -348,8 +347,7 @@ const DistributionPlot = ({ realData, syntheticData, realHeaders, syntheticHeade
             ]}
             layout={{ 
               xaxis: { 
-                title: 'Value',
-                range: [minValue - range * 0.05, maxValue + range * 0.05] // Add 5% padding
+                title: 'Value'
               }, 
               yaxis: { title: 'Probability Density' },
               barmode: 'overlay',        

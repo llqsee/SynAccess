@@ -42,15 +42,18 @@ import {
   History as HistoryIcon,
   Schedule,
   Memory,
-  TrendingUp
+  TrendingUp,
+  Download
 } from '@mui/icons-material';
 import { 
   getJobHistory, 
   getJobDetail, 
   loadJobEmbeddings, 
   toggleJobFavorite, 
-  deleteJob,
-  getJobStats 
+  deleteJob, 
+  downloadModel,
+  downloadModelBinary,
+  getJobStats
 } from '../services/api';
 // Removed date utilities - using simple display
 
@@ -149,6 +152,40 @@ const History = ({ onLoadEmbedding }) => {
     }
   };
 
+  const handleDownloadModel = async (jobId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/jobs/${jobId}/model/download`);
+      if (!response.ok) {
+        throw new Error('Failed to download model');
+      }
+      
+      // Get the filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `model_${jobId}`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      // Create download link with the binary blob
+      const modelBlob = await response.blob();
+      const url = URL.createObjectURL(modelBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      showNotification('Model downloaded successfully', 'success');
+    } catch (error) {
+      showNotification(error.message, 'error');
+    }
+  };
+
   const handleViewDetails = async (job) => {
     try {
       const details = await getJobDetail(job.job_id);
@@ -222,7 +259,9 @@ const History = ({ onLoadEmbedding }) => {
     // If we have sample counts from any source, use them to generate the correct name
     if (realSamples !== null && realSamples !== undefined &&
         synthSamples !== null && synthSamples !== undefined) {
-      return `${job.method.toUpperCase()} Embedding - ${realSamples}R + ${synthSamples}S samples`;
+      const fineTuned = job.parameters?.fine_tune || false;
+      const fineTuneSuffix = fineTuned ? " (Adapted)" : "";
+      return `${job.method.toUpperCase()} Embedding - ${realSamples}R + ${synthSamples}S samples${fineTuneSuffix}`;
     }
     
     // Fall back to stored name if no sample information available
@@ -413,6 +452,18 @@ const History = ({ onLoadEmbedding }) => {
                             </Tooltip>
                           )}
                           
+                          {job.status === 'completed' && job.has_model && (
+                            <Tooltip title={job.parameters?.fine_tune ? "Download Adapted Model" : "Download Model"}>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleDownloadModel(job.job_id)}
+                                color="secondary"
+                              >
+                                <Download data-testid="download-model-icon" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          
                           <Tooltip title="View Details">
                             <IconButton
                               size="small"
@@ -482,7 +533,7 @@ const History = ({ onLoadEmbedding }) => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     label="Name"
-                    value={selectedJob.job.name}
+                    value={selectedJob.name}
                     fullWidth
                     disabled
                     size="small"
@@ -491,7 +542,7 @@ const History = ({ onLoadEmbedding }) => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     label="Method"
-                    value={selectedJob.job.method.toUpperCase()}
+                    value={selectedJob.method.toUpperCase()}
                     fullWidth
                     disabled
                     size="small"
@@ -500,7 +551,7 @@ const History = ({ onLoadEmbedding }) => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     label="Status"
-                    value={selectedJob.job.status}
+                    value={selectedJob.status}
                     fullWidth
                     disabled
                     size="small"
@@ -509,7 +560,7 @@ const History = ({ onLoadEmbedding }) => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     label="Runtime"
-                    value={formatRuntime(selectedJob.job.runtime_seconds)}
+                    value={formatRuntime(selectedJob.runtime_seconds)}
                     fullWidth
                     disabled
                     size="small"
@@ -517,8 +568,8 @@ const History = ({ onLoadEmbedding }) => {
                 </Grid>
                 <Grid item xs={12}>
                   <TextField
-                    label="Description"
-                    value={selectedJob.job.description || 'No description'}
+                    label="Created At"
+                    value={formatDate(selectedJob.created_at)}
                     fullWidth
                     disabled
                     size="small"
@@ -527,7 +578,7 @@ const History = ({ onLoadEmbedding }) => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     label="Processed Real Samples"
-                    value={selectedJob.job.real_processed_samples || selectedJob.job.real_data_shape?.[0] || 'N/A'}
+                    value={selectedJob.actual_processed_samples?.real_samples || 'N/A'}
                     fullWidth
                     disabled
                     size="small"
@@ -537,7 +588,7 @@ const History = ({ onLoadEmbedding }) => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     label="Processed Synthetic Samples"
-                    value={selectedJob.job.synthetic_processed_samples || selectedJob.job.synthetic_data_shape?.[0] || 'N/A'}
+                    value={selectedJob.actual_processed_samples?.synthetic_samples || 'N/A'}
                     fullWidth
                     disabled
                     size="small"
@@ -546,22 +597,20 @@ const History = ({ onLoadEmbedding }) => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="Total Real Dataset Size"
-                    value={selectedJob.job.real_data_shape?.[0] || 'N/A'}
+                    label="Has Results"
+                    value={selectedJob.has_results ? 'Yes' : 'No'}
                     fullWidth
                     disabled
                     size="small"
-                    helperText="Original dataset size"
                   />
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="Total Synthetic Dataset Size"
-                    value={selectedJob.job.synthetic_data_shape?.[0] || 'N/A'}
+                    label="Has Model"
+                    value={selectedJob.has_model ? 'Yes' : 'No'}
                     fullWidth
                     disabled
                     size="small"
-                    helperText="Original dataset size"
                   />
                 </Grid>
                 <Grid item xs={12}>
@@ -569,9 +618,41 @@ const History = ({ onLoadEmbedding }) => {
                     Parameters
                   </Typography>
                   <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                    <pre style={{ margin: 0, fontSize: '12px' }}>
-                      {JSON.stringify(selectedJob.job.parameters, null, 2)}
-                    </pre>
+                    {selectedJob.parameters?.fine_tune ? (
+                      <Box>
+                        <Alert severity="info" sx={{ mb: 2 }}>
+                          <Typography variant="body2">
+                            <strong>Model Adaptation:</strong> This model was adapted to the real data using the parameters from the original pre-trained model.
+                          </Typography>
+                        </Alert>
+                        <Typography variant="body2" gutterBottom>
+                          <strong>Adapted Model Parameters:</strong>
+                        </Typography>
+                        <pre style={{ margin: 0, fontSize: '12px' }}>
+                          {JSON.stringify(selectedJob.parameters, null, 2)}
+                        </pre>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                          Note: These are the parameters used to create the adapted model. The model was re-trained on your real data with these same parameters.
+                        </Typography>
+                        {selectedJob.results?.preprocessing_info?.adapted_model_params && (
+                          <Box sx={{ mt: 2 }}>
+                            <Typography variant="body2" gutterBottom>
+                              <strong>Actual Adapted Model Parameters:</strong>
+                            </Typography>
+                            <pre style={{ margin: 0, fontSize: '12px', backgroundColor: '#f0f8ff', padding: '8px', borderRadius: '4px' }}>
+                              {JSON.stringify(selectedJob.results.preprocessing_info.adapted_model_params, null, 2)}
+                            </pre>
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                              These are the actual parameters of the newly created adapted model that was trained on your real data.
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    ) : (
+                      <pre style={{ margin: 0, fontSize: '12px' }}>
+                        {JSON.stringify(selectedJob.parameters, null, 2)}
+                      </pre>
+                    )}
                   </Paper>
                 </Grid>
               </Grid>
@@ -580,10 +661,10 @@ const History = ({ onLoadEmbedding }) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailDialogOpen(false)}>Close</Button>
-          {selectedJob?.job.status === 'completed' && (
+          {selectedJob?.status === 'completed' && (
             <Button
               onClick={() => {
-                handleLoadJob(selectedJob.job.job_id);
+                handleLoadJob(selectedJob.job_id);
                 setDetailDialogOpen(false);
               }}
               color="primary"
@@ -604,7 +685,7 @@ const History = ({ onLoadEmbedding }) => {
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete the job "{jobToDelete?.name}"? 
+            Are you sure you want to delete the job "{jobToDelete?.name || jobToDelete?.job_id}"? 
             This action cannot be undone.
           </Typography>
         </DialogContent>

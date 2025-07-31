@@ -26,9 +26,11 @@ import {
   LinearProgress,
   IconButton,
   Tooltip,
-  Stack
+  Stack,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
-import { CheckCircle, CloudUpload, ArrowForward, Settings, ExpandLess, ExpandMore, PlayArrow, Cancel } from '@mui/icons-material';
+import { CheckCircle, CloudUpload, ArrowForward, Settings, ExpandLess, ExpandMore, PlayArrow, Cancel, Upload } from '@mui/icons-material';
 
 const Sidebar = ({
   onRealDataUpload,
@@ -59,6 +61,11 @@ const Sidebar = ({
   const [nSynthSamples, setNSynthSamples] = useState(1000);
   const [parametersConfigured, setParametersConfigured] = useState(false); // Start as false to allow parameter configuration
   const [parametersExpanded, setParametersExpanded] = useState(true);
+  const [usePretrainedModel, setUsePretrainedModel] = useState(false);
+  const [pretrainedModel, setPretrainedModel] = useState(null);
+  const [pretrainedModelName, setPretrainedModelName] = useState('');
+  const [fineTuneModel, setFineTuneModel] = useState(false);
+  const [modelFormat, setModelFormat] = useState('pickle'); // State to store the detected model format
 
   const handleFileSelection = async (event, isReal) => {
     const file = event.target.files[0];
@@ -75,24 +82,95 @@ const Sidebar = ({
     }
   };
 
+  const handleModelUpload = async (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      try {
+        // Validate file size (max 50MB)
+        if (file.size > 5 * 1024 * 1024) { // Changed to 5MB for testing, can revert to 50MB later
+          alert('Model file is too large. Please upload a file smaller than 5MB.');
+          return;
+        }
+
+        // Validate file extension
+        const validExtensions = ['.pkl', '.pickle', '.joblib'];
+        const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+        if (!validExtensions.includes(fileExtension)) {
+          alert('Please upload a valid model file (.pkl, .pickle, or .joblib)');
+          return;
+        }
+
+        // Determine model format based on file extension
+        let modelFormat = 'pickle'; // default
+        if (fileExtension === '.joblib') {
+          modelFormat = 'joblib';
+        }
+
+        console.log('Reading model file:', file.name, 'Size:', file.size, 'bytes', 'Format:', modelFormat);
+
+        // Use FileReader to safely convert binary file to base64
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const base64String = e.target.result.split(',')[1]; // Extract base64 part from Data URL
+          setPretrainedModel(base64String);
+          setPretrainedModelName(file.name);
+          setUsePretrainedModel(true);
+          setModelFormat(modelFormat); // Store the detected format
+          console.log('Model file successfully read and base64 encoded.');
+        };
+        reader.onerror = (error) => {
+          console.error('FileReader error during model upload:', error);
+          alert('Error reading model file. Please ensure it is a valid UMAP or t-SNE model file.');
+        };
+        reader.readAsDataURL(file); // Read the file as a Data URL
+
+      } catch (error) {
+        console.error('Error in handleModelUpload:', error);
+        alert('Error reading model file. Please ensure it is a valid UMAP or t-SNE model file.');
+      }
+    }
+  };
+
   const handleVisualize = () => {
-    const params = {
-      method,
-      params: method === 'umap' 
-        ? { 
-            n_neighbors: nNeighbors, 
-            min_dist: minDist,
-            n_real_samples: nRealSamples,
-            n_synth_samples: nSynthSamples
-          }
-        : { 
-            perplexity: perplexity, 
-            early_exaggeration: earlyExaggeration,
-            n_real_samples: nRealSamples,
-            n_synth_samples: nSynthSamples
-          }
-    };
-    onVisualize(params);
+    if (method === 'pretrained') {
+      if (!usePretrainedModel || !pretrainedModel) {
+        alert('Please upload a pre-trained model first.');
+        return;
+      }
+      // Use pre-trained model
+      const params = {
+        method: 'umap', // Default to UMAP, could be enhanced to detect from model
+        pretrainedModel,
+        modelFormat: modelFormat, // Use the detected format
+        params: {
+          pretrained_model: true,
+          model_format: modelFormat,
+          n_real_samples: nRealSamples,
+          n_synth_samples: nSynthSamples,
+          fine_tune: fineTuneModel
+        }
+      };
+      onVisualize(params);
+    } else {
+      // Use regular training
+      const params = {
+        method,
+        params: method === 'umap' 
+          ? { 
+              n_neighbors: nNeighbors, 
+              min_dist: minDist,
+              n_real_samples: nRealSamples,
+              n_synth_samples: nSynthSamples
+            }
+          : { 
+              perplexity: perplexity, 
+              early_exaggeration: earlyExaggeration,
+              n_real_samples: nRealSamples,
+              n_synth_samples: nSynthSamples
+            }
+      };
+      onVisualize(params);
+    }
   };
 
   // Handlers for parameter changes (without auto-confirming)
@@ -329,10 +407,11 @@ const Sidebar = ({
                       >
                         <MenuItem value="umap">UMAP</MenuItem>
                         <MenuItem value="tsne">t-SNE</MenuItem>
+                        <MenuItem value="pretrained">Upload Pre-trained Model</MenuItem>
                       </Select>
                     </FormControl>
 
-                    {method === 'umap' ? (
+                    {method === 'umap' && (
                       <>
                         <Box>
                           <Typography variant="body2" gutterBottom>
@@ -362,7 +441,9 @@ const Sidebar = ({
                           />
                         </Box>
                       </>
-                    ) : (
+                    )}
+                    
+                    {method === 'tsne' && (
                       <>
                         <Box>
                           <Typography variant="body2" gutterBottom>
@@ -391,6 +472,86 @@ const Sidebar = ({
                           />
                         </Box>
                       </>
+                    )}
+                    
+                    {method === 'pretrained' && (
+                      <Box sx={{ 
+                        border: '2px dashed #e5e7eb', 
+                        borderRadius: 2, 
+                        p: 2, 
+                        textAlign: 'center',
+                        background: usePretrainedModel ? 
+                          'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)' : 
+                          'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                        borderColor: usePretrainedModel ? '#059669' : '#e5e7eb'
+                      }}>
+                        <Typography variant="body2" gutterBottom>
+                          {usePretrainedModel ? 'Model Uploaded' : 'Upload Pre-trained Model'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                          {usePretrainedModel ? 
+                            `Model: ${pretrainedModelName}` : 
+                            'Upload a pre-trained UMAP/t-SNE model (.pkl, .pickle, .joblib)'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block', fontSize: '0.7rem' }}>
+                          {!usePretrainedModel && 'Tip: Save your UMAP/t-SNE models using pickle.dump(model, file) or joblib.dump(model, file)'}
+                        </Typography>
+                        <Button
+                          variant={usePretrainedModel ? "outlined" : "contained"}
+                          component="label"
+                          fullWidth
+                          size="small"
+                          color={usePretrainedModel ? "success" : "warning"}
+                          sx={{ mb: 1 }}
+                        >
+                          {usePretrainedModel ? 'Model Loaded' : 'Choose Model File'}
+                          <input
+                            type="file"
+                            hidden
+                            accept=".pkl,.pickle,.joblib"
+                            onChange={handleModelUpload}
+                          />
+                        </Button>
+                        {usePretrainedModel && (
+                          <Box sx={{ mt: 2 }}>
+                            <FormControlLabel
+                              control={
+                                <Switch
+                                  checked={fineTuneModel}
+                                  onChange={(e) => setFineTuneModel(e.target.checked)}
+                                  size="small"
+                                />
+                              }
+                              label={
+                                <Typography variant="caption" color="text.secondary">
+                                  Adapt model to real data
+                                </Typography>
+                              }
+                            />
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontSize: '0.7rem' }}>
+                              {fineTuneModel ? 
+                                'Model will be re-trained on real data with same parameters before transforming both datasets' :
+                                'Model will be used directly without additional training'
+                              }
+                            </Typography>
+                          </Box>
+                        )}
+                        {usePretrainedModel && (
+                          <Button
+                            variant="text"
+                            size="small"
+                            onClick={() => {
+                              setUsePretrainedModel(false);
+                              setPretrainedModel(null);
+                              setPretrainedModelName('');
+                              setFineTuneModel(false);
+                              setModelFormat('pickle'); // Reset format
+                            }}
+                          >
+                            Remove Model
+                          </Button>
+                        )}
+                      </Box>
                     )}
 
                     <Box>
@@ -428,7 +589,7 @@ const Sidebar = ({
                   <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     {!parametersExpanded && (
                       <Typography variant="caption" color="text.secondary">
-                        {method.toUpperCase()} | {method === 'umap' ? `${nNeighbors} neighbors` : `${perplexity} perplexity`} | {nRealSamples}/{nSynthSamples} samples
+                        {method === 'pretrained' ? 'PRETRAINED MODEL' : method.toUpperCase()} | {method === 'umap' ? `${nNeighbors} neighbors` : method === 'tsne' ? `${perplexity} perplexity` : 'pre-trained'} | {nRealSamples}/{nSynthSamples} samples
                       </Typography>
                     )}
                     

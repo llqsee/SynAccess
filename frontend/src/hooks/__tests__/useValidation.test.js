@@ -65,7 +65,7 @@ describe('useValidation', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockValidationService.validateDatasets.mockResolvedValue(mockValidationResults);
+    mockValidationService.computeValidationStatistics.mockResolvedValue(mockValidationResults);
   });
 
   describe('runValidation', () => {
@@ -76,7 +76,7 @@ describe('useValidation', () => {
         await result.current.runValidation(mockRealData, mockSyntheticData);
       });
 
-      expect(mockValidationService.validateDatasets).toHaveBeenCalledWith(
+      expect(mockValidationService.computeValidationStatistics).toHaveBeenCalledWith(
         mockRealData,
         mockSyntheticData,
         { enableAdvancedTests: false }
@@ -98,7 +98,7 @@ describe('useValidation', () => {
         });
       });
 
-      expect(mockValidationService.validateDatasets).toHaveBeenCalledWith(
+      expect(mockValidationService.computeValidationStatistics).toHaveBeenCalledWith(
         mockRealData,
         mockSyntheticData,
         {
@@ -117,11 +117,11 @@ describe('useValidation', () => {
 
       expect(result.current.validationError).toBe('Both real and synthetic datasets are required for validation');
       expect(result.current.validating).toBe(false);
-      expect(mockValidationService.validateDatasets).not.toHaveBeenCalled();
+      expect(mockValidationService.computeValidationStatistics).not.toHaveBeenCalled();
     });
 
     it('should handle validation service errors', async () => {
-      mockValidationService.validateDatasets.mockRejectedValue(new Error('Validation service error'));
+      mockValidationService.computeValidationStatistics.mockRejectedValue(new Error('Validation service error'));
 
       const { result } = renderHook(() => useValidation());
 
@@ -152,7 +152,7 @@ describe('useValidation', () => {
           }
         }
       };
-      mockValidationService.validateDatasets.mockResolvedValue(mockResultsWithCritical);
+      mockValidationService.computeValidationStatistics.mockResolvedValue(mockResultsWithCritical);
 
       const { result } = renderHook(() => useValidation());
 
@@ -227,7 +227,7 @@ describe('useValidation', () => {
         ...mockValidationResults,
         summary: { totalTests: 10, passed: 10, warnings: 0, failures: 0, critical: 0 }
       };
-      mockValidationService.validateDatasets.mockResolvedValue(excellentResults);
+      mockValidationService.computeValidationStatistics.mockResolvedValue(excellentResults);
 
       const { result } = renderHook(() => useValidation());
 
@@ -252,7 +252,7 @@ describe('useValidation', () => {
         ...mockValidationResults,
         summary: { totalTests: 10, passed: 3, warnings: 2, failures: 3, critical: 2 }
       };
-      mockValidationService.validateDatasets.mockResolvedValue(poorResults);
+      mockValidationService.computeValidationStatistics.mockResolvedValue(poorResults);
 
       const { result } = renderHook(() => useValidation());
 
@@ -310,7 +310,7 @@ describe('useValidation', () => {
   describe('state management', () => {
     it('should set validating to true during validation', async () => {
       // Mock a delayed response
-      mockValidationService.validateDatasets.mockImplementation(() => 
+      mockValidationService.computeValidationStatistics.mockImplementation(() => 
         new Promise(resolve => setTimeout(() => resolve(mockValidationResults), 100))
       );
 

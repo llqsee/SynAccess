@@ -1,89 +1,172 @@
-// Comprehensive Data Validation and Benchmarking Service
+// Raw Data Validation and Statistics Service
+// This service only computes raw statistics and test results
+// All interpretation, severity assessment, and recommendations are handled by the AI agent
 import { classifyColumnType } from '../utils/dataUtils';
 
 export class ValidationService {
   constructor() {
     this.validationResults = null;
-    this.severity_thresholds = {
-      CRITICAL: 0.8,   // 80%+ difference
-      HIGH: 0.5,       // 50%+ difference  
-      MEDIUM: 0.3,     // 30%+ difference
-      LOW: 0.1         // 10%+ difference
+    
+    // Optimal sample sizes for different tests
+    this.optimal_sample_sizes = {
+      ks_test: 1000,        // KS test optimal size
+      t_test: 500,          // t-test optimal size
+      chi_square: 1000,     // Chi-square optimal size
+      correlation: 500,      // Correlation analysis optimal size
+      outlier: 2000,        // Outlier detection optimal size
+      range: 2000,          // Range validation optimal size
+      distribution: 1500     // Distribution tests optimal size
+    };
+    
+    // Minimum sample sizes for meaningful tests
+    this.min_sample_sizes = {
+      ks_test: 30,
+      t_test: 20,
+      chi_square: 50,
+      correlation: 30,
+      outlier: 50,
+      range: 10,
+      distribution: 30
+    };
+    
+    // Multiple sampling runs for robust results
+    this.multiple_sampling_runs = {
+      ks_test: 5,        // Run KS test 5 times with different samples
+      t_test: 3,         // Run t-test 3 times
+      chi_square: 3,     // Run chi-square 3 times
+      correlation: 1,    // Correlation analysis (single run due to complexity)
+      outlier: 3,        // Run outlier detection 3 times
+      range: 1,          // Range validation (single run)
+      distribution: 1    // Distribution tests (single run)
     };
   }
 
   /**
-   * Main validation function that runs all tests
+   * Main validation function that computes raw statistics
+   * Structured for AI analysis with clear sections for Executive Summary, Key Findings, etc.
    */
-  async validateDatasets(realData, syntheticData, options = {}) {
+  async computeValidationStatistics(realData, syntheticData, options = {}) {
     const startTime = performance.now();
     
     try {
       const results = {
         timestamp: new Date().toISOString(),
-        summary: {
-          totalTests: 0,
-          passed: 0,
-          warnings: 0,
-          failures: 0,
-          critical: 0
+        datasetInfo: this.getDatasetInfo(realData, syntheticData),
+        processingTime: 0,
+        
+        // Structured sections for AI analysis
+        executiveSummary: {
+          datasetOverview: this.getDatasetOverview(realData, syntheticData),
+          overallAssessment: this.getOverallAssessment(realData, syntheticData)
         },
-        tests: {},
-        recommendations: [],
-        processingTime: 0
+        
+        keyFindings: {
+          statisticalTests: {},
+          distributionAnalysis: {},
+          correlationAnalysis: {},
+          qualityMetrics: {}
+        },
+        
+        statisticalQuality: {
+          testResults: {},
+          significanceLevels: {},
+          effectSizes: {}
+        },
+        
+        practicalUsefulness: {
+          dataUtility: {},
+          privacyProtection: {},
+          domainSpecific: {}
+        },
+        
+        criticalIssues: [],
+        
+        recommendations: {
+          dataQuality: [],
+          privacyEnhancement: [],
+          utilityImprovement: []
+        },
+        
+        riskAssessment: {
+          overallRisk: 'UNKNOWN',
+          riskFactors: {},
+          justification: ''
+        },
+        
+        // Raw test data for detailed analysis
+        tests: {}
       };
 
-      // Basic dataset info
-      results.datasetInfo = this.getDatasetInfo(realData, syntheticData);
-      
-      // Run validation tests with yields to prevent UI blocking
-      console.log('Running range validation...');
-      results.tests.rangeValidation = this.runRangeTests(realData, syntheticData);
-      await this.yield(); // Yield control back to UI
-      
-      console.log('Running distribution validation...');
-      results.tests.distributionValidation = this.runDistributionTests(realData, syntheticData);
+      // Compute and structure range statistics
+      const rangeStats = this.computeRangeStatistics(realData, syntheticData);
+      results.tests.rangeValidation = rangeStats;
+      results.keyFindings.statisticalTests.rangeAnalysis = this.extractRangeFindings(rangeStats);
       await this.yield();
       
-      console.log('Running correlation validation...');
-      results.tests.correlationValidation = this.runCorrelationTests(realData, syntheticData);
+      // Compute and structure distribution statistics
+      const distributionStats = this.computeDistributionStatistics(realData, syntheticData);
+      results.tests.distributionValidation = distributionStats;
+      results.keyFindings.distributionAnalysis = this.extractDistributionFindings(distributionStats);
+      results.statisticalQuality.testResults.distribution = this.extractDistributionQuality(distributionStats);
       await this.yield();
       
-      console.log('Running statistical validation...');
-      results.tests.statisticalValidation = this.runStatisticalTests(realData, syntheticData);
+      // Compute and structure correlation statistics
+      const correlationStats = this.computeCorrelationStatistics(realData, syntheticData);
+      results.tests.correlationValidation = correlationStats;
+      results.keyFindings.correlationAnalysis = this.extractCorrelationFindings(correlationStats);
+      results.statisticalQuality.testResults.correlation = this.extractCorrelationQuality(correlationStats);
       await this.yield();
       
-      console.log('Running outlier validation...');
-      results.tests.outlierValidation = this.runOutlierTests(realData, syntheticData);
+      // Compute and structure statistical tests
+      const statisticalTests = this.computeStatisticalTests(realData, syntheticData);
+      results.tests.statisticalValidation = statisticalTests;
+      results.statisticalQuality.testResults.statistical = this.extractStatisticalQuality(statisticalTests);
       await this.yield();
       
-      console.log('Calculating quality metrics...');
-      results.tests.qualityMetrics = this.calculateQualityMetrics(realData, syntheticData);
+      // Compute and structure outlier statistics
+      const outlierStats = this.computeOutlierStatistics(realData, syntheticData);
+      results.tests.outlierValidation = outlierStats;
+      results.keyFindings.statisticalTests.outlierAnalysis = this.extractOutlierFindings(outlierStats);
+      await this.yield();
+      
+      // Compute and structure quality metrics
+      const qualityMetrics = this.computeQualityMetrics(realData, syntheticData);
+      results.tests.qualityMetrics = qualityMetrics;
+      results.keyFindings.qualityMetrics = this.extractQualityFindings(qualityMetrics);
+      results.practicalUsefulness.dataUtility = this.extractUtilityMetrics(qualityMetrics);
       await this.yield();
 
       // Additional advanced tests if enabled
       if (options.enableAdvancedTests) {
-        console.log('Running advanced tests...');
-        results.tests.jennrichTest = this.runJennrichTest(realData, syntheticData);
+        const jennrichTest = this.computeJennrichTest(realData, syntheticData);
+        results.tests.jennrichTest = jennrichTest;
+        results.statisticalQuality.testResults.jennrich = this.extractJennrichQuality(jennrichTest);
         await this.yield();
-        results.tests.privacyTests = this.runPrivacyTests(realData, syntheticData);
+        
+        const privacyTests = this.computePrivacyStatistics(realData, syntheticData);
+        results.tests.privacyTests = privacyTests;
+        results.practicalUsefulness.privacyProtection = this.extractPrivacyMetrics(privacyTests);
         await this.yield();
       }
 
-      console.log('Finalizing results...');
+      // Calculate overall risk assessment
+      results.riskAssessment = this.calculateOverallRisk(results);
+      
+      // Generate initial recommendations
+      results.recommendations = this.generateInitialRecommendations(results);
+      
+      // Identify critical issues
+      results.criticalIssues = this.identifyCriticalIssues(results);
+      
       // Calculate summary statistics
       this.calculateSummary(results);
-      
-      // Generate recommendations
-      results.recommendations = this.generateRecommendations(results);
       
       results.processingTime = Math.round(performance.now() - startTime);
       this.validationResults = results;
       
       return results;
     } catch (error) {
-      console.error('Validation error:', error);
-      throw new Error(`Validation failed: ${error.message}`);
+      throw new Error(`Validation computation failed: ${error.message}`);
     }
   }
 
@@ -120,9 +203,9 @@ export class ValidationService {
   }
 
   /**
-   * Range validation tests - check bounds and domains
+   * Compute range statistics - no rule-based decisions
    */
-  runRangeTests(realData, syntheticData) {
+  computeRangeStatistics(realData, syntheticData) {
     const tests = [];
     
     realData.headers.forEach((header, colIndex) => {
@@ -138,8 +221,22 @@ export class ValidationService {
       });
 
       if (dataType === 'numeric') {
-        const realStats = this.calculateNumericStats(realValues);
-        const synthStats = this.calculateNumericStats(synthValues);
+        const realClean = realValues.filter(v => v !== null && v !== undefined && !isNaN(v));
+        const synthClean = synthValues.filter(v => v !== null && v !== undefined && !isNaN(v));
+        
+        if (realClean.length < 5 || synthClean.length < 5) {
+          return; // Skip if insufficient data
+        }
+        
+        // Get optimal sample sizes for range validation
+        const sampling = this.getOptimalSampleSize('range', realClean.length, synthClean.length);
+        
+        // Sample data for range validation
+        const realSampled = this.sampleDataRandomly(realClean, sampling.realSampleSize, 42);
+        const synthSampled = this.sampleDataRandomly(synthClean, sampling.synthSampleSize, 42);
+        
+        const realStats = this.calculateNumericStats(realSampled);
+        const synthStats = this.calculateNumericStats(synthSampled);
         
         const test = {
           column: header,
@@ -147,42 +244,31 @@ export class ValidationService {
           dataType: 'numeric',
           real: realStats,
           synthetic: synthStats,
-          issues: [],
-          severity: 'PASS'
+          statistics: {
+            rangeDiff: Math.abs((realStats.max - realStats.min) - (synthStats.max - synthStats.min)) / (realStats.max - realStats.min),
+            minDiff: Math.abs(realStats.min - synthStats.min),
+            maxDiff: Math.abs(realStats.max - synthStats.max),
+            meanDiff: Math.abs(realStats.mean - synthStats.mean),
+            stdDiff: Math.abs(realStats.std - synthStats.std)
+          },
+          sampling: {
+            method: sampling.samplingMethod,
+            realOriginalSize: realClean.length,
+            synthOriginalSize: synthClean.length,
+            realSampleSize: realSampled.length,
+            synthSampleSize: synthSampled.length,
+            samplingRatio: sampling.samplingRatio
+          }
         };
-
-        // Range coverage test
-        const realRange = realStats.max - realStats.min;
-        const synthRange = synthStats.max - synthStats.min;
-        const rangeDiff = Math.abs(realRange - synthRange) / realRange;
-        
-        if (rangeDiff > this.severity_thresholds.CRITICAL) {
-          test.issues.push({
-            type: 'range_mismatch',
-            severity: 'CRITICAL',
-            message: `Synthetic data range (${synthRange.toFixed(3)}) differs significantly from real data range (${realRange.toFixed(3)})`,
-            impact: 'High - May indicate poor data generation quality'
-          });
-          test.severity = 'CRITICAL';
-        }
-
-        // Bounds violation test
-        if (synthStats.min < realStats.min || synthStats.max > realStats.max) {
-          const violation = synthStats.min < realStats.min ? 'minimum' : 'maximum';
-          test.issues.push({
-            type: 'bounds_violation',
-            severity: 'HIGH',
-            message: `Synthetic data violates ${violation} bounds: real [${realStats.min.toFixed(3)}, ${realStats.max.toFixed(3)}], synthetic [${synthStats.min.toFixed(3)}, ${synthStats.max.toFixed(3)}]`,
-            impact: 'Medium - Synthetic data exceeds realistic bounds'
-          });
-          if (test.severity === 'PASS') test.severity = 'HIGH';
-        }
 
         tests.push(test);
       } else {
-        // Categorical range tests
+        // Categorical range statistics
         const realUnique = new Set(realValues.filter(v => v !== null && v !== undefined));
         const synthUnique = new Set(synthValues.filter(v => v !== null && v !== undefined));
+        
+        const newCategories = [...synthUnique].filter(v => !realUnique.has(v));
+        const missingCategories = [...realUnique].filter(v => !synthUnique.has(v));
         
         const test = {
           column: header,
@@ -196,54 +282,38 @@ export class ValidationService {
             uniqueValues: synthUnique.size, 
             values: Array.from(synthUnique).slice(0, 10)
           },
-          issues: [],
-          severity: 'PASS'
+          statistics: {
+            newCategories: newCategories.length,
+            missingCategories: missingCategories.length,
+            categoryOverlap: realUnique.size - missingCategories.length,
+            overlapRatio: (realUnique.size - missingCategories.length) / realUnique.size
+          }
         };
-
-        // Check for new categories in synthetic data
-        const newCategories = [...synthUnique].filter(v => !realUnique.has(v));
-        if (newCategories.length > 0) {
-          test.issues.push({
-            type: 'new_categories',
-            severity: 'HIGH',
-            message: `Synthetic data contains ${newCategories.length} new categories not in real data: ${newCategories.slice(0, 5).join(', ')}${newCategories.length > 5 ? '...' : ''}`,
-            impact: 'High - May indicate data leakage or poor category handling'
-          });
-          test.severity = 'HIGH';
-        }
-
-        // Check for missing categories
-        const missingCategories = [...realUnique].filter(v => !synthUnique.has(v));
-        if (missingCategories.length > 0) {
-          test.issues.push({
-            type: 'missing_categories',
-            severity: 'MEDIUM',
-            message: `Synthetic data missing ${missingCategories.length} categories from real data: ${missingCategories.slice(0, 5).join(', ')}${missingCategories.length > 5 ? '...' : ''}`,
-            impact: 'Medium - Reduced diversity in synthetic data'
-          });
-          if (test.severity === 'PASS') test.severity = 'MEDIUM';
-        }
 
         tests.push(test);
       }
     });
 
     return {
-      testType: 'Range and Domain Validation',
-      description: 'Validates data ranges, bounds, and categorical domains',
+      testType: 'Range and Domain Statistics',
+      description: 'Raw statistics for data ranges, bounds, and categorical domains',
       tests,
-      summary: this.summarizeTests(tests)
+      summary: {
+        total: tests.length,
+        numericTests: tests.filter(t => t.dataType === 'numeric').length,
+        categoricalTests: tests.filter(t => t.dataType === 'categorical').length
+      }
     };
   }
 
   /**
-   * Distribution validation tests
+   * Compute distribution statistics - no rule-based decisions
    */
-  runDistributionTests(realData, syntheticData) {
+  computeDistributionStatistics(realData, syntheticData) {
     const tests = [];
     
-    // Safety limit for very wide datasets (can be increased as needed)
-    const maxColumns = 100; // Increased from 20 to 100
+    // Safety limit for very wide datasets
+    const maxColumns = 100;
     const numColumns = Math.min(realData.headers.length, syntheticData.headers.length, maxColumns);
     
     for (let colIndex = 0; colIndex < numColumns; colIndex++) {
@@ -259,26 +329,30 @@ export class ValidationService {
       });
 
       if (dataType === 'numeric') {
-        const test = this.runKSTest(realValues, synthValues, header);
+        const test = this.computeKSTest(realValues, synthValues, header);
         tests.push(test);
       } else {
-        const test = this.runChiSquareTest(realValues, synthValues, header);
+        const test = this.computeChiSquareTest(realValues, synthValues, header);
         tests.push(test);
       }
     }
 
     return {
-      testType: 'Marginal Distribution Tests',
-      description: `Statistical tests comparing distributions between real and synthetic data (${numColumns}/${Math.min(realData.headers.length, syntheticData.headers.length)} columns processed)`,
+      testType: 'Distribution Statistics',
+      description: `Raw distribution statistics comparing real and synthetic data (${numColumns}/${Math.min(realData.headers.length, syntheticData.headers.length)} columns processed)`,
       tests,
-      summary: this.summarizeTests(tests)
+      summary: {
+        total: tests.length,
+        numericTests: tests.filter(t => t.type === 'ks_test').length,
+        categoricalTests: tests.filter(t => t.type === 'chi_square_test').length
+      }
     };
   }
 
   /**
-   * Kolmogorov-Smirnov test for numeric distributions
+   * Compute KS test statistics - no rule-based decisions
    */
-  runKSTest(realValues, synthValues, column) {
+  computeKSTest(realValues, synthValues, column) {
     const realClean = realValues.filter(v => v !== null && v !== undefined && !isNaN(v));
     const synthClean = synthValues.filter(v => v !== null && v !== undefined && !isNaN(v));
     
@@ -286,53 +360,45 @@ export class ValidationService {
       return {
         column,
         type: 'ks_test',
-        result: 'SKIP',
+        result: 'INSUFFICIENT_DATA',
         reason: 'Insufficient numeric data',
-        severity: 'SKIP'
+        statistics: null
       };
     }
 
+    // Use multiple sampling iterations for robust results
+    return this.runMultipleSamplingIterations('ks_test', realClean, synthClean, column, (realSampled, synthSampled, col) => {
     // Sort values
-    const realSorted = [...realClean].sort((a, b) => a - b);
-    const synthSorted = [...synthClean].sort((a, b) => a - b);
+      const realSorted = [...realSampled].sort((a, b) => a - b);
+      const synthSorted = [...synthSampled].sort((a, b) => a - b);
     
     // Calculate empirical CDFs and KS statistic
     const ksStatistic = this.calculateKSStatistic(realSorted, synthSorted);
     
-    // Critical value for α = 0.05
+      // Critical value for α = 0.05 (adjusted for sample size)
     const n1 = realSorted.length;
     const n2 = synthSorted.length;
     const criticalValue = 1.36 * Math.sqrt((n1 + n2) / (n1 * n2));
     
-    const test = {
-      column,
+      return {
+        column: col,
       type: 'ks_test',
       statistic: ksStatistic,
       criticalValue,
       pValueApprox: ksStatistic > criticalValue ? '< 0.05' : '> 0.05',
-      result: ksStatistic > criticalValue ? 'REJECT' : 'ACCEPT',
-      issues: [],
-      severity: 'PASS'
-    };
-
-    if (ksStatistic > criticalValue) {
-      const severityLevel = ksStatistic > (criticalValue * 2) ? 'HIGH' : 'MEDIUM';
-      test.issues.push({
-        type: 'distribution_mismatch',
-        severity: severityLevel,
-        message: `Distributions significantly different (KS = ${ksStatistic.toFixed(4)}, critical = ${criticalValue.toFixed(4)})`,
-        impact: severityLevel === 'HIGH' ? 'High - Major distribution differences' : 'Medium - Notable distribution differences'
-      });
-      test.severity = severityLevel;
-    }
-
-    return test;
+        sampleSizes: {
+          real: n1,
+          synthetic: n2
+        },
+        effectSize: ksStatistic / criticalValue
+      };
+    });
   }
 
   /**
-   * Chi-square test for categorical distributions
+   * Compute Chi-square test statistics - no rule-based decisions
    */
-  runChiSquareTest(realValues, synthValues, column) {
+  computeChiSquareTest(realValues, synthValues, column) {
     const realClean = realValues.filter(v => v !== null && v !== undefined);
     const synthClean = synthValues.filter(v => v !== null && v !== undefined);
     
@@ -340,48 +406,48 @@ export class ValidationService {
       return {
         column,
         type: 'chi_square_test',
-        result: 'SKIP',
+        result: 'INSUFFICIENT_DATA',
         reason: 'Insufficient categorical data',
-        severity: 'SKIP'
+        statistics: null
       };
     }
 
+    // Get optimal sample sizes for Chi-square test
+    const sampling = this.getOptimalSampleSize('chi_square', realClean.length, synthClean.length);
+    
+    // Sample data if needed
+    const realSampled = this.sampleDataRandomly(realClean, sampling.realSampleSize, 42);
+    const synthSampled = this.sampleDataRandomly(synthClean, sampling.synthSampleSize, 42);
+
     // Get frequency distributions
-    const realFreq = this.getFrequencyDistribution(realClean);
-    const synthFreq = this.getFrequencyDistribution(synthClean);
+    const realFreq = this.getFrequencyDistribution(realSampled);
+    const synthFreq = this.getFrequencyDistribution(synthSampled);
     
     // Calculate chi-square statistic
     const chiSquare = this.calculateChiSquare(realFreq, synthFreq);
     
-    const test = {
+    return {
       column,
       type: 'chi_square_test',
       statistic: chiSquare.statistic,
       degreesOfFreedom: chiSquare.df,
-      result: chiSquare.significant ? 'REJECT' : 'ACCEPT',
       realDistribution: realFreq,
       syntheticDistribution: synthFreq,
-      issues: [],
-      severity: 'PASS'
+      sampling: {
+        method: sampling.samplingMethod,
+        realOriginalSize: realClean.length,
+        synthOriginalSize: synthClean.length,
+        realSampleSize: realSampled.length,
+        synthSampleSize: synthSampled.length,
+        samplingRatio: sampling.samplingRatio
+      }
     };
-
-    if (chiSquare.significant) {
-      test.issues.push({
-        type: 'categorical_distribution_mismatch',
-        severity: 'MEDIUM',
-        message: `Categorical distributions significantly different (χ² = ${chiSquare.statistic.toFixed(4)}, df = ${chiSquare.df})`,
-        impact: 'Medium - Category proportions differ between real and synthetic data'
-      });
-      test.severity = 'MEDIUM';
-    }
-
-    return test;
   }
 
   /**
    * Correlation structure validation
    */
-  runCorrelationTests(realData, syntheticData) {
+  computeCorrelationStatistics(realData, syntheticData) {
     const realNumericCols = [];
     const synthNumericCols = [];
     
@@ -397,7 +463,7 @@ export class ValidationService {
         const realValues = this.extractColumnValues(realData.data, colIndex).filter(v => !isNaN(v));
         const synthValues = this.extractColumnValues(syntheticData.data, colIndex).filter(v => !isNaN(v));
         
-        if (realValues.length > 10 && synthValues.length > 10) { // Minimum sample size
+        if (realValues.length > 10 && synthValues.length > 10) {
           realNumericCols.push({ header, index: colIndex, values: realValues });
           synthNumericCols.push({ header, index: colIndex, values: synthValues });
         }
@@ -407,32 +473,67 @@ export class ValidationService {
     if (realNumericCols.length < 2) {
       return {
         testType: 'Correlation Structure Validation',
-        description: 'Validates correlation structures between variables',
+        description: 'Element-wise comparison of correlation matrices',
         result: 'SKIP',
-        reason: 'Insufficient numeric columns for correlation analysis',
-        summary: { total: 0, passed: 0, warnings: 0, failures: 0 }
+        reason: 'Insufficient numeric variables (minimum 2 required)',
+        status: 'SKIP',
+        severity: 'LOW'
       };
     }
 
-    // Calculate correlation matrices
-    const realCorr = this.calculateCorrelationMatrix(realNumericCols);
-    const synthCorr = this.calculateCorrelationMatrix(synthNumericCols);
+    // Get optimal sample sizes for correlation analysis
+    const sampling = this.getOptimalSampleSize('correlation', realData.data.length, syntheticData.data.length);
+    
+    // Sample data for correlation analysis
+    const realSampled = this.sampleDataRandomly(realData.data, sampling.realSampleSize, 42);
+    const synthSampled = this.sampleDataRandomly(syntheticData.data, sampling.synthSampleSize, 42);
+    
+    // Rebuild numeric columns with sampled data
+    const realNumericColsSampled = [];
+    const synthNumericColsSampled = [];
+    
+    realData.headers.forEach((header, colIndex) => {
+      const dataType = classifyColumnType(colIndex, {
+        data: [...realSampled, ...synthSampled],
+        headers: realData.headers,
+        labels: [...Array(realSampled.length).fill('Real'), ...Array(synthSampled.length).fill('Synthetic')]
+      });
+      
+      if (dataType === 'numeric') {
+        const realValues = this.extractColumnValues(realSampled, colIndex).filter(v => !isNaN(v));
+        const synthValues = this.extractColumnValues(synthSampled, colIndex).filter(v => !isNaN(v));
+        
+        if (realValues.length > 10 && synthValues.length > 10) {
+          realNumericColsSampled.push({ header, index: colIndex, values: realValues });
+          synthNumericColsSampled.push({ header, index: colIndex, values: synthValues });
+        }
+      }
+    });
+
+    const realCorr = this.calculateCorrelationMatrix(realNumericColsSampled);
+    const synthCorr = this.calculateCorrelationMatrix(synthNumericColsSampled);
     
     // Compare correlation matrices
     const corrComparison = this.compareCorrelationMatrices(realCorr, synthCorr);
     
     return {
       testType: 'Correlation Structure Validation',
-      description: 'Element-wise comparison of correlation matrices (complements Jennrich statistical test)',
+      description: 'Element-wise comparison of correlation matrices (raw statistics only)',
       realCorrelations: realCorr,
       syntheticCorrelations: synthCorr,
       comparison: corrComparison,
       note: 'This provides detailed element-wise correlation comparison. For statistical significance testing of correlation matrix equality, see Jennrich test results.',
+      sampling: {
+        method: sampling.samplingMethod,
+        realOriginalSize: realData.data.length,
+        synthOriginalSize: syntheticData.data.length,
+        realSampleSize: realSampled.length,
+        synthSampleSize: synthSampled.length,
+        samplingRatio: sampling.samplingRatio
+      },
       summary: {
         total: 1,
-        passed: corrComparison.severity === 'PASS' ? 1 : 0,
-        warnings: corrComparison.severity === 'MEDIUM' ? 1 : 0,
-        failures: corrComparison.severity === 'HIGH' || corrComparison.severity === 'CRITICAL' ? 1 : 0
+        correlationComparisons: 1
       }
     };
   }
@@ -440,7 +541,7 @@ export class ValidationService {
   /**
    * Statistical validation tests (means, variances, etc.)
    */
-  runStatisticalTests(realData, syntheticData) {
+  computeStatisticalTests(realData, syntheticData) {
     const tests = [];
     
     realData.headers.forEach((header, colIndex) => {
@@ -457,7 +558,7 @@ export class ValidationService {
         const synthValues = this.extractColumnValues(syntheticData.data, colIndex).filter(v => !isNaN(v));
         
         if (realValues.length > 5 && synthValues.length > 5) {
-          const test = this.runTTest(realValues, synthValues, header);
+          const test = this.computeTTest(realValues, synthValues, header);
           tests.push(test);
         }
       }
@@ -465,16 +566,19 @@ export class ValidationService {
 
     return {
       testType: 'Statistical Significance Tests',
-      description: "Welch's t-tests comparing means between real and synthetic data (handles unequal variances)",
+      description: "Welch's t-tests comparing means between real and synthetic data (raw statistics only)",
       tests,
-      summary: this.summarizeTests(tests)
+      summary: {
+        total: tests.length,
+        tTests: tests.filter(t => t.type === 'welch_t_test').length
+      }
     };
   }
 
   /**
-   * Outlier detection and comparison
+   * Outlier detection and comparison with dynamic sampling
    */
-  runOutlierTests(realData, syntheticData) {
+  computeOutlierStatistics(realData, syntheticData) {
     const tests = [];
     
     realData.headers.forEach((header, colIndex) => {
@@ -490,72 +594,74 @@ export class ValidationService {
         const realValues = this.extractColumnValues(realData.data, colIndex).filter(v => !isNaN(v));
         const synthValues = this.extractColumnValues(syntheticData.data, colIndex).filter(v => !isNaN(v));
         
-        const realOutliers = this.detectOutliers(realValues);
-        const synthOutliers = this.detectOutliers(synthValues);
+        if (realValues.length < 10 || synthValues.length < 10) {
+          return; // Skip if insufficient data
+        }
+        
+        // Get optimal sample sizes for outlier detection
+        const sampling = this.getOptimalSampleSize('outlier', realValues.length, synthValues.length);
+        
+        // Sample data for outlier detection
+        const realSampled = this.sampleDataRandomly(realValues, sampling.realSampleSize, 42);
+        const synthSampled = this.sampleDataRandomly(synthValues, sampling.synthSampleSize, 42);
+        
+        const realOutliers = this.detectOutliers(realSampled);
+        const synthOutliers = this.detectOutliers(synthSampled);
         
         const test = {
           column: header,
           type: 'outlier_test',
           real: {
             outlierCount: realOutliers.outliers.length,
-            outlierPercentage: (realOutliers.outliers.length / realValues.length) * 100,
+            outlierPercentage: (realOutliers.outliers.length / realSampled.length) * 100,
             outliers: realOutliers.outliers.slice(0, 5) // First 5 for display
           },
           synthetic: {
             outlierCount: synthOutliers.outliers.length,
-            outlierPercentage: (synthOutliers.outliers.length / synthValues.length) * 100,
+            outlierPercentage: (synthOutliers.outliers.length / synthSampled.length) * 100,
             outliers: synthOutliers.outliers.slice(0, 5)
           },
-          issues: [],
-          severity: 'PASS'
+          sampling: {
+            method: sampling.samplingMethod,
+            realOriginalSize: realValues.length,
+            synthOriginalSize: synthValues.length,
+            realSampleSize: realSampled.length,
+            synthSampleSize: synthSampled.length,
+            samplingRatio: sampling.samplingRatio
+          }
         };
-
-        const outlierDiff = Math.abs(test.real.outlierPercentage - test.synthetic.outlierPercentage);
-        
-        if (outlierDiff > 5) { // 5% difference threshold
-          const severity = outlierDiff > 15 ? 'HIGH' : 'MEDIUM';
-          test.issues.push({
-            type: 'outlier_pattern_mismatch',
-            severity,
-            message: `Outlier rates differ significantly: real ${test.real.outlierPercentage.toFixed(1)}%, synthetic ${test.synthetic.outlierPercentage.toFixed(1)}%`,
-            impact: severity === 'HIGH' ? 'High - Major outlier pattern differences' : 'Medium - Notable outlier pattern differences'
-          });
-          test.severity = severity;
-        }
 
         tests.push(test);
       }
     });
 
     return {
-      testType: 'Outlier Pattern Validation',
-      description: 'Compares outlier patterns between real and synthetic data',
+      testType: 'Outlier Detection and Comparison',
+      description: 'Compares outlier patterns between real and synthetic data (raw statistics only)',
       tests,
-      summary: this.summarizeTests(tests)
+      summary: {
+        total: tests.length,
+        numericTests: tests.filter(t => t.type === 'outlier_test').length
+      }
     };
   }
 
   /**
-   * Overall quality metrics
+   * Raw data completeness and consistency statistics (no rule-based assessment)
    */
-  calculateQualityMetrics(realData, syntheticData) {
-    const metrics = {
-      completeness: this.calculateCompleteness(realData, syntheticData),
-      consistency: this.calculateConsistency(realData, syntheticData),
-      utility: this.calculateUtility(realData, syntheticData),
-      privacy: this.calculatePrivacyMetrics(realData, syntheticData)
-    };
+  computeQualityMetrics(realData, syntheticData) {
+    const completeness = this.computeCompleteness(realData, syntheticData);
+    const consistency = this.computeConsistency(realData, syntheticData);
 
     return {
-      testType: 'Overall Quality Metrics',
-      description: 'Comprehensive quality assessment of synthetic data',
-      metrics,
-      overallScore: this.calculateOverallScore(metrics),
+      testType: 'Data Completeness and Consistency Statistics',
+      description: 'Raw statistics for data completeness and type consistency (no rule-based assessment)',
+      completeness,
+      consistency,
       summary: {
-        total: 4,
-        passed: Object.values(metrics).filter(m => m.score > 0.7).length,
-        warnings: Object.values(metrics).filter(m => m.score >= 0.5 && m.score <= 0.7).length,
-        failures: Object.values(metrics).filter(m => m.score < 0.5).length
+        total: 2,
+        completenessTests: 1,
+        consistencyTests: 1
       }
     };
   }
@@ -684,71 +790,408 @@ export class ValidationService {
     };
   }
 
-  summarizeTests(tests) {
-    return {
-      total: tests.length,
-      passed: tests.filter(t => t.severity === 'PASS').length,
-      warnings: tests.filter(t => t.severity === 'MEDIUM' || t.severity === 'LOW').length,
-      failures: tests.filter(t => t.severity === 'HIGH' || t.severity === 'CRITICAL').length
-    };
-  }
-
   calculateSummary(results) {
     let totalTests = 0;
-    let passed = 0;
-    let warnings = 0;
-    let failures = 0;
-    let critical = 0;
+    let testCategories = 0;
 
     Object.values(results.tests).forEach(testGroup => {
       if (testGroup.summary) {
         totalTests += testGroup.summary.total || 0;
-        passed += testGroup.summary.passed || 0;
-        warnings += testGroup.summary.warnings || 0;
-        failures += testGroup.summary.failures || 0;
+        testCategories += 1;
       }
     });
 
-    results.summary = { totalTests, passed, warnings, failures, critical };
+    results.summary = { 
+      totalTests, 
+      testCategories,
+      timestamp: new Date().toISOString()
+    };
   }
 
-  generateRecommendations(results) {
-    const recommendations = [];
+  /**
+   * Extract dataset overview for Executive Summary
+   */
+  getDatasetOverview(realData, syntheticData) {
+    return {
+      realDataset: {
+        rows: realData.data.length,
+        columns: realData.headers.length,
+        fileName: realData.metadata?.fileName || 'Unknown'
+      },
+      syntheticDataset: {
+        rows: syntheticData.data.length,
+        columns: syntheticData.headers.length,
+        fileName: syntheticData.metadata?.fileName || 'Unknown'
+      },
+      sizeComparison: {
+        rowRatio: syntheticData.data.length / realData.data.length,
+        columnMatch: realData.headers.length === syntheticData.headers.length,
+        headerMatch: JSON.stringify(realData.headers) === JSON.stringify(syntheticData.headers)
+      }
+    };
+  }
+
+  /**
+   * Get overall assessment for Executive Summary
+   */
+  getOverallAssessment(realData, syntheticData) {
+    const realSize = realData.data.length;
+    const synthSize = syntheticData.data.length;
+    const sizeRatio = synthSize / realSize;
     
-    // Analyze results and generate specific recommendations
-    Object.values(results.tests).forEach(testGroup => {
-      if (testGroup.tests) {
-        testGroup.tests.forEach(test => {
-          if (test.issues) {
-            test.issues.forEach(issue => {
-              if (issue.severity === 'CRITICAL' || issue.severity === 'HIGH') {
-                recommendations.push({
-                  priority: issue.severity,
-                  category: test.type,
-                  column: test.column,
-                  recommendation: this.getRecommendationText(issue.type, test),
-                  impact: issue.impact
-                });
-              }
-            });
-          }
-        });
+    return {
+      datasetSize: {
+        real: realSize,
+        synthetic: synthSize,
+        ratio: sizeRatio,
+        assessment: sizeRatio >= 0.5 ? 'Adequate' : 'Small'
+      },
+      columnCompatibility: {
+        sameCount: realData.headers.length === syntheticData.headers.length,
+        sameHeaders: JSON.stringify(realData.headers) === JSON.stringify(syntheticData.headers),
+        assessment: realData.headers.length === syntheticData.headers.length ? 'Compatible' : 'Incompatible'
       }
-    });
-
-    return recommendations.slice(0, 10); // Top 10 recommendations
+    };
   }
 
-  getRecommendationText(issueType, test) {
-    const recommendations = {
-      'range_mismatch': `Consider adjusting data generation parameters for column '${test.column}' to better match the original data range`,
-      'bounds_violation': `Review data generation bounds for column '${test.column}' to prevent out-of-range values`,
-      'new_categories': `Remove or map new categories in column '${test.column}' to existing ones from the real data`,
-      'distribution_mismatch': `Fine-tune distribution parameters for column '${test.column}' to better match the original distribution`,
-      'outlier_pattern_mismatch': `Adjust outlier handling in your synthetic data generation for column '${test.column}'`
+  /**
+   * Extract key findings from range statistics
+   */
+  extractRangeFindings(rangeStats) {
+    if (!rangeStats || !rangeStats.tests) return {};
+    
+    const numericTests = rangeStats.tests.filter(t => t.dataType === 'numeric');
+    const categoricalTests = rangeStats.tests.filter(t => t.dataType === 'categorical');
+    
+    return {
+      numericVariables: {
+        total: numericTests.length,
+        significantDifferences: numericTests.filter(t => t.statistics?.rangeDiff > 0.1).length,
+        averageRangeDifference: numericTests.reduce((sum, t) => sum + (t.statistics?.rangeDiff || 0), 0) / numericTests.length || 0
+      },
+      categoricalVariables: {
+        total: categoricalTests.length,
+        perfectOverlap: categoricalTests.filter(t => t.statistics?.overlapRatio === 1).length,
+        averageOverlap: categoricalTests.reduce((sum, t) => sum + (t.statistics?.overlapRatio || 0), 0) / categoricalTests.length || 0
+      }
+    };
+  }
+
+  /**
+   * Extract key findings from distribution statistics
+   */
+  extractDistributionFindings(distributionStats) {
+    if (!distributionStats || !distributionStats.tests) return {};
+    
+    const ksTests = distributionStats.tests.filter(t => t.type === 'ks_test');
+    const chiSquareTests = distributionStats.tests.filter(t => t.type === 'chi_square_test');
+    
+    return {
+      kolmogorovSmirnov: {
+        total: ksTests.length,
+        significant: ksTests.filter(t => t.statistic > t.criticalValue).length,
+        averageStatistic: ksTests.reduce((sum, t) => sum + (t.statistic || 0), 0) / ksTests.length || 0
+      },
+      chiSquare: {
+        total: chiSquareTests.length,
+        significant: chiSquareTests.filter(t => t.statistic > 3.841).length, // α = 0.05
+        averageStatistic: chiSquareTests.reduce((sum, t) => sum + (t.statistic || 0), 0) / chiSquareTests.length || 0
+      }
+    };
+  }
+
+  /**
+   * Extract key findings from correlation statistics
+   */
+  extractCorrelationFindings(correlationStats) {
+    if (!correlationStats || correlationStats.result === 'SKIP') return {};
+    
+    return {
+      correlationMatrix: {
+        size: correlationStats.realCorrelations?.size || 0,
+        significantDifferences: correlationStats.comparison?.significantDifferences || 0,
+        averageDifference: correlationStats.comparison?.avgDifference || 0,
+        maxDifference: correlationStats.comparison?.maxDifference || 0
+      }
+    };
+  }
+
+  /**
+   * Extract key findings from quality metrics
+   */
+  extractQualityFindings(qualityMetrics) {
+    if (!qualityMetrics) return {};
+    
+    return {
+      completeness: {
+        realCompleteness: qualityMetrics.completeness?.realCompleteness || 0,
+        syntheticCompleteness: qualityMetrics.completeness?.syntheticCompleteness || 0,
+        ratio: qualityMetrics.completeness?.score || 0
+      },
+      consistency: {
+        consistentColumns: qualityMetrics.consistency?.consistentColumns || 0,
+        totalColumns: qualityMetrics.consistency?.totalColumns || 0,
+        ratio: qualityMetrics.consistency?.score || 0
+      }
+    };
+  }
+
+  /**
+   * Extract key findings from outlier statistics
+   */
+  extractOutlierFindings(outlierStats) {
+    if (!outlierStats || !outlierStats.tests) return {};
+    
+    const outlierTests = outlierStats.tests.filter(t => t.type === 'outlier_detection');
+    const realOutliers = outlierTests.reduce((sum, t) => sum + (t.realOutliers || 0), 0);
+    const synthOutliers = outlierTests.reduce((sum, t) => sum + (t.syntheticOutliers || 0), 0);
+    const totalRealValues = outlierTests.reduce((sum, t) => sum + (t.realCount || 0), 0);
+    const totalSynthValues = outlierTests.reduce((sum, t) => sum + (t.syntheticCount || 0), 0);
+    
+    return {
+      totalTests: outlierTests.length,
+      realOutlierRate: totalRealValues > 0 ? realOutliers / totalRealValues : 0,
+      syntheticOutlierRate: totalSynthValues > 0 ? synthOutliers / totalSynthValues : 0,
+      outlierRateDifference: totalSynthValues > 0 && totalRealValues > 0 ? 
+        (synthOutliers / totalSynthValues) - (realOutliers / totalRealValues) : 0,
+      columnsWithOutliers: outlierTests.filter(t => t.realOutliers > 0 || t.syntheticOutliers > 0).length,
+      averageOutlierCount: outlierTests.length > 0 ? 
+        (realOutliers + synthOutliers) / (outlierTests.length * 2) : 0
+    };
+  }
+
+  /**
+   * Extract distribution quality metrics
+   */
+  extractDistributionQuality(distributionStats) {
+    if (!distributionStats || !distributionStats.tests) return {};
+    
+    const ksTests = distributionStats.tests.filter(t => t.type === 'ks_test');
+    const significantTests = ksTests.filter(t => t.statistic > t.criticalValue);
+    
+    return {
+      totalTests: ksTests.length,
+      significantTests: significantTests.length,
+      significanceRate: significantTests.length / ksTests.length || 0,
+      averageEffectSize: ksTests.reduce((sum, t) => sum + (t.effectSize || 0), 0) / ksTests.length || 0
+    };
+  }
+
+  /**
+   * Extract correlation quality metrics
+   */
+  extractCorrelationQuality(correlationStats) {
+    if (!correlationStats || correlationStats.result === 'SKIP') return {};
+    
+    return {
+      matrixSize: correlationStats.realCorrelations?.size || 0,
+      significantDifferences: correlationStats.comparison?.significantDifferences || 0,
+      percentageSignificant: correlationStats.comparison?.percentageSignificant || 0,
+      averageDifference: correlationStats.comparison?.avgDifference || 0
+    };
+  }
+
+  /**
+   * Extract statistical quality metrics
+   */
+  extractStatisticalQuality(statisticalTests) {
+    if (!statisticalTests || !statisticalTests.tests) return {};
+    
+    const tTests = statisticalTests.tests.filter(t => t.type === 'welch_t_test');
+    const significantTests = tTests.filter(t => t.result === 'REJECT');
+    
+    return {
+      totalTests: tTests.length,
+      significantTests: significantTests.length,
+      significanceRate: significantTests.length / tTests.length || 0,
+      averageTStatistic: tTests.reduce((sum, t) => sum + Math.abs(t.statistic || 0), 0) / tTests.length || 0
+    };
+  }
+
+  /**
+   * Extract Jennrich test quality metrics
+   */
+  extractJennrichQuality(jennrichTest) {
+    if (!jennrichTest || jennrichTest.result === 'SKIP') return {};
+    
+    return {
+      testPerformed: jennrichTest.result !== 'SKIP',
+      significant: jennrichTest.result === 'REJECT',
+      statistic: jennrichTest.statistic || 0,
+      criticalValue: jennrichTest.criticalValue || 0,
+      interpretation: jennrichTest.interpretation || 'Test not performed'
+    };
+  }
+
+  /**
+   * Extract utility metrics
+   */
+  extractUtilityMetrics(qualityMetrics) {
+    if (!qualityMetrics) return {};
+    
+    return {
+      completenessRatio: qualityMetrics.completeness?.score || 0,
+      consistencyRatio: qualityMetrics.consistency?.score || 0,
+      overallUtility: (qualityMetrics.completeness?.score + qualityMetrics.consistency?.score) / 2 || 0
+    };
+  }
+
+  /**
+   * Extract privacy metrics
+   */
+  extractPrivacyMetrics(privacyTests) {
+    if (!privacyTests || !privacyTests.tests) return {};
+    
+    const membershipTest = privacyTests.tests.find(t => t.type === 'membership_inference_test');
+    const attributeTest = privacyTests.tests.find(t => t.type === 'attribute_inference_test');
+    
+    return {
+      membershipInference: {
+        exactMatches: membershipTest?.exactMatches || 0,
+        matchRate: membershipTest?.matchRate || 0,
+        riskLevel: membershipTest?.matchRate > 0.01 ? 'HIGH' : 'LOW'
+      },
+      attributeInference: {
+        rareValueLeaks: attributeTest?.rareValueLeaks || 0,
+        riskLevel: attributeTest?.rareValueLeaks > 0 ? 'MEDIUM' : 'LOW'
+      }
+    };
+  }
+
+  /**
+   * Calculate overall risk assessment
+   */
+  calculateOverallRisk(results) {
+    const riskFactors = {
+      statisticalRisk: 'LOW',
+      privacyRisk: 'LOW',
+      utilityRisk: 'LOW',
+      correlationRisk: 'LOW'
     };
     
-    return recommendations[issueType] || `Review data generation process for column '${test.column}'`;
+    let overallRisk = 'LOW';
+    let justification = '';
+    
+    // Assess statistical risk
+    const distributionQuality = results.statisticalQuality?.testResults?.distribution;
+    if (distributionQuality && distributionQuality.significanceRate > 0.3) {
+      riskFactors.statisticalRisk = 'MEDIUM';
+    }
+    if (distributionQuality && distributionQuality.significanceRate > 0.5) {
+      riskFactors.statisticalRisk = 'HIGH';
+    }
+    
+    // Assess privacy risk
+    const privacyProtection = results.practicalUsefulness?.privacyProtection;
+    if (privacyProtection?.membershipInference?.riskLevel === 'HIGH') {
+      riskFactors.privacyRisk = 'HIGH';
+    }
+    if (privacyProtection?.attributeInference?.riskLevel === 'HIGH') {
+      riskFactors.privacyRisk = 'HIGH';
+    }
+    
+    // Assess utility risk
+    const dataUtility = results.practicalUsefulness?.dataUtility;
+    if (dataUtility && dataUtility.overallUtility < 0.7) {
+      riskFactors.utilityRisk = 'MEDIUM';
+    }
+    if (dataUtility && dataUtility.overallUtility < 0.5) {
+      riskFactors.utilityRisk = 'HIGH';
+    }
+    
+    // Determine overall risk
+    const highRisks = Object.values(riskFactors).filter(r => r === 'HIGH').length;
+    const mediumRisks = Object.values(riskFactors).filter(r => r === 'MEDIUM').length;
+    
+    if (highRisks > 0) {
+      overallRisk = 'HIGH';
+      justification = 'Multiple high-risk factors detected including statistical differences and privacy concerns.';
+    } else if (mediumRisks > 1) {
+      overallRisk = 'MEDIUM';
+      justification = 'Several medium-risk factors indicate potential issues with data quality or privacy.';
+    } else {
+      overallRisk = 'LOW';
+      justification = 'Overall risk assessment indicates acceptable levels across all factors.';
+    }
+    
+    return {
+      overallRisk,
+      riskFactors,
+      justification
+    };
+  }
+
+  /**
+   * Generate initial recommendations
+   */
+  generateInitialRecommendations(results) {
+    const recommendations = {
+      dataQuality: [],
+      privacyEnhancement: [],
+      utilityImprovement: []
+    };
+    
+    // Data quality recommendations
+    const distributionQuality = results.statisticalQuality?.testResults?.distribution;
+    if (distributionQuality && distributionQuality.significanceRate > 0.3) {
+      recommendations.dataQuality.push('Review synthetic data generation parameters to improve distribution matching');
+    }
+    
+    // Privacy recommendations
+    const privacyProtection = results.practicalUsefulness?.privacyProtection;
+    if (privacyProtection?.membershipInference?.riskLevel === 'HIGH') {
+      recommendations.privacyEnhancement.push('Implement additional privacy protection measures to reduce membership inference risk');
+    }
+    
+    // Utility recommendations
+    const dataUtility = results.practicalUsefulness?.dataUtility;
+    if (dataUtility && dataUtility.overallUtility < 0.7) {
+      recommendations.utilityImprovement.push('Enhance data completeness and consistency to improve overall utility');
+    }
+    
+    return recommendations;
+  }
+
+  /**
+   * Identify critical issues
+   */
+  identifyCriticalIssues(results) {
+    const issues = [];
+    
+    // Check for critical statistical issues
+    const distributionQuality = results.statisticalQuality?.testResults?.distribution;
+    if (distributionQuality && distributionQuality.significanceRate > 0.5) {
+      issues.push({
+        type: 'STATISTICAL',
+        severity: 'HIGH',
+        description: 'More than 50% of distribution tests show significant differences',
+        impact: 'May affect downstream analysis reliability'
+      });
+    }
+    
+    // Check for critical privacy issues
+    const privacyProtection = results.practicalUsefulness?.privacyProtection;
+    if (privacyProtection?.membershipInference?.riskLevel === 'HIGH') {
+      issues.push({
+        type: 'PRIVACY',
+        severity: 'CRITICAL',
+        description: 'High membership inference risk detected',
+        impact: 'Potential data leakage and privacy breach'
+      });
+    }
+    
+    // Check for critical utility issues
+    const dataUtility = results.practicalUsefulness?.dataUtility;
+    if (dataUtility && dataUtility.overallUtility < 0.5) {
+      issues.push({
+        type: 'UTILITY',
+        severity: 'HIGH',
+        description: 'Low data utility score indicates poor synthetic data quality',
+        impact: 'May not be suitable for intended use cases'
+      });
+    }
+    
+    return issues;
   }
 
   /**
@@ -826,22 +1269,18 @@ export class ValidationService {
   compareCorrelationMatrices(realCorr, synthCorr) {
     if (!realCorr || !synthCorr || realCorr.size !== synthCorr.size) {
       return {
-        severity: 'CRITICAL',
-        issues: [{
-          type: 'matrix_size_mismatch',
-          severity: 'CRITICAL',
-          message: 'Correlation matrix sizes do not match',
-          impact: 'High - Cannot compare correlation structures'
-        }],
+        matrixSizeMatch: false,
+        realSize: realCorr?.size || 0,
+        syntheticSize: synthCorr?.size || 0,
         summary: 'Matrix comparison failed due to size mismatch'
       };
     }
     
-    const issues = [];
     const n = realCorr.size;
     let totalDifferences = 0;
     let significantDifferences = 0;
     let maxDifference = 0;
+    const differences = [];
     
     // Compare corresponding correlation coefficients
     for (let i = 0; i < n; i++) {
@@ -855,14 +1294,7 @@ export class ValidationService {
         
         if (diff > 0.3) { // Significant difference threshold
           significantDifferences++;
-          const severity = diff > 0.6 ? 'CRITICAL' : diff > 0.4 ? 'HIGH' : 'MEDIUM';
-          
-          issues.push({
-            type: 'correlation_mismatch',
-            severity,
-            message: `Strong correlation difference between ${realCorr.headers[i]} and ${realCorr.headers[j]}: real=${realCoeff.toFixed(3)}, synthetic=${synthCoeff.toFixed(3)} (diff=${diff.toFixed(3)})`,
-            impact: severity === 'CRITICAL' ? 'High - Major structural difference' : 
-                   severity === 'HIGH' ? 'Medium - Notable structural difference' : 'Low - Minor structural difference',
+          differences.push({
             variables: [realCorr.headers[i], realCorr.headers[j]],
             realValue: realCoeff,
             syntheticValue: synthCoeff,
@@ -875,29 +1307,17 @@ export class ValidationService {
     const totalComparisons = (n * (n - 1)) / 2;
     const avgDifference = totalDifferences / totalComparisons;
     
-    // Determine overall severity
-    let overallSeverity = 'PASS';
-    if (maxDifference > 0.6 || avgDifference > 0.3) {
-      overallSeverity = 'CRITICAL';
-    } else if (maxDifference > 0.4 || avgDifference > 0.2) {
-      overallSeverity = 'HIGH';
-    } else if (maxDifference > 0.3 || avgDifference > 0.1) {
-      overallSeverity = 'MEDIUM';
-    }
-    
     return {
-      severity: overallSeverity,
-      issues,
-      metrics: {
+      matrixSizeMatch: true,
         totalComparisons,
         significantDifferences,
         avgDifference: avgDifference.toFixed(4),
         maxDifference: maxDifference.toFixed(4),
-        percentageSignificant: ((significantDifferences / totalComparisons) * 100).toFixed(1)
-      },
-      summary: issues.length === 0 ? 
+      percentageSignificant: ((significantDifferences / totalComparisons) * 100).toFixed(1),
+      differences: differences.slice(0, 10), // First 10 for display
+      summary: significantDifferences === 0 ? 
         'Correlation structures match well' : 
-        `Found ${issues.length} significant correlation differences`
+        `Found ${significantDifferences} significant correlation differences`
     };
   }
 
@@ -905,7 +1325,7 @@ export class ValidationService {
    * Jennrich test for comparing correlation matrices
    * Tests if correlation structures are statistically equivalent between datasets
    */
-  runJennrichTest(realData, syntheticData) {
+  computeJennrichTest(realData, syntheticData) {
     const realNumericCols = [];
     const synthNumericCols = [];
     
@@ -960,18 +1380,9 @@ export class ValidationService {
         realCorrelationMatrix: realCorrMatrix,
         syntheticCorrelationMatrix: synthCorrMatrix,
         variablesUsed: realNumericCols.map(col => col.header),
-        issues: jennrichResult.significant ? [{
-          type: 'correlation_structure_difference',
-          severity: jennrichResult.statistic > (jennrichResult.criticalValue * 2) ? 'HIGH' : 'MEDIUM',
-          message: `Correlation structures differ significantly (χ² = ${jennrichResult.statistic.toFixed(4)}, p ${jennrichResult.pValue})`,
-          impact: 'Medium to High - Different correlation patterns between variables in synthetic vs real data',
-          recommendation: 'Consider improving correlation preservation in synthetic data generation'
-        }] : [],
         summary: {
           total: 1,
-          passed: jennrichResult.significant ? 0 : 1,
-          warnings: jennrichResult.significant && jennrichResult.statistic <= (jennrichResult.criticalValue * 2) ? 1 : 0,
-          failures: jennrichResult.significant && jennrichResult.statistic > (jennrichResult.criticalValue * 2) ? 1 : 0
+          jennrichTests: 1
         }
       };
     } catch (error) {
@@ -1061,21 +1472,16 @@ export class ValidationService {
   /**
    * Comprehensive privacy and security tests - analyzes entire datasets
    */
-  runPrivacyTests(realData, syntheticData) {
-    console.log(`Starting comprehensive privacy analysis on ${realData.data.length} real and ${syntheticData.data.length} synthetic records...`);
+  computePrivacyStatistics(realData, syntheticData) {
     const tests = [];
     
     // Test 1: Membership inference risk - comprehensive analysis
-    console.log('Running membership inference test on entire dataset...');
     const membershipTest = this.testMembershipInference(realData, syntheticData);
     tests.push(membershipTest);
     
     // Test 2: Attribute inference risk - already uses full dataset
-    console.log('Running attribute inference test on entire dataset...');
     const attributeTest = this.testAttributeInference(realData, syntheticData);
     tests.push(attributeTest);
-    
-    console.log('Privacy analysis complete.');
     
     return {
       testType: 'Comprehensive Privacy and Security Assessment',
@@ -1087,7 +1493,10 @@ export class ValidationService {
         analysisType: 'Complete Dataset Analysis'
       },
       tests,
-      summary: this.summarizeTests(tests),
+      summary: {
+        total: tests.length,
+        privacyTests: tests.filter(t => t.type === 'membership_inference_test' || t.type === 'attribute_inference_test').length
+      },
       overallRisk: this.calculatePrivacyRisk(tests)
     };
   }
@@ -1096,8 +1505,6 @@ export class ValidationService {
    * Test for membership inference vulnerabilities - analyzes entire dataset
    */
   testMembershipInference(realData, syntheticData) {
-    console.log('Running comprehensive membership inference test on entire dataset...');
-    
     // Use entire datasets, not just samples
     const realDataset = realData.data;
     const synthDataset = syntheticData.data;
@@ -1107,14 +1514,12 @@ export class ValidationService {
     const synthRowHashes = new Map(); // Map to track count of each hash
     
     // Create hashes of all real data rows
-    console.log(`Hashing ${realDataset.length} real data records...`);
     for (const realRow of realDataset) {
       const rowHash = JSON.stringify(realRow);
       realRowHashes.add(rowHash);
     }
     
     // Create hashes of all synthetic data rows and count occurrences
-    console.log(`Hashing ${synthDataset.length} synthetic data records...`);
     for (const synthRow of synthDataset) {
       const rowHash = JSON.stringify(synthRow);
       synthRowHashes.set(rowHash, (synthRowHashes.get(rowHash) || 0) + 1);
@@ -1144,8 +1549,6 @@ export class ValidationService {
     const matchRate = duplicatedRealRecords / realDataset.length;
     const synthDuplicationRate = exactMatches / synthDataset.length;
     
-    console.log(`Privacy test complete: ${exactMatches} exact matches found (${duplicatedRealRecords} unique real records)`);
-    
     return {
       type: 'membership_inference_test',
       description: 'Tests for exact record duplications indicating membership leakage across entire dataset',
@@ -1155,20 +1558,7 @@ export class ValidationService {
       syntheticDatasetSize: synthDataset.length,
       matchRate: matchRate.toFixed(6),
       synthDuplicationRate: synthDuplicationRate.toFixed(6),
-      matchedSamples: matchedHashes,
-      risk: matchRate > 0.01 ? 'CRITICAL' : matchRate > 0.001 ? 'HIGH' : matchRate > 0.0001 ? 'MEDIUM' : 'LOW',
-      issues: matchRate > 0.0001 ? [{
-        type: 'membership_leakage',
-        severity: matchRate > 0.01 ? 'CRITICAL' : matchRate > 0.001 ? 'HIGH' : 'MEDIUM',
-        message: `Found ${exactMatches} exact matches across ${duplicatedRealRecords} unique real records (${(matchRate * 100).toFixed(4)}% of real data duplicated)`,
-        impact: matchRate > 0.01 ? 
-          'Critical - Severe privacy violation through direct record reconstruction' : 
-          matchRate > 0.001 ? 
-            'High - Significant privacy risk through record reconstruction' :
-            'Medium - Notable privacy concern with record similarities',
-        recommendation: 'Consider adding more noise, using differential privacy, or reviewing data generation methodology'
-      }] : [],
-      severity: matchRate > 0.01 ? 'CRITICAL' : matchRate > 0.001 ? 'HIGH' : matchRate > 0.0001 ? 'MEDIUM' : 'PASS'
+      matchedSamples: matchedHashes
     };
   }
 
@@ -1208,14 +1598,7 @@ export class ValidationService {
       description: 'Tests for preservation of rare values that could enable attribute inference',
       rareValueLeaks: riskColumns.length,
       riskColumns: riskColumns.slice(0, 5), // First 5 for display
-      risk: riskColumns.length > 10 ? 'HIGH' : riskColumns.length > 5 ? 'MEDIUM' : 'LOW',
-      issues: riskColumns.length > 5 ? [{
-        type: 'rare_value_leakage',
-        severity: riskColumns.length > 10 ? 'HIGH' : 'MEDIUM',
-        message: `Found ${riskColumns.length} rare values preserved in synthetic data`,
-        impact: 'Medium - Potential attribute inference through rare value combinations'
-      }] : [],
-      severity: riskColumns.length > 10 ? 'HIGH' : riskColumns.length > 5 ? 'MEDIUM' : 'PASS'
+      rareValueThreshold: rareValueThreshold
     };
   }
 
@@ -1223,24 +1606,37 @@ export class ValidationService {
    * Calculate overall privacy risk assessment
    */
   calculatePrivacyRisk(privacyTests) {
-    const highRiskTests = privacyTests.filter(t => t.risk === 'HIGH' || t.severity === 'HIGH' || t.severity === 'CRITICAL').length;
-    const mediumRiskTests = privacyTests.filter(t => t.risk === 'MEDIUM' || t.severity === 'MEDIUM').length;
-    
-    if (highRiskTests > 0) return 'HIGH';
-    if (mediumRiskTests > 0) return 'MEDIUM';
-    return 'LOW';
+    return {
+      totalTests: privacyTests.length,
+      membershipTests: privacyTests.filter(t => t.type === 'membership_inference_test').length,
+      attributeTests: privacyTests.filter(t => t.type === 'attribute_inference_test').length
+    };
   }
 
   // Helper methods for missing statistical tests
-  runTTest(realValues, synthValues, column) {
-    const n1 = realValues.length;
-    const n2 = synthValues.length;
+  computeTTest(realValues, synthValues, column) {
+    const realClean = realValues.filter(v => v !== null && v !== undefined && !isNaN(v));
+    const synthClean = synthValues.filter(v => v !== null && v !== undefined && !isNaN(v));
     
-    const mean1 = realValues.reduce((sum, val) => sum + val, 0) / n1;
-    const mean2 = synthValues.reduce((sum, val) => sum + val, 0) / n2;
-    
-    const var1 = realValues.reduce((sum, val) => sum + Math.pow(val - mean1, 2), 0) / (n1 - 1);
-    const var2 = synthValues.reduce((sum, val) => sum + Math.pow(val - mean2, 2), 0) / (n2 - 1);
+    if (realClean.length === 0 || synthClean.length === 0) {
+      return {
+        column,
+        type: 'welch_t_test',
+        result: 'INSUFFICIENT_DATA',
+        reason: 'Insufficient numeric data'
+      };
+    }
+
+    // Use multiple sampling iterations for robust results
+    return this.runMultipleSamplingIterations('t_test', realClean, synthClean, column, (realSampled, synthSampled, col) => {
+      const n1 = realSampled.length;
+      const n2 = synthSampled.length;
+      
+      const mean1 = realSampled.reduce((sum, val) => sum + val, 0) / n1;
+      const mean2 = synthSampled.reduce((sum, val) => sum + val, 0) / n2;
+      
+      const var1 = realSampled.reduce((sum, val) => sum + Math.pow(val - mean1, 2), 0) / (n1 - 1);
+      const var2 = synthSampled.reduce((sum, val) => sum + Math.pow(val - mean2, 2), 0) / (n2 - 1);
     
     // Welch's t-test for unequal variances
     const pooledSE = Math.sqrt(var1 / n1 + var2 / n2);
@@ -1252,7 +1648,7 @@ export class ValidationService {
     const significant = Math.abs(tStatistic) > criticalValue;
     
     return {
-      column,
+        column: col,
       type: 'welch_t_test',
       testName: "Welch's t-test",
       description: 'Two-sample t-test assuming unequal variances',
@@ -1263,17 +1659,13 @@ export class ValidationService {
       meanDifference: Math.abs(mean1 - mean2),
       result: significant ? 'REJECT' : 'ACCEPT',
       pValueApprox: significant ? '< 0.05' : '> 0.05',
-      issues: significant ? [{
-        type: 'mean_difference',
-        severity: Math.abs(tStatistic) > 3 ? 'HIGH' : 'MEDIUM',
-        message: `Means significantly different (Welch's t-test): real=${mean1.toFixed(4)}, synthetic=${mean2.toFixed(4)} (t=${tStatistic.toFixed(4)}, df=${df.toFixed(2)})`,
-        impact: 'Medium - Different central tendencies between datasets'
-      }] : [],
-      severity: significant ? (Math.abs(tStatistic) > 3 ? 'HIGH' : 'MEDIUM') : 'PASS'
-    };
+        criticalValue: criticalValue,
+        significant: significant
+      };
+    });
   }
 
-  calculateCompleteness(realData, syntheticData) {
+  computeCompleteness(realData, syntheticData) {
     // Simplified completeness metric
     const realComplete = realData.data.filter(row => row.every(val => val !== null && val !== undefined)).length;
     const synthComplete = syntheticData.data.filter(row => row.every(val => val !== null && val !== undefined)).length;
@@ -1290,7 +1682,7 @@ export class ValidationService {
     };
   }
 
-  calculateConsistency(realData, syntheticData) {
+  computeConsistency(realData, syntheticData) {
     // Simplified consistency metric based on data types
     let consistentColumns = 0;
     
@@ -1320,7 +1712,7 @@ export class ValidationService {
     };
   }
 
-  calculateUtility(realData, syntheticData) {
+  computeUtility(realData, syntheticData) {
     // Simplified utility metric
     return {
       name: 'Data Utility',
@@ -1329,7 +1721,7 @@ export class ValidationService {
     };
   }
 
-  calculatePrivacyMetrics(realData, syntheticData) {
+  computePrivacyMetrics(realData, syntheticData) {
     // Simplified privacy metric
     return {
       name: 'Privacy Protection',
@@ -1338,7 +1730,7 @@ export class ValidationService {
     };
   }
 
-  calculateOverallScore(metrics) {
+  computeOverallScore(metrics) {
     const weights = {
       completeness: 0.2,
       consistency: 0.3,
@@ -1349,6 +1741,184 @@ export class ValidationService {
     return Object.entries(metrics).reduce((total, [key, metric]) => {
       return total + (metric.score * weights[key]);
     }, 0);
+  }
+
+  /**
+   * Dynamic sampling strategy that adapts to dataset size and test requirements
+   */
+  getOptimalSampleSize(testType, realSize, synthSize) {
+    const optimalSize = this.optimal_sample_sizes[testType] || 1000;
+    const minSize = this.min_sample_sizes[testType] || 30;
+    
+    // For small datasets, use all available data
+    if (realSize <= optimalSize && synthSize <= optimalSize) {
+      return {
+        realSampleSize: realSize,
+        synthSampleSize: synthSize,
+        samplingMethod: 'full_dataset',
+        samplingRatio: 1.0
+      };
+    }
+    
+    // For medium datasets, use optimal size
+    if (realSize <= optimalSize * 2 && synthSize <= optimalSize * 2) {
+      const realSample = Math.min(realSize, optimalSize);
+      const synthSample = Math.min(synthSize, optimalSize);
+      return {
+        realSampleSize: realSample,
+        synthSampleSize: synthSample,
+        samplingMethod: 'optimal_size',
+        samplingRatio: Math.min(realSample / realSize, synthSample / synthSize)
+      };
+    }
+    
+    // For large datasets, use optimal size with random sampling
+    const realSample = Math.min(realSize, optimalSize);
+    const synthSample = Math.min(synthSize, optimalSize);
+    
+    return {
+      realSampleSize: realSample,
+      synthSampleSize: synthSample,
+      samplingMethod: 'random_sampling',
+      samplingRatio: Math.min(realSample / realSize, synthSample / synthSize)
+    };
+  }
+
+  /**
+   * Sample data randomly while preserving distribution characteristics
+   */
+  sampleDataRandomly(data, sampleSize, seed = null) {
+    if (data.length <= sampleSize) {
+      return data; // Return all data if sample size is larger
+    }
+    
+    // Use seed for reproducible sampling
+    if (seed !== null) {
+      const rng = this.seededRandom(seed);
+      const indices = [];
+      for (let i = 0; i < data.length; i++) {
+        indices.push(i);
+      }
+      
+      // Fisher-Yates shuffle with seeded random
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      
+      return indices.slice(0, sampleSize).map(i => data[i]);
+    } else {
+      // Simple random sampling without seed
+      const indices = new Set();
+      while (indices.size < sampleSize) {
+        indices.add(Math.floor(Math.random() * data.length));
+      }
+      return Array.from(indices).map(i => data[i]);
+    }
+  }
+
+  /**
+   * Seeded random number generator for reproducible sampling
+   */
+  seededRandom(seed) {
+    let state = seed;
+    return function() {
+      state = (state * 9301 + 49297) % 233280;
+      return state / 233280;
+    };
+  }
+
+  /**
+   * Run multiple sampling iterations for robust statistical testing
+   */
+  runMultipleSamplingIterations(testType, realValues, synthValues, column, testFunction) {
+    const numRuns = this.multiple_sampling_runs[testType] || 1;
+    
+    if (numRuns === 1) {
+      // Single run - use existing logic
+      return testFunction(realValues, synthValues, column);
+    }
+    
+    const results = [];
+    const seeds = [42, 123, 456, 789, 999]; // Different seeds for each run
+    
+    // Run multiple iterations
+    for (let i = 0; i < numRuns; i++) {
+      const seed = seeds[i % seeds.length];
+      const sampling = this.getOptimalSampleSize(testType, realValues.length, synthValues.length);
+      
+      // Sample data with different seed for each run
+      const realSampled = this.sampleDataRandomly(realValues, sampling.realSampleSize, seed);
+      const synthSampled = this.sampleDataRandomly(synthValues, sampling.synthSampleSize, seed);
+      
+      // Run the test function with sampled data
+      const result = testFunction(realSampled, synthSampled, column);
+      result.sampling = {
+        method: sampling.samplingMethod,
+        realOriginalSize: realValues.length,
+        synthOriginalSize: synthValues.length,
+        realSampleSize: realSampled.length,
+        synthSampleSize: synthSampled.length,
+        samplingRatio: sampling.samplingRatio,
+        iteration: i + 1,
+        totalIterations: numRuns,
+        seed: seed
+      };
+      
+      results.push(result);
+    }
+    
+    // Aggregate results
+    return this.aggregateMultipleResults(results, testType);
+  }
+
+  /**
+   * Aggregate results from multiple sampling iterations
+   */
+  aggregateMultipleResults(results, testType) {
+    const firstResult = results[0];
+    const baseResult = {
+      column: firstResult.column,
+      type: firstResult.type,
+      iterations: results.length,
+      sampling: {
+        method: 'multiple_sampling',
+        totalIterations: results.length,
+        iterations: results.map(r => r.sampling)
+      }
+    };
+    
+    // For KS test, aggregate statistics
+    if (testType === 'ks_test') {
+      const statistics = results.map(r => r.statistic);
+      const criticalValues = results.map(r => r.criticalValue);
+      const meanStatistic = statistics.reduce((sum, stat) => sum + stat, 0) / statistics.length;
+      const meanCriticalValue = criticalValues.reduce((sum, cv) => sum + cv, 0) / criticalValues.length;
+      
+      // Count how many iterations rejected the null hypothesis
+      const rejections = results.filter(r => r.result === 'REJECT').length;
+      const rejectionRate = rejections / results.length;
+      
+      baseResult.statistic = meanStatistic;
+      baseResult.criticalValue = meanCriticalValue;
+      baseResult.rejectionRate = rejectionRate;
+      baseResult.rejections = rejections;
+      baseResult.totalIterations = results.length;
+    }
+    
+    // For t-test, aggregate means and statistics
+    else if (testType === 't_test') {
+      const tStatistics = results.map(r => r.statistic);
+      const meanTStatistic = tStatistics.reduce((sum, stat) => sum + stat, 0) / tStatistics.length;
+      const significantResults = results.filter(r => r.result === 'REJECT').length;
+      const significanceRate = significantResults / results.length;
+      
+      baseResult.statistic = meanTStatistic;
+      baseResult.significanceRate = significanceRate;
+      baseResult.significantResults = significantResults;
+    }
+    
+    return baseResult;
   }
 }
 

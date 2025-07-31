@@ -65,6 +65,70 @@ export const submitEmbeddingJob = async ({
   }
 };
 
+// Submit embedding job with pre-trained model
+export const submitPretrainedModelJob = async ({
+  real_data,
+  synthetic_data,
+  method = 'umap',
+  model_data,
+  model_format = 'pickle',
+  real_headers = null,
+  synthetic_headers = null,
+  fine_tune = false
+}) => {
+  try {
+    // Validate inputs
+    if (!Array.isArray(real_data) || !Array.isArray(synthetic_data)) {
+      throw new Error('Input data must be arrays');
+    }
+
+    if (real_data.length === 0 || synthetic_data.length === 0) {
+      throw new Error('Data arrays cannot be empty');
+    }
+
+    if (!['umap', 'tsne'].includes(method)) {
+      throw new Error('Invalid method. Must be either "umap" or "tsne"');
+    }
+
+    if (!model_data) {
+      throw new Error('Model data is required');
+    }
+
+    const response = await api.post('/embed-pretrained', {
+      real_data,
+      synthetic_data,
+      method,
+      model_data,
+      model_format,
+      real_headers,
+      synthetic_headers,
+      fine_tune
+    });
+
+    // Return job submission details
+    return response.data;
+  } catch (error) {
+    if (error.response) {
+      if (error.response.status === 422) {
+        const detail = error.response.data.detail;
+        if (Array.isArray(detail)) {
+          const errors = detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
+          throw new Error(`Validation error: ${errors}`);
+        }
+        throw new Error(`Validation error: ${JSON.stringify(error.response.data)}`);
+      }
+      throw new Error(
+        error.response.data.detail || 
+        `Server error: ${error.response.status}`
+      );
+    } else if (error.request) {
+      throw new Error('No response from server. Please check if the backend is running.');
+    } else {
+      throw error;
+    }
+  }
+};
+
 // Get job status by job ID
 export const getJobStatus = async (jobId) => {
   try {
@@ -235,7 +299,7 @@ export const getJobHistory = async ({ page = 1, limit = 20, status = null, metho
 
 export const getJobDetail = async (jobId) => {
   try {
-    const response = await api.get(`/jobs/${jobId}`);
+    const response = await api.get(`/history/${jobId}`);
     return response.data;
   } catch (error) {
     console.error('Failed to fetch job details:', error);
@@ -265,11 +329,35 @@ export const toggleJobFavorite = async (jobId) => {
 
 export const deleteJob = async (jobId) => {
   try {
-    const response = await api.delete(`/jobs/${jobId}`);
+    const response = await api.delete(`/history/${jobId}`);
     return response.data;
   } catch (error) {
     console.error('Failed to delete job:', error);
     throw new Error(error.response?.data?.detail || 'Failed to delete job');
+  }
+};
+
+// Download model for a job
+export const downloadModel = async (jobId) => {
+  try {
+    const response = await api.get(`/jobs/${jobId}/model`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to download model:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to download model');
+  }
+};
+
+// Download model as binary file
+export const downloadModelBinary = async (jobId) => {
+  try {
+    const response = await api.get(`/jobs/${jobId}/model/download`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to download model binary:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to download model');
   }
 };
 

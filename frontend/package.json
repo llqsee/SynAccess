@@ -13,6 +13,8 @@
     "@types/papaparse": "^5.3.16",
     "axios": "^1.6.2",
     "d3": "^7.8.5",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
     "papaparse": "^5.4.1",
     "plotly.js": "^2.27.0",
     "react": "^18.2.0",
@@ -24,7 +26,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build", 
+    "build": "react-scripts build",
     "test": "react-scripts test",
     "test:fast": "react-scripts test --watchAll=false --passWithNoTests --maxWorkers=2 --testTimeout=10000",
     "test:ci": "react-scripts test --coverage --ci --watchAll=false --passWithNoTests",

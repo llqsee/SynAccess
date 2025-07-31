@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { submitEmbeddingJob, getJobStatus, getJobResults, cancelJob } from '../services/api';
+import { submitEmbeddingJob, submitPretrainedModelJob, getJobStatus, getJobResults, cancelJob } from '../services/api';
 import { 
   validateDataCompatibility, 
   combineEmbeddings, 
@@ -72,49 +72,59 @@ export const useEmbedding = () => {
           setCanCancel(true);
           break;
         case 'completed':
-          // Job completed - get results
-          try {
-            const results = await getJobResults(jobId);
-            
-            const combinedEmbeddings = combineEmbeddings(
-              results.embeddings.real, 
-              results.embeddings.synthetic
-            );
-            const labels = createEmbeddingLabels(
-              results.embeddings.real.length,
-              results.embeddings.synthetic.length
-            );
-            
-            setEmbeddingData(combinedEmbeddings);
-            
-            // Include original data in metadata for fresh embeddings (enables distribution plots)
-            const enhancedMetadata = { ...results.metadata, labels };
-            
-            // Add original data if available (for fresh embeddings)
-            if (originalRealData && originalSyntheticData) {
-              enhancedMetadata.realData = originalRealData;
-              enhancedMetadata.syntheticData = originalSyntheticData;
-              enhancedMetadata.hasCompressedData = true; // Mark as having original data for distribution plots
+          // Job completed - get results with retry logic
+          let retryCount = 0;
+          const maxRetries = 3;
+          
+          while (retryCount < maxRetries) {
+            try {
+              const results = await getJobResults(jobId);
+              
+              const combinedEmbeddings = combineEmbeddings(
+                results.embeddings.real, 
+                results.embeddings.synthetic
+              );
+              const labels = createEmbeddingLabels(
+                results.embeddings.real.length,
+                results.embeddings.synthetic.length
+              );
+              
+              setEmbeddingData(combinedEmbeddings);
+              
+              // Include original data in metadata for fresh embeddings (enables distribution plots)
+              const enhancedMetadata = { ...results.metadata, labels };
+              
+              // Add original data if available (for fresh embeddings)
+              if (originalRealData && originalSyntheticData) {
+                enhancedMetadata.realData = originalRealData;
+                enhancedMetadata.syntheticData = originalSyntheticData;
+                enhancedMetadata.hasCompressedData = true; // Mark as having original data for distribution plots
+              }
+              
+              setEmbeddingMetadata(enhancedMetadata);
+              
+              // Clear original data now that it's been added to metadata
+              setOriginalRealData(null);
+              setOriginalSyntheticData(null);
+              
+              setProcessingStatus('Completed successfully');
+              setCanCancel(false);
+              clearPolling();
+              setLoading(false);
+              
+              return; // Exit polling
+            } catch (err) {
+              retryCount++;
+              if (retryCount >= maxRetries) {
+                setError(`Job completed but failed to load results after ${maxRetries} attempts: ${err.message}`);
+                clearPolling();
+                setLoading(false);
+                resetState();
+                return;
+              }
+              // Wait a bit before retrying (exponential backoff)
+              await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
             }
-            
-            setEmbeddingMetadata(enhancedMetadata);
-            
-            // Clear original data now that it's been added to metadata
-            setOriginalRealData(null);
-            setOriginalSyntheticData(null);
-            
-            setProcessingStatus('Completed successfully');
-            setCanCancel(false);
-            clearPolling();
-            setLoading(false);
-            
-            return; // Exit polling
-          } catch (err) {
-            setError(`Job completed but failed to load results: ${err.message}`);
-            clearPolling();
-            setLoading(false);
-            resetState();
-            return;
           }
         case 'failed':
         case 'cancelled':
@@ -219,18 +229,45 @@ export const useEmbedding = () => {
       
       // Store data in sessionStorage for EmbeddingPlot component access
       try {
-        window.sessionStorage.setItem('realData', JSON.stringify({
-          data: sampledRealData,
-          headers: realData.headers,
-          metadata: realData.metadata
-        }));
-        window.sessionStorage.setItem('syntheticData', JSON.stringify({
-          data: sampledSynthData,
-          headers: syntheticData.headers,
-          metadata: syntheticData.metadata
-        }));
+        // Compress data by sampling if it's too large
+        const maxStorageSize = 5000000; // 5MB limit
+        const compressData = (data, headers, metadata) => {
+          const compressed = {
+            data: data.slice(0, 1000), // Limit to 1000 samples for storage
+            headers: headers,
+            metadata: { ...metadata, compressed: true, originalSize: data.length }
+          };
+          return compressed;
+        };
+
+        const realDataForStorage = sampledRealData.length > 1000 ? 
+          compressData(sampledRealData, realData.headers, realData.metadata) :
+          { data: sampledRealData, headers: realData.headers, metadata: realData.metadata };
+
+        const syntheticDataForStorage = sampledSynthData.length > 1000 ? 
+          compressData(sampledSynthData, syntheticData.headers, syntheticData.metadata) :
+          { data: sampledSynthData, headers: syntheticData.headers, metadata: syntheticData.metadata };
+
+        window.sessionStorage.setItem('realData', JSON.stringify(realDataForStorage));
+        window.sessionStorage.setItem('syntheticData', JSON.stringify(syntheticDataForStorage));
       } catch (error) {
         console.warn('Failed to store data in sessionStorage:', error);
+        // Clear sessionStorage and try with minimal data
+        try {
+          window.sessionStorage.clear();
+          window.sessionStorage.setItem('realData', JSON.stringify({
+            data: sampledRealData.slice(0, 100),
+            headers: realData.headers,
+            metadata: { ...realData.metadata, compressed: true, originalSize: sampledRealData.length }
+          }));
+          window.sessionStorage.setItem('syntheticData', JSON.stringify({
+            data: sampledSynthData.slice(0, 100),
+            headers: syntheticData.headers,
+            metadata: { ...syntheticData.metadata, compressed: true, originalSize: sampledSynthData.length }
+          }));
+        } catch (fallbackError) {
+          console.warn('Failed to store even minimal data in sessionStorage:', fallbackError);
+        }
       }
       
       const totalSamples = sampledRealData.length + sampledSynthData.length;
@@ -244,14 +281,31 @@ export const useEmbedding = () => {
       }
 
       // Submit job to backend
-      const jobSubmission = await submitEmbeddingJob({
-        real_data: sampledRealData,
-        synthetic_data: sampledSynthData,
-        method: params.method,
-        params: params.params,
-        real_headers: realData.headers,
-        synthetic_headers: syntheticData.headers
-      });
+      let jobSubmission;
+      
+      if (params.pretrainedModel) {
+        // Use pre-trained model
+        jobSubmission = await submitPretrainedModelJob({
+          real_data: sampledRealData,
+          synthetic_data: sampledSynthData,
+          method: params.method,
+          model_data: params.pretrainedModel,
+          model_format: params.modelFormat || 'pickle',
+          real_headers: realData.headers,
+          synthetic_headers: syntheticData.headers,
+          fine_tune: params.params?.fine_tune || false
+        });
+      } else {
+        // Use regular training
+        jobSubmission = await submitEmbeddingJob({
+          real_data: sampledRealData,
+          synthetic_data: sampledSynthData,
+          method: params.method,
+          params: params.params,
+          real_headers: realData.headers,
+          synthetic_headers: syntheticData.headers
+        });
+      }
 
       // Store job information
       setCurrentJobId(jobSubmission.job_id);
