@@ -582,6 +582,8 @@ class AdaptiveLogitAnomalyDetectionService:
                 "synthetic_anomalies": synthetic_anomalies,
                 "synthetic_normal": synthetic_normal,
                 "grid_info": self.grid_info,
+                # Provide a generic 'anomalies' key for consumers expecting this naming
+                "anomalies": logit_anomalies,
                 "logit_thresholds": {
                     "logit_global": self.logit_thresholds['logit_global'],
                     "logit_sd": self.logit_thresholds['logit_sd'],

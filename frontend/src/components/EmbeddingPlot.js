@@ -1493,6 +1493,10 @@ const EmbeddingPlot = ({
     const g = svg.append("g")
       .attr("transform", `scale(${devicePixelRatio}) translate(${margin.left / devicePixelRatio},${margin.top / devicePixelRatio})`);
 
+    // Layer groups to control rendering order (points below, grid on top)
+    const pointsLayer = g.append("g").attr("class", "points-layer");
+    const gridLayer = g.append("g").attr("class", "grid-layer");
+
     // Extract coordinates and create scales
     const x = sampledData.map(d => d[0]);
     const y = sampledData.map(d => d[1]);
@@ -1514,34 +1518,52 @@ const EmbeddingPlot = ({
     const finalXPadding = Math.max(xPadding, minPadding);
     const finalYPadding = Math.max(yPadding, minPadding);
     
+    // Align plot domains with backend grid bounds when anomalies are shown
+    let xDomainMin = xExtent[0] - finalXPadding;
+    let xDomainMax = xExtent[1] + finalXPadding;
+    let yDomainMin = yExtent[0] - finalYPadding;
+    let yDomainMax = yExtent[1] + finalYPadding;
+
+    if (showAnomalies && anomalyResults?.grid_info?.bounds) {
+      const gb = anomalyResults.grid_info.bounds;
+      xDomainMin = gb.x_min;
+      xDomainMax = gb.x_max;
+      yDomainMin = gb.y_min;
+      yDomainMax = gb.y_max;
+      console.log('✅ Using backend grid bounds for scales:', { xDomainMin, xDomainMax, yDomainMin, yDomainMax });
+    }
+
     const xScale = d3.scaleLinear()
-      .domain([xExtent[0] - finalXPadding, xExtent[1] + finalXPadding])
-      .range([0, innerWidth])
-      .nice();
+      .domain([xDomainMin, xDomainMax])
+      .range([0, innerWidth]);
 
     const yScale = d3.scaleLinear()
-      .domain([yExtent[0] - finalYPadding, yExtent[1] + finalYPadding])
-      .range([innerHeight, 0])
-      .nice();
-    
-    // Validate that all data points fall within the scale domains
-    const xDomain = xScale.domain();
-    const yDomain = yScale.domain();
-    
-    // Check if any points are outside the domain and adjust if necessary
-    const minX = Math.min(...x);
-    const maxX = Math.max(...x);
-    const minY = Math.min(...y);
-    const maxY = Math.max(...y);
-    
-    if (minX < xDomain[0] || maxX > xDomain[1]) {
-      console.warn('X-axis data points outside domain, adjusting scale');
-      xScale.domain([minX - finalXPadding, maxX + finalXPadding]);
+      .domain([yDomainMin, yDomainMax])
+      .range([innerHeight, 0]);
+
+    // Only "nice" when NOT using backend grid bounds
+    if (!(showAnomalies && anomalyResults?.grid_info?.bounds)) {
+      xScale.nice();
+      yScale.nice();
     }
     
-    if (minY < yDomain[0] || maxY > yDomain[1]) {
-      console.warn('Y-axis data points outside domain, adjusting scale');
-      yScale.domain([minY - finalYPadding, maxY + finalYPadding]);
+    // Validate that all data points fall within the scale domains
+    // When using backend grid bounds, avoid auto-adjusting domains
+    if (!(showAnomalies && anomalyResults?.grid_info?.bounds)) {
+      const xDomain = xScale.domain();
+      const yDomain = yScale.domain();
+      const minX = Math.min(...x);
+      const maxX = Math.max(...x);
+      const minY = Math.min(...y);
+      const maxY = Math.max(...y);
+      if (minX < xDomain[0] || maxX > xDomain[1]) {
+        console.warn('X-axis data points outside domain, adjusting scale');
+        xScale.domain([minX - finalXPadding, maxX + finalXPadding]);
+      }
+      if (minY < yDomain[0] || maxY > yDomain[1]) {
+        console.warn('Y-axis data points outside domain, adjusting scale');
+        yScale.domain([minY - finalYPadding, maxY + finalYPadding]);
+      }
     }
 
     // Enhanced color scheme
@@ -1695,23 +1717,89 @@ const EmbeddingPlot = ({
         }
       });
       
-      if (bounds && bounds.x_min !== undefined && bounds.x_max !== undefined && bounds.y_min !== undefined && bounds.y_max !== undefined) {
-        // Use exact bin boundaries from backend if available
-        const hasExactBins = anomalyResults.grid_info && 
-                           anomalyResults.grid_info.x_bins && 
-                           anomalyResults.grid_info.y_bins;
-        
-        console.log('🔍 Grid info available:', {
-          hasExactBins,
-          x_bins: hasExactBins ? anomalyResults.grid_info.x_bins.slice(0, 5) : 'none',
-          y_bins: hasExactBins ? anomalyResults.grid_info.y_bins.slice(0, 5) : 'none'
+      // STRICTLY require exact bin edges from backend - NO FALLBACKS ALLOWED
+      const hasExactBins = anomalyResults.grid_info && 
+                         anomalyResults.grid_info.x_bins && 
+                         anomalyResults.grid_info.y_bins &&
+                         Array.isArray(anomalyResults.grid_info.x_bins) &&
+                         Array.isArray(anomalyResults.grid_info.y_bins) &&
+                         anomalyResults.grid_info.x_bins.length === gridSize + 1 &&
+                         anomalyResults.grid_info.y_bins.length === gridSize + 1;
+      
+      if (!hasExactBins) {
+        console.error('❌ CRITICAL: Backend bin edges missing or invalid - cannot render grid');
+        console.error('Expected bin arrays of length', gridSize + 1, 'but got:', {
+          x_bins_length: anomalyResults.grid_info?.x_bins?.length,
+          y_bins_length: anomalyResults.grid_info?.y_bins?.length,
+          grid_info: anomalyResults.grid_info
         });
+        return; // STOP - no fallback rendering allowed
+      }
+      
+      // Store backend bin edges (guaranteed valid)
+      const xBins = anomalyResults.grid_info.x_bins;
+      const yBins = anomalyResults.grid_info.y_bins;
+      
+      console.log('✅ Using STRICTLY backend bin edges:', {
+        x_bins_length: xBins.length,
+        y_bins_length: yBins.length,
+        x_range: [xBins[0], xBins[xBins.length - 1]],
+        y_range: [yBins[0], yBins[yBins.length - 1]]
+      });
+      
+      // Verify alignment by testing sample points with backend logic
+      const samplePoints = data.slice(0, 3);
+      console.log('🔍 Frontend-Backend alignment verification:');
+      samplePoints.forEach((point, idx) => {
+        const [x, y] = point;
         
-        // Calculate cell dimensions (fallback method)
-        const cellWidth = (bounds.x_max - bounds.x_min) / gridSize;
-        const cellHeight = (bounds.y_max - bounds.y_min) / gridSize;
+        // Use EXACT same logic as backend: np.digitize equivalent
+        // np.digitize(x, bins) returns the index of the bin that x belongs to
+        // Backend uses: x_idx = np.digitize(point[0], x_bins) - 1
         
-        console.log('🔵 Cell dimensions:', { cellWidth, cellHeight });
+        // Find the bin index (equivalent to np.digitize)
+        let x_digitize_idx = 0;
+        for (let i = 0; i < xBins.length; i++) {
+          if (x < xBins[i]) {
+            x_digitize_idx = i;
+            break;
+          }
+          x_digitize_idx = i + 1;
+        }
+        let y_digitize_idx = 0;
+        for (let j = 0; j < yBins.length; j++) {
+          if (y < yBins[j]) {
+            y_digitize_idx = j;
+            break;
+          }
+          y_digitize_idx = j + 1;
+        }
+        
+        // Apply backend logic: subtract 1 and clamp
+        let cellX = x_digitize_idx - 1;
+        let cellY = y_digitize_idx - 1;
+        
+        // Clamp to valid range (same as backend)
+        cellX = Math.max(0, Math.min(cellX, gridSize - 1));
+        cellY = Math.max(0, Math.min(cellY, gridSize - 1));
+        
+        console.log(`📍 Point ${idx} (${x.toFixed(3)}, ${y.toFixed(3)}) -> Cell[${cellX}][${cellY}]`);
+        
+        // Verify this matches backend logic
+        const cellBounds = {
+          xMin: xBins[cellX],
+          xMax: xBins[cellX + 1],
+          yMin: yBins[cellY], 
+          yMax: yBins[cellY + 1]
+        };
+        const withinBounds = (x >= cellBounds.xMin && x < cellBounds.xMax && 
+                             y >= cellBounds.yMin && y < cellBounds.yMax);
+        console.log(`   Cell bounds: [${cellBounds.xMin.toFixed(3)}, ${cellBounds.xMax.toFixed(3)}] x [${cellBounds.yMin.toFixed(3)}, ${cellBounds.yMax.toFixed(3)}]`);
+        console.log(`   Point within cell: ${withinBounds}`);
+      });
+
+      if (bounds && bounds.x_min !== undefined && bounds.x_max !== undefined && bounds.y_min !== undefined && bounds.y_max !== undefined) {
+
         
         // First, draw all grid cells (including non-anomalous ones for context)
         for (let i = 0; i < gridSize; i++) {
@@ -1719,46 +1807,52 @@ const EmbeddingPlot = ({
             const cellId = `${i},${j}`;
             const isAnomalous = anomalousCells.has(cellId);
             
-            // Calculate cell bounds using exact bins if available
-            let cellX, cellY, cellXEnd, cellYEnd;
+            // Use ONLY backend bin edges - NO FALLBACKS
+            const cellX = xBins[i];
+            const cellXEnd = xBins[i + 1];
+            const cellY = yBins[j];
+            const cellYEnd = yBins[j + 1];
             
-            if (hasExactBins) {
-              cellX = anomalyResults.grid_info.x_bins[i];
-              cellXEnd = anomalyResults.grid_info.x_bins[i + 1];
-              cellY = anomalyResults.grid_info.y_bins[j];
-              cellYEnd = anomalyResults.grid_info.y_bins[j + 1];
-            } else {
-              cellX = bounds.x_min + i * cellWidth;
-              cellY = bounds.y_min + j * cellHeight;
-              cellXEnd = cellX + cellWidth;
-              cellYEnd = cellY + cellHeight;
+            // Debug first few cells to verify backend alignment
+            if (i < 2 && j < 2) {
+              console.log(`🎯 Cell[${i}][${j}] backend bounds:`, {
+                cellX, cellXEnd, cellY, cellYEnd,
+                width: cellXEnd - cellX,
+                height: cellYEnd - cellY,
+                screenX: xScale(cellX),
+                screenXEnd: xScale(cellXEnd),
+                screenY: yScale(cellY),
+                screenYEnd: yScale(cellYEnd)
+              });
             }
             
-            // Convert to screen coordinates
-            const screenX = xScale(cellX);
-            const screenY = yScale(cellY);
-            const screenXEnd = xScale(cellXEnd);
-            const screenYEnd = yScale(cellYEnd);
-            const screenCellWidth = screenXEnd - screenX;
-            const screenCellHeight = screenYEnd - screenY;
+            // Convert to screen coordinates (handle inverted Y-axis)
+            const screenX1 = xScale(cellX);
+            const screenX2 = xScale(cellXEnd);
+            const screenY1 = yScale(cellY);
+            const screenY2 = yScale(cellYEnd);
+            const rectX = Math.min(screenX1, screenX2);
+            const rectY = Math.min(screenY1, screenY2);
+            const rectWidth = Math.abs(screenX2 - screenX1);
+            const rectHeight = Math.abs(screenY2 - screenY1);
             
             // Draw grid cell background (subtle for all cells) if grid is enabled
             if (showGrid) {
-              const cellRect = g.append("rect")
+              const cellRect = gridLayer.append("rect")
                 .attr("class", isAnomalous ? "anomaly-grid-cell" : "normal-grid-cell")
-                .attr("x", screenX)
-                .attr("y", screenY)
-                .attr("width", Math.abs(screenCellWidth))
-                .attr("height", Math.abs(screenCellHeight))
+                .attr("x", rectX)
+                .attr("y", rectY)
+                .attr("width", rectWidth)
+                .attr("height", rectHeight)
                 .attr("fill", isAnomalous ? 
                   (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.severity === 'high' ?
-                    "rgba(220, 38, 38, 0.3)" : "rgba(245, 158, 11, 0.25)") : // Stronger colors for anomalous cells
-                  "rgba(100, 100, 100, 0.02)") // Very subtle fill for normal cells
+                    "rgba(220, 38, 38, 0.2)" : "rgba(245, 158, 11, 0.15)") : // More transparent for anomalous cells so points show through
+                  "rgba(100, 100, 100, 0.01)") // Very subtle fill for normal cells
                 .attr("stroke", isAnomalous ? 
                   (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.severity === 'high' ?
-                    "rgba(220, 38, 38, 0.8)" : "rgba(245, 158, 11, 0.7)") : // Strong borders for anomalous cells
-                  "rgba(100, 100, 100, 0.1)") // Subtle border for normal cells
-                .attr("stroke-width", isAnomalous ? 2 : 0.5)
+                    "rgba(220, 38, 38, 0.9)" : "rgba(245, 158, 11, 0.8)") : // Strong borders for anomalous cells
+                  "rgba(150, 150, 150, 0.3)") // More visible border for normal cells to see alignment
+                .attr("stroke-width", isAnomalous ? 2.5 : 0.5)
                 .style("pointer-events", isAnomalous ? "all" : "none") // Enable interactions for anomalous cells
                 .style("cursor", isAnomalous ? "pointer" : "default");
               
@@ -1984,16 +2078,21 @@ Z-Score: ${formatZScore(cellData?.z_score)} | ${cellData?.anomaly_type === 'real
     }
 
     // Add data points with anomaly detection - clamp coordinates to prevent overshooting
-    const points = g.selectAll("circle")
+    const points = pointsLayer.selectAll("circle")
       .data(sampledData)
       .enter()
       .append("circle")
-      .attr("cx", (d) => {
+      .attr("cx", (d, i) => {
         const x = xScale(d[0]);
+        // DEBUG: Log first few points to verify alignment with grid
+        if (i < 3) {
+          console.log(`🔴 Point ${i} data coords: (${d[0].toFixed(3)}, ${d[1].toFixed(3)})`);
+          console.log(`🔴 Point ${i} screen coords: (${x.toFixed(1)}, ${yScale(d[1]).toFixed(1)})`);
+        }
         // Clamp x coordinate to prevent overshooting
         return Math.max(0, Math.min(innerWidth, x));
       })
-      .attr("cy", (d) => {
+      .attr("cy", (d, i) => {
         const y = yScale(d[1]);
         // Clamp y coordinate to prevent overshooting
         return Math.max(0, Math.min(innerHeight, y));
@@ -2259,8 +2358,7 @@ Z-Score: ${formatZScore(cellData?.z_score)} | ${cellData?.anomaly_type === 'real
             
             return selectedPoints.includes(originalIndex) ? 2 * devicePixelRatio : 0.5 * devicePixelRatio;
           });
-      })
-      .lower(); // Place data points behind anomaly circles
+      });
 
     // Circular selection logic
     let isDrawing = false;
