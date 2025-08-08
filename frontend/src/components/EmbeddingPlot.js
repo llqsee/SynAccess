@@ -1493,9 +1493,9 @@ const EmbeddingPlot = ({
     const g = svg.append("g")
       .attr("transform", `scale(${devicePixelRatio}) translate(${margin.left / devicePixelRatio},${margin.top / devicePixelRatio})`);
 
-    // Layer groups to control rendering order (points below, grid on top)
-    const pointsLayer = g.append("g").attr("class", "points-layer");
+    // Layer groups to control rendering order (grid under points for interactivity)
     const gridLayer = g.append("g").attr("class", "grid-layer");
+    const pointsLayer = g.append("g").attr("class", "points-layer");
 
     // Extract coordinates and create scales
     const x = sampledData.map(d => d[0]);
@@ -1853,95 +1853,13 @@ const EmbeddingPlot = ({
                     "rgba(220, 38, 38, 0.9)" : "rgba(245, 158, 11, 0.8)") : // Strong borders for anomalous cells
                   "rgba(150, 150, 150, 0.3)") // More visible border for normal cells to see alignment
                 .attr("stroke-width", isAnomalous ? 2.5 : 0.5)
-                .style("pointer-events", isAnomalous ? "all" : "none") // Enable interactions for anomalous cells
-                .style("cursor", isAnomalous ? "pointer" : "default");
+                // Always disable pointer events on grid cells so point tooltips remain usable
+                .style("pointer-events", "none")
+                .style("cursor", "default");
               
               // Add tooltips to anomalous cells
-              if (isAnomalous) {
-                const cellData = anomalyResults.cell_anomalies.find(
-                  anomaly => anomaly.cell_x === i && anomaly.cell_y === j
-                );
-                
-                cellRect
-                  .on("mouseenter", function(event) {
-                    console.log('🔴 MOUSEENTER DETECTED on grid cell:', { i, j });
-                    
-                    // Highlight cell on hover
-                    d3.select(this).attr("fill", cellData?.severity === 'high' ? 
-                      "rgba(220, 38, 38, 0.5)" : "rgba(245, 158, 11, 0.4)");
-                    
-                    // Remove any existing tooltips first
-                    d3.select("body").selectAll(".anomaly-tooltip").remove();
-                    
-                    // Create compact tooltip with safe number formatting
-                    const formatZScore = (zScore) => {
-                      if (zScore === null || zScore === undefined) return 'N/A';
-                      if (typeof zScore === 'string') {
-                        if (zScore === 'Infinity') return '∞';
-                        if (zScore === '-Infinity') return '-∞';
-                        if (zScore === 'NaN') return 'N/A';
-                        return zScore;
-                      }
-                      if (typeof zScore === 'number' && !isNaN(zScore) && isFinite(zScore)) {
-                        return zScore.toFixed(2);
-                      }
-                      return 'N/A';
-                    };
-                    
-                    const compactContent = `Cell (${i},${j}) | ${cellData?.severity || 'unknown'} severity
-Real: ${cellData?.real_count || 0} | Synthetic: ${cellData?.synthetic_count || 0}
-Z-Score: ${formatZScore(cellData?.z_score)} | ${cellData?.anomaly_type === 'real_overrepresentation' ? 'Real heavy' : 'Synthetic heavy'}`;
-                    
-                    const tooltip = d3.select("body")
-                      .append("div")
-                      .attr("class", "anomaly-tooltip")
-                      .style("position", "fixed")
-                      .style("background", "rgba(0, 0, 0, 0.9)")
-                      .style("color", "white")
-                      .style("border", "1px solid #555")
-                      .style("border-radius", "4px")
-                      .style("padding", "8px")
-                      .style("font-size", "11px")
-                      .style("font-family", "Arial, sans-serif")
-                      .style("pointer-events", "none")
-                      .style("z-index", "9999")
-                      .style("box-shadow", "0 2px 6px rgba(0,0,0,0.3)")
-                      .style("max-width", "220px")
-                      .style("white-space", "nowrap")
-                      .style("line-height", "1.3")
-                      .html(compactContent.replace(/\n/g, '<br/>'));
-                    
-                    // Smart positioning to keep tooltip on screen
-                    const tooltipNode = tooltip.node();
-                    const tooltipRect = tooltipNode.getBoundingClientRect();
-                    const viewportWidth = window.innerWidth;
-                    const viewportHeight = window.innerHeight;
-                    
-                    let left = event.pageX + 15;
-                    let top = event.pageY - 15;
-                    
-                    if (left + tooltipRect.width > viewportWidth) {
-                      left = event.pageX - tooltipRect.width - 15;
-                    }
-                    if (top + tooltipRect.height > viewportHeight) {
-                      top = event.pageY - tooltipRect.height - 15;
-                    }
-                    if (left < 0) left = 10;
-                    if (top < 0) top = 10;
-                    
-                    tooltip
-                      .style("left", left + "px")
-                      .style("top", top + "px");
-                  })
-                  .on("mouseleave", function(event) {
-                    // Restore original color
-                    d3.select(this).attr("fill", cellData?.severity === 'high' ? 
-                      "rgba(220, 38, 38, 0.3)" : "rgba(245, 158, 11, 0.25)");
-                    
-                    // Remove tooltip
-                    d3.select("body").selectAll(".anomaly-tooltip").remove();
-                  });
-              }
+              // Disable hover interactions on grid cells to prefer point interactions
+              // (Remove anomaly cell tooltip handlers to avoid intercepting pointer events)
             }
             
             if (isAnomalous) {
