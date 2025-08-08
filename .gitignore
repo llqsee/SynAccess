@@ -29,6 +29,47 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+mavis_dev.db
+test.db
+
+# Log files
+*.log
+logs/
+
+# Cache directories
+__pycache__/
+.pytest_cache/
+.jest-cache/
+.ipynb_checkpoints/
+
+# Environment files
+.env
+.env.example
+
+# Large data files
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.h5
+*.hdf5
+
+# Model files
+*.pkl
+*.joblib
+*.bin
+*.model
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
 ## https://github.com/github/gitignore/blob/e8554d85bf62e38d6db966a50d2064ac025fd82a/Python.gitignore
 
 # Byte-compiled / optimized / DLL files

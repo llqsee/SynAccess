@@ -1,11 +1,13 @@
 """API routes for embedding job history management."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+import logging
 from datetime import datetime, timedelta
 import json
 
-from services.job_service import JobService
-from utils.logging_config import get_logger
+from backend.services.job_service import JobService
+from backend.utils.logging_config import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -95,7 +97,7 @@ async def get_job_history(
             if job.has_results:
                 try:
                     results = JobService.get_job_results(job.job_id)
-                    if results:
+                    if results and isinstance(results, dict):
                         job_dict["actual_processed_samples"] = {
                             "real_samples": results.get("real_processed_samples"),
                             "synthetic_samples": results.get("synthetic_processed_samples")
@@ -384,3 +386,69 @@ async def get_history_stats():
     except Exception as e:
         logger.error(f"Error getting history stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get history statistics: {str(e)}") 
+
+@router.get("/available-models")
+async def get_available_models():
+    """Get list of available models from completed jobs for sidebar selection."""
+    try:
+        from services.job_service import JobService
+        
+        # Get all completed jobs with models
+        jobs = JobService.get_jobs(
+            limit=1000,  # Get all jobs
+            status="completed",
+            favorites_only=False
+        )
+        
+        # Filter jobs that have models and format for frontend
+        available_models = []
+        for job in jobs:
+            if job.has_model:
+                # Get display name based on job parameters
+                real_samples = job.parameters.get('n_real_samples') if isinstance(job.parameters, dict) else None
+                synth_samples = job.parameters.get('n_synth_samples') if isinstance(job.parameters, dict) else None
+                
+                # Use processed samples if available - get from JobResult
+                if real_samples is None or synth_samples is None:
+                    try:
+                        results = JobService.get_job_results(job.job_id)
+                        if results and isinstance(results, dict):
+                            if real_samples is None:
+                                real_samples = results.get("real_processed_samples")
+                            if synth_samples is None:
+                                synth_samples = results.get("synthetic_processed_samples")
+                    except Exception:
+                        # If we can't get results, continue with what we have
+                        pass
+                
+                # Generate display name
+                if real_samples and synth_samples:
+                    display_name = f"{job.method.upper()} - {real_samples}R + {synth_samples}S samples"
+                else:
+                    display_name = job.name
+                
+                model_info = {
+                    "job_id": job.job_id,
+                    "name": job.name,  # Include the full job name with dataset information
+                    "display_name": display_name,
+                    "method": job.method,
+                    "created_at": job.created_at.isoformat() if job.created_at else None,
+                    "is_favorite": job.is_favorite,
+                    "parameters": job.parameters if isinstance(job.parameters, dict) else json.loads(job.parameters) if job.parameters else {},
+                    "real_processed_samples": real_samples,
+                    "synthetic_processed_samples": synth_samples,
+                    "runtime_seconds": job.runtime_seconds
+                }
+                available_models.append(model_info)
+        
+        # Sort by creation date (newest first)
+        available_models.sort(key=lambda x: x["created_at"] or "", reverse=True)
+        
+        return {
+            "models": available_models,
+            "total": len(available_models)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting available models: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get available models: {str(e)}") 

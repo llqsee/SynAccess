@@ -259,9 +259,7 @@ const History = ({ onLoadEmbedding }) => {
     // If we have sample counts from any source, use them to generate the correct name
     if (realSamples !== null && realSamples !== undefined &&
         synthSamples !== null && synthSamples !== undefined) {
-      const fineTuned = job.parameters?.fine_tune || false;
-      const fineTuneSuffix = fineTuned ? " (Adapted)" : "";
-      return `${job.method.toUpperCase()} Embedding - ${realSamples}R + ${synthSamples}S samples${fineTuneSuffix}`;
+      return `${job.method.toUpperCase()} Embedding - ${realSamples}R + ${synthSamples}S samples`;
     }
     
     // Fall back to stored name if no sample information available
@@ -453,7 +451,7 @@ const History = ({ onLoadEmbedding }) => {
                           )}
                           
                           {job.status === 'completed' && job.has_model && (
-                            <Tooltip title={job.parameters?.fine_tune ? "Download Adapted Model" : "Download Model"}>
+                            <Tooltip title="Download Model">
                               <IconButton
                                 size="small"
                                 onClick={() => handleDownloadModel(job.job_id)}
@@ -618,41 +616,12 @@ const History = ({ onLoadEmbedding }) => {
                     Parameters
                   </Typography>
                   <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                    {selectedJob.parameters?.fine_tune ? (
-                      <Box>
-                        <Alert severity="info" sx={{ mb: 2 }}>
-                          <Typography variant="body2">
-                            <strong>Model Adaptation:</strong> This model was adapted to the real data using the parameters from the original pre-trained model.
-                          </Typography>
-                        </Alert>
-                        <Typography variant="body2" gutterBottom>
-                          <strong>Adapted Model Parameters:</strong>
-                        </Typography>
-                        <pre style={{ margin: 0, fontSize: '12px' }}>
-                          {JSON.stringify(selectedJob.parameters, null, 2)}
-                        </pre>
-                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                          Note: These are the parameters used to create the adapted model. The model was re-trained on your real data with these same parameters.
-                        </Typography>
-                        {selectedJob.results?.preprocessing_info?.adapted_model_params && (
-                          <Box sx={{ mt: 2 }}>
-                            <Typography variant="body2" gutterBottom>
-                              <strong>Actual Adapted Model Parameters:</strong>
-                            </Typography>
-                            <pre style={{ margin: 0, fontSize: '12px', backgroundColor: '#f0f8ff', padding: '8px', borderRadius: '4px' }}>
-                              {JSON.stringify(selectedJob.results.preprocessing_info.adapted_model_params, null, 2)}
-                            </pre>
-                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                              These are the actual parameters of the newly created adapted model that was trained on your real data.
-                            </Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    ) : (
-                      <pre style={{ margin: 0, fontSize: '12px' }}>
-                        {JSON.stringify(selectedJob.parameters, null, 2)}
-                      </pre>
-                    )}
+                    <pre style={{ margin: 0, fontSize: '12px' }}>
+                      {JSON.stringify(selectedJob.parameters, null, 2)}
+                    </pre>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      These are the parameters used to create the embedding model.
+                    </Typography>
                   </Paper>
                 </Grid>
               </Grid>

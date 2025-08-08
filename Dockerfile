@@ -13,6 +13,7 @@ FROM continuumio/miniconda3:latest
 
 # --- Build ARG to select environment file ---
 ARG ENV_FILE=environment.yml
+ARG GPU_ENABLED=false
 
 # Install system dependencies and Node.js
 RUN apt-get update && apt-get install -y \
@@ -20,6 +21,14 @@ RUN apt-get update && apt-get install -y \
     g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install NVIDIA runtime if GPU is enabled
+RUN if [ "$GPU_ENABLED" = "true" ]; then \
+    apt-get update && apt-get install -y \
+    nvidia-container-runtime \
+    nvidia-container-toolkit \
+    && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs
@@ -61,5 +70,5 @@ CMD ["./start.sh"]
 # docker build --build-arg ENV_FILE=environment.yml -t mavis:cpu .
 #
 # Build for GPU:
-# docker build --build-arg ENV_FILE=environment-gpu.yml -t mavis:gpu .
+# docker build --build-arg ENV_FILE=environment-gpu.yml --build-arg GPU_ENABLED=true -t mavis:gpu .
 # --- 

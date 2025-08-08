@@ -6,11 +6,12 @@ from datetime import datetime
 import base64
 import pickle
 
-from services.embedding import EmbeddingService
-from services.job_service import JobService
-from services.task_queue import get_task_queue_manager, EmbeddingTask
-from utils.validation import validate_data_format
-from utils.logging_config import get_logger
+from backend.services.embedding import EmbeddingService
+from backend.services.job_service import JobService
+from backend.services.task_queue import get_task_queue_manager, EmbeddingTask
+from backend.utils.validation import validate_data_format
+from backend.utils.logging_config import get_logger
+from backend.utils.dataset_fingerprint import generate_human_readable_description
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -23,6 +24,8 @@ class EmbeddingRequest(BaseModel):
     n_samples: Optional[int] = Field(None, description="Number of samples to use")
     real_headers: Optional[List[str]] = Field(None, description="Real data headers")
     synthetic_headers: Optional[List[str]] = Field(None, description="Synthetic data headers")
+    real_dataset_name: Optional[str] = Field(None, description="Name of the real dataset (filename)")
+    synthetic_dataset_name: Optional[str] = Field(None, description="Name of the synthetic dataset (filename)")
 
 class PreTrainedModelRequest(BaseModel):
     real_data: List[List[Any]] = Field(..., description="Real dataset")
@@ -32,7 +35,9 @@ class PreTrainedModelRequest(BaseModel):
     method: str = Field(..., description="Embedding method (umap, tsne)")
     real_headers: Optional[List[str]] = Field(None, description="Real data headers")
     synthetic_headers: Optional[List[str]] = Field(None, description="Synthetic data headers")
-    fine_tune: bool = Field(False, description="Whether to fine-tune the model on real data")
+    real_dataset_name: Optional[str] = Field(None, description="Name of the real dataset (filename)")
+    synthetic_dataset_name: Optional[str] = Field(None, description="Name of the synthetic dataset (filename)")
+    # Fine-tuning removed - using pretrained models from history
 
 @router.post("/embed")
 async def compute_embedding(request: EmbeddingRequest):
@@ -45,13 +50,30 @@ async def compute_embedding(request: EmbeddingRequest):
         job_id = str(uuid.uuid4())
         task_id = str(uuid.uuid4())
         
-        # Create job record
+        # Generate human-readable dataset description for job naming
+        try:
+            dataset_description = generate_human_readable_description(
+                request.real_data, 
+                request.synthetic_data,
+                request.real_headers,
+                request.synthetic_headers,
+                request.method.upper(),
+                request.real_dataset_name,
+                request.synthetic_dataset_name
+            )
+            logger.info(f"Generated dataset description: {dataset_description}")
+        except Exception as e:
+            logger.warning(f"Failed to generate dataset description: {e}")
+            dataset_description = f"{request.method.upper()} Embedding"
+        
+        # Create job record with descriptive name
         JobService.create_job(
             job_id=job_id,
             method=request.method,
             params=request.params,
             n_samples=request.n_samples,
-            status="queued"
+            status="queued",
+            dataset_description=dataset_description
         )
         
         # Create embedding task
@@ -149,7 +171,23 @@ async def compute_embedding_with_pretrained_model(request: PreTrainedModelReques
         job_id = str(uuid.uuid4())
         task_id = str(uuid.uuid4())
         
-        # Create job record
+        # Generate human-readable dataset description for pretrained job naming
+        try:
+            dataset_description = generate_human_readable_description(
+                request.real_data, 
+                request.synthetic_data,
+                request.real_headers,
+                request.synthetic_headers,
+                request.method.upper(),
+                request.real_dataset_name,
+                request.synthetic_dataset_name
+            ) + " (Pretrained)"
+            logger.info(f"Generated pretrained dataset description: {dataset_description}")
+        except Exception as e:
+            logger.warning(f"Failed to generate pretrained dataset description: {e}")
+            dataset_description = f"{request.method.upper()} Embedding (Pretrained)"
+        
+        # Create job record with descriptive name
         JobService.create_job(
             job_id=job_id,
             method=request.method,
@@ -157,11 +195,11 @@ async def compute_embedding_with_pretrained_model(request: PreTrainedModelReques
                 "pretrained_model": True, 
                 "model_format": request.model_format,
                 "n_real_samples": len(request.real_data),
-                "n_synth_samples": len(request.synthetic_data),
-                "fine_tune": request.fine_tune
+                "n_synth_samples": len(request.synthetic_data)
             },
             n_samples=None,
-            status="queued"
+            status="queued",
+            dataset_description=dataset_description
         )
         
         # Create embedding task with pre-trained model
@@ -175,8 +213,7 @@ async def compute_embedding_with_pretrained_model(request: PreTrainedModelReques
                 "pretrained_model": True, 
                 "model_format": request.model_format,
                 "n_real_samples": len(request.real_data),
-                "n_synth_samples": len(request.synthetic_data),
-                "fine_tune": request.fine_tune
+                "n_synth_samples": len(request.synthetic_data)
             },
             n_samples=None,
             real_headers=request.real_headers,
@@ -226,3 +263,112 @@ async def compute_embedding_with_pretrained_model(request: PreTrainedModelReques
             JobService.mark_job_failed(job_id, str(e))
         logger.error(f"Error in pre-trained model embedding: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") 
+
+@router.post("/embed-pretrained-from-history")
+async def embed_with_pretrained_model_from_history(
+    real_data: List[List[Any]],
+    synthetic_data: List[List[Any]],
+    method: str = "umap",
+    pretrained_model_job_id: str = None,
+    params: Dict[str, Any] = {},
+    real_headers: Optional[List[str]] = None,
+    synthetic_headers: Optional[List[str]] = None,
+    real_dataset_name: Optional[str] = None,
+    synthetic_dataset_name: Optional[str] = None
+):
+    """Generate embeddings using a pre-trained model from history."""
+    try:
+        from backend.services.embedding_service import EmbeddingService
+        from backend.services.job_service import JobService
+        
+        # Validate inputs
+        if not real_data or not synthetic_data:
+            raise HTTPException(status_code=400, detail="Both real and synthetic data are required")
+        
+        if not pretrained_model_job_id:
+            raise HTTPException(status_code=400, detail="pretrained_model_job_id is required")
+        
+        # Get the original job to retrieve the model
+        original_job = JobService.get_job(pretrained_model_job_id)
+        if not original_job:
+            raise HTTPException(status_code=404, detail="Original job not found")
+        
+        if not original_job.has_model:
+            raise HTTPException(status_code=400, detail="Original job has no model available")
+        
+        # Get model data
+        model_data = JobService.get_model(pretrained_model_job_id)
+        if not model_data:
+            raise HTTPException(status_code=404, detail="Model data not found")
+        
+        # Decode and load the model
+        import base64
+        import joblib
+        import io
+        
+        model_bytes = base64.b64decode(model_data["model_data"])
+        buffer = io.BytesIO(model_bytes)
+        pretrained_model = joblib.load(buffer)
+        buffer.close()
+        
+        logger.info(f"Loaded pretrained model from job {pretrained_model_job_id}")
+        logger.info(f"Model type: {type(pretrained_model).__name__}")
+        
+        # Create a new job for this embedding
+        job_id = str(uuid.uuid4())
+        
+        # Generate human-readable dataset description for history-based pretrained job
+        try:
+            dataset_description = generate_human_readable_description(
+                real_data, 
+                synthetic_data,
+                real_headers,
+                synthetic_headers,
+                method.upper(),
+                real_dataset_name,
+                synthetic_dataset_name
+            ) + f" (From {original_job.name})"
+            logger.info(f"Generated history-based dataset description: {dataset_description}")
+        except Exception as e:
+            logger.warning(f"Failed to generate history-based dataset description: {e}")
+            dataset_description = f"{method.upper()} Embedding (Pre-trained from {original_job.name})"
+        
+        # Create job record with descriptive name
+        JobService.create_job(
+            job_id=job_id,
+            method=method,
+            params={
+                **params,
+                "pretrained_model_job_id": pretrained_model_job_id,
+                "original_job_name": original_job.name
+            },
+            dataset_description=dataset_description
+        )
+        
+        # Submit the embedding job with the pretrained model
+        embedding_service = EmbeddingService()
+        
+        # Process the embedding with the pretrained model
+        result = await embedding_service.generate_embedding_with_pretrained_model(
+            real_data=real_data,
+            synthetic_data=synthetic_data,
+            method=method,
+            pretrained_model=pretrained_model,
+            params=params,
+            real_headers=real_headers,
+            synthetic_headers=synthetic_headers,
+            job_id=job_id
+        )
+        
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "message": "Embedding generated successfully using pretrained model",
+            "result": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in embed_with_pretrained_model_from_history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}") 

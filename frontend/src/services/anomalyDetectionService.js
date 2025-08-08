@@ -1,3 +1,5 @@
+import logger from '../utils/logger';
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
 
 class AnomalyDetectionService {
@@ -5,13 +7,14 @@ class AnomalyDetectionService {
     this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
   }
 
-  async detectAnomalies(realData, syntheticData, contamination = 'auto') {
+  async detectAnomalies(realData, syntheticData, gridSize = 20) {
     try {
-      console.log('🔍 Sending anomaly detection request:');
-      console.log('Real data sample:', realData.slice(0, 3));
-      console.log('Synthetic data sample:', syntheticData.slice(0, 3));
-      console.log('Contamination:', contamination);
-      
+      logger.debug('Sending adaptive logit-based anomaly detection request', { gridSize });
+      logger.debug('AnomalyRequestSamples', {
+        realSample: realData.slice(0, 3),
+        synthSample: syntheticData.slice(0, 3)
+      });
+
       // Validate data types
       const validateNumericData = (data, name) => {
         if (!Array.isArray(data)) {
@@ -21,25 +24,28 @@ class AnomalyDetectionService {
           if (!Array.isArray(data[i])) {
             throw new Error(`${name}[${i}] must be an array`);
           }
-          for (let j = 0; j < Math.min(data[i].length, 3); j++) {
+          if (data[i].length !== 2) {
+            throw new Error(`${name}[${i}] must have exactly 2 dimensions for grid-based detection`);
+          }
+          for (let j = 0; j < data[i].length; j++) {
             if (typeof data[i][j] !== 'number' || isNaN(data[i][j])) {
               throw new Error(`${name}[${i}][${j}] must be a number, got ${typeof data[i][j]}: ${data[i][j]}`);
             }
           }
         }
       };
-      
+
       validateNumericData(realData, 'realData');
       validateNumericData(syntheticData, 'syntheticData');
-      
+
       const requestBody = {
         real_data: realData,
         synthetic_data: syntheticData,
-        contamination: contamination
+        grid_size: gridSize
       };
-      
-      console.log('📤 Request body:', JSON.stringify(requestBody, null, 2));
-      
+
+      logger.apiRequest('POST', `${this.baseURL}/anomaly/detect`, requestBody);
+
       const response = await fetch(`${this.baseURL}/anomaly/detect`, {
         method: 'POST',
         headers: {
@@ -48,80 +54,57 @@ class AnomalyDetectionService {
         body: JSON.stringify(requestBody),
       });
 
-      console.log('📥 Response status:', response.status);
-      
+      logger.apiResponse('POST', `${this.baseURL}/anomaly/detect`, response.status);
+
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ Backend error:', errorData);
+        logger.apiError('POST', `${this.baseURL}/anomaly/detect`, new Error('Backend error'), { errorData });
         throw new Error(errorData.detail || 'Failed to detect anomalies');
       }
 
       const data = await response.json();
-      console.log('✅ Anomaly detection response:', data);
-      console.log('📊 Response keys:', Object.keys(data));
-      console.log('📈 Response structure:', JSON.stringify(data, null, 2));
-      
-      // The response structure is different than expected
-      // Return the entire response instead of looking for anomaly_detection property
+      logger.debug('Anomaly detection response received');
       return data;
     } catch (error) {
-      console.error('❌ Anomaly detection failed:', error);
+      logger.error('Adaptive logit-based anomaly detection failed', error);
       throw error;
     }
   }
 
-  async detectAnomaliesFromJob(jobId, contamination = 'auto') {
+  async detectAnomaliesFromJob(jobId, gridSize = 20) {
     try {
-      console.log('🔍 Sending anomaly detection request using preprocessed data from job:', jobId);
-      console.log('Contamination:', contamination);
-      
-      const requestBody = {
-        job_id: jobId,
-        contamination: contamination
-      };
-      
-      console.log('📤 Request body:', JSON.stringify(requestBody, null, 2));
-      
+      const requestBody = { job_id: jobId, grid_size: gridSize };
+      logger.apiRequest('POST', `${this.baseURL}/anomaly/detect-from-job`, requestBody);
+
       const response = await fetch(`${this.baseURL}/anomaly/detect-from-job`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
       });
 
-      console.log('📥 Response status:', response.status);
-      
+      logger.apiResponse('POST', `${this.baseURL}/anomaly/detect-from-job`, response.status);
+
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ Backend error:', errorData);
+        logger.apiError('POST', `${this.baseURL}/anomaly/detect-from-job`, new Error('Backend error'), { errorData });
         throw new Error(errorData.detail || 'Failed to detect anomalies from job');
       }
 
       const data = await response.json();
-      console.log('✅ Anomaly detection from job response:', data);
-      console.log('📊 Response keys:', Object.keys(data));
-      console.log('📈 Response structure:', JSON.stringify(data, null, 2));
-      
+      logger.debug('Anomaly detection from job response received');
       return data;
     } catch (error) {
-      console.error('❌ Anomaly detection from job failed:', error);
+      logger.error('Adaptive logit-based anomaly detection from job failed', error);
       throw error;
     }
   }
 
-  async generateAnomalyCSV(realData, syntheticData, contamination = 'auto') {
+  async generateAnomalyCSV(realData, syntheticData, gridSize = 20) {
     try {
       const response = await fetch(`${this.baseURL}/anomaly/csv`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          real_data: realData,
-          synthetic_data: syntheticData,
-          contamination: contamination
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ real_data: realData, synthetic_data: syntheticData, grid_size: gridSize }),
       });
 
       if (!response.ok) {
@@ -129,25 +112,19 @@ class AnomalyDetectionService {
         throw new Error(errorData.detail || 'Failed to generate CSV');
       }
 
-      const data = await response.json();
-      return data;
+      return await response.json();
     } catch (error) {
-      console.error('CSV generation failed:', error);
+      logger.error('CSV generation failed', error);
       throw error;
     }
   }
 
-  async generateAnomalyCSVFromJob(jobId, contamination = 'auto') {
+  async generateAnomalyCSVFromJob(jobId, gridSize = 20) {
     try {
       const response = await fetch(`${this.baseURL}/anomaly/csv-from-job`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          job_id: jobId,
-          contamination: contamination
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: jobId, grid_size: gridSize }),
       });
 
       if (!response.ok) {
@@ -155,10 +132,9 @@ class AnomalyDetectionService {
         throw new Error(errorData.detail || 'Failed to generate CSV from job');
       }
 
-      const data = await response.json();
-      return data;
+      return await response.json();
     } catch (error) {
-      console.error('CSV generation from job failed:', error);
+      logger.error('CSV generation from job failed', error);
       throw error;
     }
   }
@@ -171,7 +147,7 @@ class AnomalyDetectionService {
       }
       return await response.json();
     } catch (error) {
-      console.error('Health check failed:', error);
+      logger.error('Health check failed', error);
       throw error;
     }
   }
@@ -188,7 +164,7 @@ class AnomalyDetectionService {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      console.error('Failed to download CSV:', error);
+      logger.error('Failed to download CSV', error);
       throw error;
     }
   }
@@ -210,32 +186,18 @@ class AnomalyDetectionService {
 
   validateData(realData, syntheticData) {
     const errors = [];
-    
-    if (!Array.isArray(realData) || realData.length === 0) {
-      errors.push('Real data must be a non-empty array');
-    }
-    
-    if (!Array.isArray(syntheticData) || syntheticData.length === 0) {
-      errors.push('Synthetic data must be a non-empty array');
-    }
-    
-    if (realData.length < 10) {
-      errors.push('Real data must have at least 10 points');
-    }
-    
+    if (!Array.isArray(realData) || realData.length === 0) errors.push('Real data must be a non-empty array');
+    if (!Array.isArray(syntheticData) || syntheticData.length === 0) errors.push('Synthetic data must be a non-empty array');
+    if (realData.length < 10) errors.push('Real data must have at least 10 points');
+
     if (realData.length > 0 && syntheticData.length > 0) {
       const realDim = realData[0].length;
       const syntheticDim = syntheticData[0].length;
-      
-      if (realDim !== syntheticDim) {
-        errors.push(`Data dimension mismatch: Real data has ${realDim} features, Synthetic data has ${syntheticDim} features`);
-      }
+      if (realDim !== 2 || syntheticDim !== 2) errors.push('Adaptive logit-based anomaly detection requires 2D data (embedding coordinates)');
+      if (realDim !== syntheticDim) errors.push(`Data dimension mismatch: Real data has ${realDim} features, Synthetic data has ${syntheticDim} features`);
     }
-    
-    return {
-      isValid: errors.length === 0,
-      errors: errors
-    };
+
+    return { isValid: errors.length === 0, errors };
   }
 }
 

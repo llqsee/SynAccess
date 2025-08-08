@@ -35,4 +35,6 @@ npm install
 npm start
 ```
 
+> Windows PowerShell note: do not chain with `&&`. Run each command separately (e.g., `cd frontend` then `npm start`).
+
 *This page is under construction. More detailed content will be added soon.*

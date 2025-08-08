@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -28,9 +28,31 @@ import {
   Tooltip,
   Stack,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  ListItemSecondaryAction
 } from '@mui/material';
-import { CheckCircle, CloudUpload, ArrowForward, Settings, ExpandLess, ExpandMore, PlayArrow, Cancel, Upload } from '@mui/icons-material';
+import { 
+  CheckCircle, 
+  CloudUpload, 
+  ArrowForward, 
+  Settings, 
+  ExpandLess, 
+  ExpandMore, 
+  PlayArrow, 
+  Cancel, 
+  Upload,
+  History,
+  Favorite,
+  FavoriteBorder,
+  Schedule,
+  Memory,
+  Refresh
+} from '@mui/icons-material';
+import { getAvailableModels } from '../services/api';
 
 const Sidebar = ({
   onRealDataUpload,
@@ -59,13 +81,32 @@ const Sidebar = ({
   const [earlyExaggeration, setEarlyExaggeration] = useState(12.0);
   const [nRealSamples, setNRealSamples] = useState(1000);
   const [nSynthSamples, setNSynthSamples] = useState(1000);
-  const [parametersConfigured, setParametersConfigured] = useState(false); // Start as false to allow parameter configuration
+  const [parametersConfigured, setParametersConfigured] = useState(false);
   const [parametersExpanded, setParametersExpanded] = useState(true);
   const [usePretrainedModel, setUsePretrainedModel] = useState(false);
-  const [pretrainedModel, setPretrainedModel] = useState(null);
-  const [pretrainedModelName, setPretrainedModelName] = useState('');
-  const [fineTuneModel, setFineTuneModel] = useState(false);
-  const [modelFormat, setModelFormat] = useState('pickle'); // State to store the detected model format
+  const [selectedModelJobId, setSelectedModelJobId] = useState('');
+  const [availableModels, setAvailableModels] = useState([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [useGpu, setUseGpu] = useState(false);
+
+  // Load available models when method changes to pretrained
+  useEffect(() => {
+    if (method === 'pretrained' && availableModels.length === 0) {
+      loadAvailableModels();
+    }
+  }, [method]);
+
+  const loadAvailableModels = async () => {
+    setLoadingModels(true);
+    try {
+      const response = await getAvailableModels();
+      setAvailableModels(response.models || []);
+    } catch (error) {
+      console.error('Failed to load available models:', error);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
 
   const handleFileSelection = async (event, isReal) => {
     const file = event.target.files[0];
@@ -82,72 +123,29 @@ const Sidebar = ({
     }
   };
 
-  const handleModelUpload = async (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      try {
-        // Validate file size (max 50MB)
-        if (file.size > 5 * 1024 * 1024) { // Changed to 5MB for testing, can revert to 50MB later
-          alert('Model file is too large. Please upload a file smaller than 5MB.');
-          return;
-        }
-
-        // Validate file extension
-        const validExtensions = ['.pkl', '.pickle', '.joblib'];
-        const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-        if (!validExtensions.includes(fileExtension)) {
-          alert('Please upload a valid model file (.pkl, .pickle, or .joblib)');
-          return;
-        }
-
-        // Determine model format based on file extension
-        let modelFormat = 'pickle'; // default
-        if (fileExtension === '.joblib') {
-          modelFormat = 'joblib';
-        }
-
-        console.log('Reading model file:', file.name, 'Size:', file.size, 'bytes', 'Format:', modelFormat);
-
-        // Use FileReader to safely convert binary file to base64
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const base64String = e.target.result.split(',')[1]; // Extract base64 part from Data URL
-          setPretrainedModel(base64String);
-          setPretrainedModelName(file.name);
-          setUsePretrainedModel(true);
-          setModelFormat(modelFormat); // Store the detected format
-          console.log('Model file successfully read and base64 encoded.');
-        };
-        reader.onerror = (error) => {
-          console.error('FileReader error during model upload:', error);
-          alert('Error reading model file. Please ensure it is a valid UMAP or t-SNE model file.');
-        };
-        reader.readAsDataURL(file); // Read the file as a Data URL
-
-      } catch (error) {
-        console.error('Error in handleModelUpload:', error);
-        alert('Error reading model file. Please ensure it is a valid UMAP or t-SNE model file.');
-      }
-    }
-  };
-
   const handleVisualize = () => {
     if (method === 'pretrained') {
-      if (!usePretrainedModel || !pretrainedModel) {
-        alert('Please upload a pre-trained model first.');
+      if (!selectedModelJobId) {
+        alert('Please select a pre-trained model from the dropdown.');
         return;
       }
-      // Use pre-trained model
+      
+      // Find the selected model details
+      const selectedModel = availableModels.find(model => model.job_id === selectedModelJobId);
+      if (!selectedModel) {
+        alert('Selected model not found. Please refresh and try again.');
+        return;
+      }
+
+      // Use pre-trained model from history
       const params = {
-        method: 'umap', // Default to UMAP, could be enhanced to detect from model
-        pretrainedModel,
-        modelFormat: modelFormat, // Use the detected format
+        method: selectedModel.method,
+        pretrainedModelJobId: selectedModelJobId,
         params: {
           pretrained_model: true,
-          model_format: modelFormat,
+          model_job_id: selectedModelJobId,
           n_real_samples: nRealSamples,
-          n_synth_samples: nSynthSamples,
-          fine_tune: fineTuneModel
+          n_synth_samples: nSynthSamples
         }
       };
       onVisualize(params);
@@ -160,7 +158,8 @@ const Sidebar = ({
               n_neighbors: nNeighbors, 
               min_dist: minDist,
               n_real_samples: nRealSamples,
-              n_synth_samples: nSynthSamples
+              n_synth_samples: nSynthSamples,
+              use_gpu: useGpu
             }
           : { 
               perplexity: perplexity, 
@@ -188,12 +187,15 @@ const Sidebar = ({
   const getCurrentStep = () => {
     if (!realDataLoaded) return 0;
     if (!syntheticDataLoaded) return 1;
-    if (syntheticDataLoaded && !parametersConfigured) return 2; // Parameter configuration step
-    if (syntheticDataLoaded && parametersConfigured) return 3; // Generate visualization step
+    if (syntheticDataLoaded && !parametersConfigured) return 2;
+    if (syntheticDataLoaded && parametersConfigured) return 3;
     return 2;
   };
 
   const currentStep = getCurrentStep();
+
+  // Get selected model details
+  const selectedModel = availableModels.find(model => model.job_id === selectedModelJobId);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, height: '100%' }}>
@@ -407,7 +409,7 @@ const Sidebar = ({
                       >
                         <MenuItem value="umap">UMAP</MenuItem>
                         <MenuItem value="tsne">t-SNE</MenuItem>
-                        <MenuItem value="pretrained">Upload Pre-trained Model</MenuItem>
+                        <MenuItem value="pretrained">Use Pre-trained Model</MenuItem>
                       </Select>
                     </FormControl>
 
@@ -440,6 +442,24 @@ const Sidebar = ({
                             disabled={!syntheticDataLoaded}
                           />
                         </Box>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={useGpu}
+                              onChange={(e) => setUseGpu(e.target.checked)}
+                              color="primary"
+                              size="small"
+                              disabled={!syntheticDataLoaded}
+                            />
+                          }
+                          label="Use GPU (if available)"
+                          sx={{ 
+                            mt: 1,
+                            '& .MuiFormControlLabel-label': {
+                              fontSize: '0.875rem'
+                            }
+                          }}
+                        />
                       </>
                     )}
                     
@@ -478,78 +498,174 @@ const Sidebar = ({
                       <Box sx={{ 
                         border: '2px dashed #e5e7eb', 
                         borderRadius: 2, 
-                        p: 2, 
-                        textAlign: 'center',
-                        background: usePretrainedModel ? 
+                        p: 2,
+                        background: selectedModelJobId ? 
                           'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)' : 
                           'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-                        borderColor: usePretrainedModel ? '#059669' : '#e5e7eb'
+                        borderColor: selectedModelJobId ? '#059669' : '#e5e7eb'
                       }}>
-                        <Typography variant="body2" gutterBottom>
-                          {usePretrainedModel ? 'Model Uploaded' : 'Upload Pre-trained Model'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                          {usePretrainedModel ? 
-                            `Model: ${pretrainedModelName}` : 
-                            'Upload a pre-trained UMAP/t-SNE model (.pkl, .pickle, .joblib)'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block', fontSize: '0.7rem' }}>
-                          {!usePretrainedModel && 'Tip: Save your UMAP/t-SNE models using pickle.dump(model, file) or joblib.dump(model, file)'}
-                        </Typography>
-                        <Button
-                          variant={usePretrainedModel ? "outlined" : "contained"}
-                          component="label"
-                          fullWidth
-                          size="small"
-                          color={usePretrainedModel ? "success" : "warning"}
-                          sx={{ mb: 1 }}
-                        >
-                          {usePretrainedModel ? 'Model Loaded' : 'Choose Model File'}
-                          <input
-                            type="file"
-                            hidden
-                            accept=".pkl,.pickle,.joblib"
-                            onChange={handleModelUpload}
-                          />
-                        </Button>
-                        {usePretrainedModel && (
-                          <Box sx={{ mt: 2 }}>
-                            <FormControlLabel
-                              control={
-                                <Switch
-                                  checked={fineTuneModel}
-                                  onChange={(e) => setFineTuneModel(e.target.checked)}
-                                  size="small"
-                                />
-                              }
-                              label={
-                                <Typography variant="caption" color="text.secondary">
-                                  Adapt model to real data
-                                </Typography>
-                              }
-                            />
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontSize: '0.7rem' }}>
-                              {fineTuneModel ? 
-                                'Model will be re-trained on real data with same parameters before transforming both datasets' :
-                                'Model will be used directly without additional training'
-                              }
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                          <Typography variant="body2" gutterBottom>
+                            {selectedModelJobId ? 'Model Selected' : 'Select Pre-trained Model'}
+                          </Typography>
+                          <Button
+                            size="small"
+                            onClick={loadAvailableModels}
+                            disabled={loadingModels}
+                            startIcon={loadingModels ? <CircularProgress size={16} /> : <Refresh />}
+                          >
+                            {loadingModels ? 'Loading...' : 'Refresh'}
+                          </Button>
+                        </Box>
+                        
+                        {loadingModels ? (
+                          <Box sx={{ textAlign: 'center', py: 2 }}>
+                            <CircularProgress size={24} />
+                            <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                              Loading available models...
                             </Typography>
                           </Box>
-                        )}
-                        {usePretrainedModel && (
-                          <Button
-                            variant="text"
-                            size="small"
-                            onClick={() => {
-                              setUsePretrainedModel(false);
-                              setPretrainedModel(null);
-                              setPretrainedModelName('');
-                              setFineTuneModel(false);
-                              setModelFormat('pickle'); // Reset format
-                            }}
-                          >
-                            Remove Model
-                          </Button>
+                        ) : availableModels.length === 0 ? (
+                          <Alert severity="info" sx={{ mb: 2 }}>
+                            <Typography variant="body2">
+                              No pre-trained models available. Create some embeddings first to see them here.
+                            </Typography>
+                          </Alert>
+                        ) : (
+                          <>
+                            <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                              <InputLabel>Select Model</InputLabel>
+                              <Select
+                                value={selectedModelJobId}
+                                label="Select Model"
+                                onChange={(e) => setSelectedModelJobId(e.target.value)}
+                                disabled={!syntheticDataLoaded}
+                              >
+                                {availableModels.map((model) => (
+                                  <MenuItem key={model.job_id} value={model.job_id}>
+                                    <Tooltip 
+                                      title={
+                                        <Box>
+                                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                                            {(() => {
+                                              // Try to get the actual job name first (which should contain dataset name)
+                                              const jobName = model.name;
+                                              const displayName = model.display_name;
+                                              
+                                              // First try to extract from the full job name (like "UMAP: insurance+insurance 100K 1,000R+1,000S 7cols 3cat 4num")
+                                              if (jobName) {
+                                                // Look for pattern: "METHOD: datasetname+..." 
+                                                const match = jobName.match(/^(UMAP|t-SNE|TSNE):\s*([^+\s]+)/i);
+                                                if (match) {
+                                                  // Return the first dataset name, capitalized
+                                                  const datasetName = match[2];
+                                                  return datasetName.charAt(0).toUpperCase() + datasetName.slice(1).toLowerCase();
+                                                }
+                                              }
+                                              
+                                              // If no job name or pattern doesn't match, try display name
+                                              if (displayName) {
+                                                const match = displayName.match(/^(UMAP|t-SNE|TSNE):\s*([^+\s]+)/i);
+                                                if (match) {
+                                                  const datasetName = match[2];
+                                                  return datasetName.charAt(0).toUpperCase() + datasetName.slice(1).toLowerCase();
+                                                }
+                                              }
+                                              
+                                              // Fallback: show display name or job name
+                                              return displayName || jobName || 'Unknown Dataset';
+                                            })()}
+                                          </Typography>
+                                          <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
+                                            Method: {model.method?.toUpperCase()}
+                                          </Typography>
+                                          <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
+                                            Created: {model.created_at ? new Date(model.created_at).toLocaleString() : 'N/A'}
+                                          </Typography>
+                                          <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
+                                            Runtime: {model.runtime_seconds ? `${model.runtime_seconds.toFixed(1)}s` : 'N/A'}
+                                          </Typography>
+                                          {model.real_processed_samples && (
+                                            <Typography variant="caption" sx={{ display: 'block' }}>
+                                              Samples: {model.real_processed_samples}R + {model.synthetic_processed_samples}S
+                                            </Typography>
+                                          )}
+                                        </Box>
+                                      }
+                                      arrow
+                                      placement="right"
+                                      enterDelay={500}
+                                    >
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                                        <Typography variant="body2">
+                                          {model.display_name}
+                                        </Typography>
+                                        {model.is_favorite && (
+                                          <Favorite sx={{ fontSize: 16, color: 'error.main' }} />
+                                        )}
+                                      </Box>
+                                    </Tooltip>
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                            
+                            {selectedModel && (
+                              <Paper sx={{ p: 2, bgcolor: 'grey.50', mb: 2 }}>
+                                <Typography variant="subtitle2" gutterBottom>
+                                  Model Details
+                                </Typography>
+                                <List dense>
+                                  <ListItem>
+                                    <ListItemIcon>
+                                      <Memory sx={{ fontSize: 16 }} />
+                                    </ListItemIcon>
+                                    <ListItemText 
+                                      primary="Method" 
+                                      secondary={selectedModel.method.toUpperCase()} 
+                                    />
+                                  </ListItem>
+                                  <ListItem>
+                                    <ListItemIcon>
+                                      <Schedule sx={{ fontSize: 16 }} />
+                                    </ListItemIcon>
+                                    <ListItemText 
+                                      primary="Created" 
+                                      secondary={new Date(selectedModel.created_at).toLocaleString()} 
+                                    />
+                                  </ListItem>
+                                  <ListItem>
+                                    <ListItemIcon>
+                                      <History sx={{ fontSize: 16 }} />
+                                    </ListItemIcon>
+                                    <ListItemText 
+                                      primary="Runtime" 
+                                      secondary={`${selectedModel.runtime_seconds?.toFixed(1)}s`} 
+                                    />
+                                  </ListItem>
+                                  {selectedModel.real_processed_samples && (
+                                    <ListItem>
+                                      <ListItemIcon>
+                                        <CheckCircle sx={{ fontSize: 16 }} />
+                                      </ListItemIcon>
+                                      <ListItemText 
+                                        primary="Samples" 
+                                        secondary={`${selectedModel.real_processed_samples}R + ${selectedModel.synthetic_processed_samples}S`} 
+                                      />
+                                    </ListItem>
+                                  )}
+                                </List>
+                              </Paper>
+                            )}
+                            
+                            {selectedModelJobId && (
+                              <Box sx={{ mt: 2 }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
+                                  The selected model will be used directly to transform your current data without additional training.
+                                </Typography>
+                              </Box>
+                            )}
+                          </>
                         )}
                       </Box>
                     )}
@@ -589,7 +705,7 @@ const Sidebar = ({
                   <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     {!parametersExpanded && (
                       <Typography variant="caption" color="text.secondary">
-                        {method === 'pretrained' ? 'PRETRAINED MODEL' : method.toUpperCase()} | {method === 'umap' ? `${nNeighbors} neighbors` : method === 'tsne' ? `${perplexity} perplexity` : 'pre-trained'} | {nRealSamples}/{nSynthSamples} samples
+                        {method === 'pretrained' ? 'PRETRAINED MODEL' : method.toUpperCase()} | {method === 'umap' ? `${nNeighbors} neighbors` : method === 'tsne' ? `${perplexity} perplexity` : selectedModel ? selectedModel.method.toUpperCase() : 'no model'} | {nRealSamples}/{nSynthSamples} samples
                       </Typography>
                     )}
                     
@@ -670,7 +786,10 @@ const Sidebar = ({
                       <strong>Current Parameters:</strong>
                     </Typography>
                     <Typography variant="caption" color="text.primary">
-                      {method.toUpperCase()} • {method === 'umap' ? `${nNeighbors} neighbors, ${minDist} min distance` : `${perplexity} perplexity, ${earlyExaggeration} early exaggeration`} • {nRealSamples}/{nSynthSamples} samples
+                      {method === 'pretrained' && selectedModel ? 
+                        `${selectedModel.method.toUpperCase()} (Pre-trained) • ${selectedModel.real_processed_samples}R + ${selectedModel.synthetic_processed_samples}S samples` :
+                        method === 'umap' ? `${nNeighbors} neighbors, ${minDist} min distance${useGpu ? ', GPU enabled' : ''}` : 
+                        `${perplexity} perplexity, ${earlyExaggeration} early exaggeration`} • {nRealSamples}/{nSynthSamples} samples
                     </Typography>
                     <Button
                       size="small"

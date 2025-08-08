@@ -14,7 +14,7 @@ from pathlib import Path
 
 def run_frontend_tests(args):
     """Run frontend Jest tests with enhanced options."""
-    print("🚀 Running Frontend Tests (Jest)...")
+    print("Running Frontend Tests (Jest)...")
     print("=" * 50)
     
     original_dir = os.getcwd()
@@ -50,14 +50,14 @@ def run_frontend_tests(args):
         return result.returncode == 0
         
     except Exception as e:
-        print(f"❌ Frontend tests failed: {e}")
+        print(f"Frontend tests failed: {e}")
         return False
     finally:
         os.chdir(original_dir)
 
 def run_backend_tests(args):
     """Run backend pytest tests with enhanced options."""
-    print("🧪 Running Backend Tests (pytest)...")
+    print("Running Backend Tests (pytest)...")
     print("=" * 50)
     
     try:
@@ -85,12 +85,12 @@ def run_backend_tests(args):
         return result.returncode == 0
         
     except Exception as e:
-        print(f"❌ Backend tests failed: {e}")
+        print(f"Backend tests failed: {e}")
         return False
 
 def run_lint_checks():
     """Run code quality checks."""
-    print("🔍 Running Code Quality Checks...")
+    print("Running Code Quality Checks...")
     print("=" * 50)
     
     checks = [
@@ -106,32 +106,32 @@ def run_lint_checks():
             result = subprocess.run(cmd, capture_output=True, text=True)
             results[name] = result.returncode == 0
             if result.returncode != 0:
-                print(f"❌ {name} failed:")
+                print(f"{name} failed:")
                 print(result.stdout)
                 print(result.stderr)
             else:
-                print(f"✅ {name} passed")
+                print(f"{name} passed")
         except Exception as e:
-            print(f"❌ {name} error: {e}")
+            print(f"{name} error: {e}")
             results[name] = False
     
     return all(results.values())
 
 def generate_test_report(frontend_success, backend_success, lint_success, args):
     """Generate comprehensive test report."""
-    print("\n📊 Test Results Summary")
+    print("\nTest Results Summary")
     print("=" * 50)
     
     # Summary
-    print(f"Frontend Tests: {'✅ PASSED' if frontend_success else '❌ FAILED'}")
-    print(f"Backend Tests:  {'✅ PASSED' if backend_success else '❌ FAILED'}")
+    print(f"Frontend Tests: {'PASSED' if frontend_success else 'FAILED'}")
+    print(f"Backend Tests:  {'PASSED' if backend_success else 'FAILED'}")
     
     if args.lint:
-        print(f"Code Quality:   {'✅ PASSED' if lint_success else '❌ FAILED'}")
+        print(f"Code Quality:   {'PASSED' if lint_success else 'FAILED'}")
     
     # Coverage information
     if args.coverage:
-        print("\n📈 Coverage Reports Generated:")
+        print("\nCoverage Reports Generated:")
         print("Frontend: frontend/coverage/lcov-report/index.html")
         print("Backend:  backend/htmlcov/index.html")
     
@@ -140,7 +140,7 @@ def generate_test_report(frontend_success, backend_success, lint_success, args):
     if args.lint:
         overall_success = overall_success and lint_success
     
-    print(f"\n🎯 Overall Result: {'✅ ALL TESTS PASSED' if overall_success else '❌ SOME TESTS FAILED'}")
+    print(f"\nOverall Result: {'ALL TESTS PASSED' if overall_success else 'SOME TESTS FAILED'}")
     
     return overall_success
 
@@ -165,7 +165,7 @@ def main():
         args.frontend = True
         args.backend = True
     
-    print("🧪 MAVIS Enhanced Test Suite")
+    print("MAVIS Enhanced Test Suite")
     print("=" * 50)
     
     start_time = time.time()
@@ -189,13 +189,13 @@ def main():
     
     # Execution time
     execution_time = time.time() - start_time
-    print(f"\n⏱️  Total execution time: {execution_time:.2f} seconds")
+    print(f"\nTotal execution time: {execution_time:.2f} seconds")
     
     if overall_success:
-        print("\n🎉 All tests passed!")
+        print("\nAll tests passed!")
         sys.exit(0)
     else:
-        print("\n💥 Some tests failed!")
+        print("\nSome tests failed!")
         sys.exit(1)
 
 if __name__ == "__main__":

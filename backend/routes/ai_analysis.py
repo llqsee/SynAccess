@@ -3,12 +3,15 @@ AI Analysis API Routes
 Provides endpoints for Claude AI-powered analysis of validation results
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional
 import logging
+import json
+import uuid
+from datetime import datetime
 
-from services.ai_analysis_service import get_ai_agent, initialize_ai_agent
+from backend.services.ai_analysis_service import get_ai_agent, initialize_ai_agent
 from config import settings
 
 logger = logging.getLogger(__name__)

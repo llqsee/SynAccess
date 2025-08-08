@@ -4,7 +4,8 @@ import pandas as pd
 import time
 from umap import UMAP
 from openTSNE import TSNE
-from utils.data_preprocessing import preprocess_data
+from backend.utils.data_preprocessing import preprocess_data
+from backend.utils.dataset_fingerprint import generate_dataset_summary, generate_human_readable_description
 
 # GPU support imports
 try:
@@ -50,7 +51,7 @@ class EmbeddingService:
             embeddings: Dictionary with 'real' and 'synthetic' embedding arrays
             metadata: Dictionary with embedding metadata
         """
-        from utils.logging_config import get_logger
+        from backend.utils.logging_config import get_logger
         logger = get_logger(__name__)
         
         start_time = time.time()
@@ -67,96 +68,141 @@ class EmbeddingService:
         if progress_callback:
             progress_callback(0.1)
         
-        # Preprocess data using simplified preprocessing
-        real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
-        preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding'}
-        
-        # Report preprocessing completion
-        if progress_callback:
-            progress_callback(0.2)
-        
-        # Handle sampling parameters
-        n_real_samples = params.pop('n_real_samples', None)
-        n_synth_samples = params.pop('n_synth_samples', None)
-        random_state = params.get('random_state', None)
-        
-        # Ensure we have valid sample sizes (use all data if not specified)
-        if n_real_samples is None:
-            n_real_samples = len(real_processed)
-        if n_synth_samples is None:
-            n_synth_samples = len(synth_processed)
-        
-        # Validate sample sizes
-        if n_real_samples > len(real_processed):
-            raise ValueError(
-                f"Requested {n_real_samples} real samples, but only {len(real_processed)} available."
+        try:
+            # Preprocess data using simplified preprocessing and save transformer
+            real_processed, synth_processed, data_transformer = preprocess_data(
+                real_data, synthetic_data, return_transformer=True
             )
-        if n_synth_samples > len(synth_processed):
-            raise ValueError(
-                f"Requested {n_synth_samples} synthetic samples, but only {len(synth_processed)} available."
-            )
-        
-        # Sample data
-        rng = np.random.default_rng(random_state)
-        real_n = n_real_samples
-        synth_n = n_synth_samples
-        
-        # Only sample if we need fewer samples than available
-        if real_n < len(real_processed):
-            real_idx = rng.choice(len(real_processed), real_n, replace=False)
-            real_sampled = real_processed[real_idx]
-        else:
-            real_sampled = real_processed
+            preprocessing_metadata = {
+                'preprocessing': 'simplified_categorical_encoding',
+                'has_transformer': data_transformer is not None
+            }
             
-        if synth_n < len(synth_processed):
-            synth_idx = rng.choice(len(synth_processed), synth_n, replace=False)
-            synth_sampled = synth_processed[synth_idx]
-        else:
-            synth_sampled = synth_processed
-        
-        # Report sampling completion
-        if progress_callback:
-            progress_callback(0.3)
-        
-        # Compute embeddings using the method
-        result = self.methods[method](
-            real_sampled, synth_sampled, progress_callback=progress_callback, **params
-        )
-        
-        # Unpack results (now includes model)
-        if len(result) == 3:
-            embedding_real, embedding_synth, model = result
-        else:
-            embedding_real, embedding_synth = result
-            model = None
-        
-        # Collect metadata
-        metadata = {
-            "runtime": time.time() - start_time,
-            "method": method,
-            "params": params,
-            "input_shape": real_sampled.shape,
-            "real_samples": real_n,
-            "synthetic_samples": synth_n,
-            "preprocessing": preprocessing_metadata,
-            "gpu_available": GPU_AVAILABLE,
-            "gpu_used": params.get("use_gpu", False) if method == "umap" else False
-        }
-        
-        # Convert to lists for JSON serialization
-        embeddings = {
-            "real": embedding_real.tolist(),
-            "synthetic": embedding_synth.tolist()
-        }
-        
-        # Add model to metadata if available
-        if model is not None:
-            metadata["model"] = model
-            logger.info(f"Added model to metadata for {method} embedding. Model type: {type(model).__name__}")
-        else:
-            logger.warning(f"No model available for {method} embedding")
-        
-        return embeddings, metadata
+            # Report preprocessing completion
+            if progress_callback:
+                progress_callback(0.2)
+            
+            # Handle sampling parameters
+            n_real_samples = params.pop('n_real_samples', None)
+            n_synth_samples = params.pop('n_synth_samples', None)
+            random_state = params.get('random_state', None)
+            
+            # Ensure we have valid sample sizes (use all data if not specified)
+            if n_real_samples is None:
+                n_real_samples = len(real_processed)
+            if n_synth_samples is None:
+                n_synth_samples = len(synth_processed)
+            
+            # Validate sample sizes
+            if n_real_samples > len(real_processed):
+                raise ValueError(
+                    f"Requested {n_real_samples} real samples, but only {len(real_processed)} available."
+                )
+            if n_synth_samples > len(synth_processed):
+                raise ValueError(
+                    f"Requested {n_synth_samples} synthetic samples, but only {len(synth_processed)} available."
+                )
+            
+            # Sample data
+            rng = np.random.default_rng(random_state)
+            real_n = n_real_samples
+            synth_n = n_synth_samples
+            
+            # Only sample if we need fewer samples than available
+            if real_n < len(real_processed):
+                real_idx = rng.choice(len(real_processed), real_n, replace=False)
+                real_sampled = real_processed[real_idx]
+            else:
+                real_sampled = real_processed
+                
+            if synth_n < len(synth_processed):
+                synth_idx = rng.choice(len(synth_processed), synth_n, replace=False)
+                synth_sampled = synth_processed[synth_idx]
+            else:
+                synth_sampled = synth_processed
+            
+            # Report sampling completion
+            if progress_callback:
+                progress_callback(0.3)
+            
+            # Filter out non-embedding parameters to avoid passing them to UMAP/t-SNE constructors
+            embedding_params = params.copy() if params else {}
+            
+            # Remove parameters that shouldn't be passed to UMAP/t-SNE constructors
+            non_embedding_params = [
+                'pretrained_model', 'model_job_id', 'job_id', 'fine_tune',
+                'real_headers', 'synthetic_headers', 'progress_callback',
+                'n_real_samples', 'n_synth_samples'
+            ]
+            
+            for param in non_embedding_params:
+                embedding_params.pop(param, None)
+            
+            # Compute embeddings using the method
+            result = self.methods[method](
+                real_sampled, synth_sampled, progress_callback=progress_callback, **embedding_params
+            )
+            
+            # Unpack results (now includes model)
+            if len(result) == 3:
+                embedding_real, embedding_synth, model = result
+            else:
+                embedding_real, embedding_synth = result
+                model = None
+            
+            # Generate dataset identification
+            dataset_summary = generate_dataset_summary(real_data, synthetic_data, real_headers, synthetic_headers)
+            
+            # Collect metadata with enhanced identification
+            metadata = {
+                "runtime": time.time() - start_time,
+                "method": method,
+                "params": params,
+                "input_shape": real_sampled.shape,
+                "real_samples": real_n,
+                "synthetic_samples": synth_n,
+                "preprocessing": preprocessing_metadata,
+                "gpu_available": GPU_AVAILABLE,
+                "gpu_used": params.get("use_gpu", False) if method == "umap" else False,
+                "dataset_identification": dataset_summary
+            }
+            
+            # Convert to lists for JSON serialization
+            embeddings = {
+                "real": embedding_real.tolist(),
+                "synthetic": embedding_synth.tolist()
+            }
+            
+            # Add model and transformer to metadata if available
+            if model is not None:
+                # Save both the embedding model and the preprocessing transformer with dataset identification
+                model_package = {
+                    'embedding_model': model,
+                    'data_transformer': data_transformer,
+                    'dataset_identification': dataset_summary,
+                    'training_metadata': {
+                        'method': method,
+                        'real_samples_used': real_n,
+                        'synthetic_samples_used': synth_n,
+                        'original_real_shape': len(real_data) if hasattr(real_data, '__len__') else 'unknown',
+                        'original_synthetic_shape': len(synthetic_data) if hasattr(synthetic_data, '__len__') else 'unknown',
+                        'training_time': time.time() - start_time,
+                        'created_at': time.time()
+                    }
+                }
+                metadata["model"] = model_package
+                logger.info(f"Added model package to metadata for {method} embedding.")
+                logger.info(f"  - Embedding model type: {type(model).__name__}")
+                logger.info(f"  - Data transformer: {'present' if data_transformer else 'not needed'}")
+                logger.info(f"  - Dataset fingerprint: {dataset_summary['fingerprint']}")
+            else:
+                logger.warning(f"No model available for {method} embedding")
+            
+            return embeddings, metadata
+            
+        except Exception as e:
+            logger.error(f"Error in compute_embedding: {str(e)}")
+            raise
     
     def _compute_umap(
         self,
@@ -180,8 +226,11 @@ class EmbeddingService:
         
         # Convert to GPU arrays if requested
         if use_gpu and GPU_AVAILABLE:
-            real_data_gpu = cp.asarray(real_data)
-            synth_data_gpu = cp.asarray(synth_data)
+            try:
+                real_data_gpu = cp.asarray(real_data)
+                synth_data_gpu = cp.asarray(synth_data)
+            except Exception as e:
+                raise ValueError(f"Failed to convert data to GPU arrays: {str(e)}")
         else:
             real_data_gpu = real_data
             synth_data_gpu = synth_data
@@ -207,8 +256,11 @@ class EmbeddingService:
         
         # Convert back to CPU arrays if using GPU
         if use_gpu and GPU_AVAILABLE:
-            embedding_real = cp.asnumpy(embedding_real)
-            embedding_synth = cp.asnumpy(embedding_synth)
+            try:
+                embedding_real = cp.asnumpy(embedding_real)
+                embedding_synth = cp.asnumpy(embedding_synth)
+            except Exception as e:
+                raise ValueError(f"Failed to convert GPU results back to CPU: {str(e)}")
         
         if progress_callback:
             progress_callback(0.95)
@@ -275,11 +327,10 @@ class EmbeddingService:
         method: str = "umap",
         real_headers: List[str] = None,
         synthetic_headers: List[str] = None,
-        progress_callback: Optional[Callable[[float], None]] = None,
-        fine_tune: bool = False
+        progress_callback: Optional[Callable[[float], None]] = None
     ) -> Tuple[Dict[str, List[List[float]]], Dict[str, Any]]:
         """
-        Compute embeddings using a pre-trained model.
+        Compute embeddings using a pre-trained model with direct transformation.
         
         Args:
             real_data: Real dataset
@@ -289,25 +340,23 @@ class EmbeddingService:
             real_headers: Column headers for real data
             synthetic_headers: Column headers for synthetic data
             progress_callback: Optional callback for progress updates (0.0 to 1.0)
-            fine_tune: Whether to fine-tune the model on real data before transforming
             
         Returns:
             embeddings: Dictionary with 'real' and 'synthetic' embedding arrays
             metadata: Dictionary with embedding metadata
         """
-        from utils.logging_config import get_logger
+        from backend.utils.logging_config import get_logger
         logger = get_logger(__name__)
         
         start_time = time.time()
         method = method.lower()
         
-        logger.info(f"Starting pre-trained model embedding with method: {method}, fine_tune: {fine_tune}")
+        logger.info(f"Starting direct transformation with pre-trained {method.upper()} model")
         
         if method not in ["umap", "tsne"]:
             raise ValueError(f"Unsupported method: {method}")
         
-        # Auto-detect model type if method is not specified or to validate
-        detected_method = method
+        # Auto-detect model type
         model_type = type(pretrained_model).__name__
         
         # Try to auto-detect the model type
@@ -319,6 +368,7 @@ class EmbeddingService:
             logger.info(f"Detected t-SNE model: {model_type}")
         else:
             logger.warning(f"Could not auto-detect model type: {model_type}, using specified method: {method}")
+            detected_method = method
         
         # Use detected method if it differs from specified method
         if detected_method != method:
@@ -326,7 +376,7 @@ class EmbeddingService:
             logger.info(f"Using detected method: {detected_method}")
             method = detected_method
         
-        # Validate that the model has the expected attributes for the detected type
+        # Validate that the model has the expected attributes
         if method == "umap":
             expected_attrs = ['n_components', 'n_neighbors', 'min_dist', 'metric', 'random_state']
             missing_attrs = [attr for attr in expected_attrs if not hasattr(pretrained_model, attr)]
@@ -345,9 +395,33 @@ class EmbeddingService:
             progress_callback(0.1)
         
         logger.info("Preprocessing data...")
-        # Preprocess data using simplified preprocessing
-        real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
-        preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding'}
+        
+        # Check if pretrained_model is a package with transformer (new format) or just the model (old format)
+        if isinstance(pretrained_model, dict) and 'embedding_model' in pretrained_model:
+            # New format: model package with transformer
+            embedding_model = pretrained_model['embedding_model']
+            data_transformer = pretrained_model.get('data_transformer')
+            
+            if data_transformer is not None:
+                logger.info("Using saved data transformer (FAST PATH for pretrained model)")
+                # Use the saved transformer - this is much faster!
+                real_processed, synth_processed = preprocess_data(
+                    real_data, synthetic_data, transformer=data_transformer
+                )
+                preprocessing_metadata = {'preprocessing': 'reused_saved_transformer'}
+            else:
+                logger.info("No transformer in model package, falling back to full preprocessing")
+                real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
+                preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding'}
+        else:
+            # Old format: just the model (backward compatibility)
+            logger.info("Old model format detected, using full preprocessing (SLOW PATH)")
+            embedding_model = pretrained_model
+            real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
+            preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding_legacy'}
+        
+        # Update pretrained_model reference to point to the actual embedding model
+        pretrained_model = embedding_model
         
         # Report preprocessing completion
         if progress_callback:
@@ -368,86 +442,8 @@ class EmbeddingService:
         if progress_callback:
             progress_callback(0.5)
         
-        # Handle fine-tuning if requested
-        if fine_tune:
-            logger.info(f"Adapting {method.upper()} model to real data...")
-            try:
-                # Fine-tune the model on real data
-                if method == "umap":
-                    # For UMAP, we need to create a new model with the same parameters
-                    # and fit it on the real data, then use it for transformation
-                    logger.info("Creating new UMAP model with same parameters for adaptation")
-                    
-                    # Extract parameters from the pre-trained model
-                    umap_params = {
-                        'n_components': pretrained_model.n_components,
-                        'n_neighbors': pretrained_model.n_neighbors,
-                        'min_dist': pretrained_model.min_dist,
-                        'metric': pretrained_model.metric,
-                        'random_state': pretrained_model.random_state
-                    }
-                    
-                    # Create new UMAP model with same parameters
-                    adapted_model = UMAP(**umap_params)
-                    
-                    # Fit the new model on real data
-                    logger.info("Fitting adapted UMAP model on real data")
-                    adapted_model.fit(real_processed)
-                    
-                    # Use the adapted model for transformation
-                    pretrained_model = adapted_model
-                    logger.info("Adapted UMAP model ready for transformation")
-                    
-                    # Store the actual adapted model parameters
-                    adapted_model_params = {
-                        'n_components': adapted_model.n_components,
-                        'n_neighbors': adapted_model.n_neighbors,
-                        'min_dist': adapted_model.min_dist,
-                        'metric': adapted_model.metric,
-                        'random_state': adapted_model.random_state
-                    }
-                    
-                elif method == "tsne":
-                    # For t-SNE, we need to fit a new model with the same parameters
-                    logger.info("Creating new t-SNE model with same parameters for adaptation")
-                    
-                    # Extract parameters from the pre-trained model
-                    tsne_params = {
-                        'n_components': pretrained_model.n_components,
-                        'perplexity': pretrained_model.perplexity,
-                        'early_exaggeration': pretrained_model.early_exaggeration,
-                        'metric': pretrained_model.metric,
-                        'random_state': pretrained_model.random_state
-                    }
-                    
-                    # Create new t-SNE model with same parameters
-                    from openTSNE import TSNE
-                    adapted_model = TSNE(**tsne_params)
-                    
-                    # Fit the new model on real data
-                    logger.info("Fitting adapted t-SNE model on real data")
-                    adapted_model.fit(real_processed)
-                    
-                    # Use the adapted model for transformation
-                    pretrained_model = adapted_model
-                    logger.info("Adapted t-SNE model ready for transformation")
-                    
-                    # Store the actual adapted model parameters
-                    adapted_model_params = {
-                        'n_components': adapted_model.n_components,
-                        'perplexity': adapted_model.perplexity,
-                        'early_exaggeration': adapted_model.early_exaggeration,
-                        'metric': adapted_model.metric,
-                        'random_state': adapted_model.random_state
-                    }
-                
-                logger.info("Model adaptation completed")
-            except Exception as e:
-                logger.error(f"Error during model adaptation: {e}")
-                raise ValueError(f"Failed to adapt model: {str(e)}")
-        
         logger.info(f"Transforming data with pre-trained {method.upper()} model...")
-        # Transform data using pre-trained model
+        # Transform data using pre-trained model directly (no fine-tuning)
         try:
             # Validate model compatibility
             logger.info(f"Model type: {type(pretrained_model).__name__}")
@@ -489,24 +485,237 @@ class EmbeddingService:
             "embedding_dimensions": embedding_real.shape[1],
             "pretrained_model": True,
             "model_type": type(pretrained_model).__name__,
-            "fine_tuned": fine_tune,
-            "adapted_model": fine_tune,  # Indicates this is a newly created adapted model
+            "fine_tuned": False,  # Always False now
+            "direct_transformation": True,  # Indicates direct transform was used
             **preprocessing_metadata
         }
         
-        # Store the model that was actually used for transformation
-        if fine_tune:
-            # For adapted models, store the newly created adapted model
-            metadata["model"] = pretrained_model
-            # Also store the actual adapted model parameters
-            metadata["adapted_model_params"] = adapted_model_params
-        else:
-            # For direct use, store the original pre-trained model
-            metadata["model"] = pretrained_model
+        # Store the original pre-trained model
+        metadata["model"] = pretrained_model
         
         if progress_callback:
             progress_callback(1.0)
         
-        logger.info(f"Pre-trained model embedding completed in {runtime:.2f} seconds")
+        logger.info(f"Direct transformation with pre-trained model completed in {runtime:.2f} seconds")
         
-        return embeddings, metadata 
+        return embeddings, metadata
+
+    def generate_embedding_with_pretrained_model(
+        self,
+        real_data: Union[np.ndarray, List[List[Any]], pd.DataFrame],
+        synthetic_data: Union[np.ndarray, List[List[Any]], pd.DataFrame],
+        method: str = "umap",
+        pretrained_model: Any = None,
+        params: Dict[str, Any] = None,
+        real_headers: List[str] = None,
+        synthetic_headers: List[str] = None,
+        job_id: str = None,
+        progress_callback: Optional[Callable[[float], None]] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate embeddings using a pretrained model from history.
+        
+        Args:
+            real_data: Real dataset
+            synthetic_data: Synthetic dataset
+            method: Embedding method ('umap' or 'tsne')
+            pretrained_model: The pretrained model object
+            params: Method-specific parameters
+            real_headers: Column headers for real data
+            synthetic_headers: Column headers for synthetic data
+            job_id: Job ID for tracking
+            progress_callback: Optional callback for progress updates
+            
+        Returns:
+            result: Dictionary with embeddings, metadata, and job information
+        """
+        from backend.utils.logging_config import get_logger
+        from backend.services.job_service import JobService
+        import time
+        
+        logger = get_logger(__name__)
+        start_time = time.time()
+        params = params or {}
+        
+        if not pretrained_model:
+            raise ValueError("Pretrained model is required")
+        
+        # Report initial progress
+        if progress_callback:
+            progress_callback(0.1)
+        
+        # Check if pretrained_model is a package with transformer (new format) or just the model (old format)
+        if isinstance(pretrained_model, dict) and 'embedding_model' in pretrained_model:
+            # New format: model package with transformer
+            embedding_model = pretrained_model['embedding_model']
+            data_transformer = pretrained_model.get('data_transformer')
+            
+            if data_transformer is not None:
+                logger.info("Using saved data transformer (FAST PATH for pretrained model)")
+                # Use the saved transformer - this is much faster!
+                real_processed, synth_processed = preprocess_data(
+                    real_data, synthetic_data, transformer=data_transformer
+                )
+                preprocessing_metadata = {'preprocessing': 'reused_saved_transformer'}
+            else:
+                logger.info("No transformer in model package, falling back to full preprocessing")
+                real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
+                preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding'}
+        else:
+            # Old format: just the model (backward compatibility)
+            logger.info("Old model format detected, using full preprocessing (SLOW PATH)")
+            embedding_model = pretrained_model
+            real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
+            preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding_legacy'}
+        
+        # Update pretrained_model reference to point to the actual embedding model
+        pretrained_model = embedding_model
+        
+        # Report preprocessing completion
+        if progress_callback:
+            progress_callback(0.2)
+        
+        # Handle sampling parameters
+        n_real_samples = params.pop('n_real_samples', None)
+        n_synth_samples = params.pop('n_synth_samples', None)
+        random_state = params.get('random_state', None)
+        
+        # Ensure we have valid sample sizes
+        if n_real_samples is None:
+            n_real_samples = len(real_processed)
+        if n_synth_samples is None:
+            n_synth_samples = len(synth_processed)
+        
+        # Validate sample sizes
+        if n_real_samples > len(real_processed):
+            raise ValueError(
+                f"Requested {n_real_samples} real samples, but only {len(real_processed)} available."
+            )
+        if n_synth_samples > len(synth_processed):
+            raise ValueError(
+                f"Requested {n_synth_samples} synthetic samples, but only {len(synth_processed)} available."
+            )
+        
+        # Sample data
+        rng = np.random.default_rng(random_state)
+        real_sampled = real_processed[:n_real_samples]
+        synth_sampled = synth_processed[:n_synth_samples]
+        
+        logger.info(f"Using pretrained model for {method} embedding")
+        logger.info(f"Real samples: {len(real_sampled)}, Synthetic samples: {len(synth_sampled)}")
+        
+        # Report sampling completion
+        if progress_callback:
+            progress_callback(0.3)
+        
+        try:
+            # Use the pretrained model directly (no fine-tuning for UMAP/t-SNE)
+            logger.info("Using pretrained model directly for transformation")
+            
+            if method == "umap":
+                real_embedding, synth_embedding = self._transform_with_pretrained_umap(
+                    real_sampled, synth_sampled, pretrained_model, progress_callback
+                )
+            elif method == "tsne":
+                real_embedding, synth_embedding = self._transform_with_pretrained_tsne(
+                    real_sampled, synth_sampled, pretrained_model, progress_callback
+                )
+            else:
+                raise ValueError(f"Unsupported method: {method}")
+            
+            # Store results without new model (using original)
+            if job_id:
+                JobService.update_job_results(
+                    job_id=job_id,
+                    embedding_real=real_embedding.tolist(),
+                    embedding_synthetic=synth_embedding.tolist(),
+                    runtime_seconds=time.time() - start_time,
+                    preprocessing_info={
+                        **preprocessing_metadata,
+                        "pretrained_model_used": True,
+                        "original_model_type": type(pretrained_model).__name__
+                    },
+                    real_processed_samples=len(real_sampled),
+                    synthetic_processed_samples=len(synth_sampled),
+                    model=None  # Don't store a new model since we used the original
+                )
+            
+            # Compress and store data asynchronously
+            if job_id:
+                JobService.compress_and_store_data_async(
+                    job_id=job_id,
+                    real_data=real_data,
+                    synthetic_data=synthetic_data,
+                    real_headers=real_headers,
+                    synthetic_headers=synthetic_headers
+                )
+            
+            result = {
+                "embeddings": {
+                    "real": real_embedding.tolist(),
+                    "synthetic": synth_embedding.tolist()
+                },
+                "metadata": {
+                    "method": method,
+                    "preprocessing_info": preprocessing_metadata,
+                    "real_processed_samples": len(real_sampled),
+                    "synthetic_processed_samples": len(synth_sampled),
+                    "runtime_seconds": time.time() - start_time,
+                    "pretrained_model_used": True
+                }
+            }
+            
+            logger.info(f"Successfully generated embeddings using pretrained model in {time.time() - start_time:.2f}s")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error generating embeddings with pretrained model: {e}")
+            if job_id:
+                JobService.mark_job_failed(job_id, str(e))
+            raise
+
+    def _transform_with_pretrained_umap(
+        self,
+        real_data: np.ndarray,
+        synth_data: np.ndarray,
+        pretrained_model: Any,
+        progress_callback: Optional[Callable[[float], None]] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Transform data using pretrained UMAP model."""
+        if progress_callback:
+            progress_callback(0.4)
+        
+        real_embedding = pretrained_model.transform(real_data)
+        
+        if progress_callback:
+            progress_callback(0.7)
+        
+        synth_embedding = pretrained_model.transform(synth_data)
+        
+        if progress_callback:
+            progress_callback(1.0)
+        
+        return real_embedding, synth_embedding
+
+    def _transform_with_pretrained_tsne(
+        self,
+        real_data: np.ndarray,
+        synth_data: np.ndarray,
+        pretrained_model: Any,
+        progress_callback: Optional[Callable[[float], None]] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Transform data using pretrained t-SNE model."""
+        if progress_callback:
+            progress_callback(0.4)
+        
+        real_embedding = pretrained_model.transform(real_data)
+        
+        if progress_callback:
+            progress_callback(0.7)
+        
+        synth_embedding = pretrained_model.transform(synth_data)
+        
+        if progress_callback:
+            progress_callback(1.0)
+        
+        return real_embedding, synth_embedding 

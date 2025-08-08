@@ -16,7 +16,9 @@ export const submitEmbeddingJob = async ({
   method = 'umap',
   params = {},
   real_headers = null,
-  synthetic_headers = null
+  synthetic_headers = null,
+  real_dataset_name = null,
+  synthetic_dataset_name = null
 }) => {
   try {
     // Basic validation
@@ -38,7 +40,9 @@ export const submitEmbeddingJob = async ({
       method,
       params,
       real_headers,
-      synthetic_headers
+      synthetic_headers,
+      real_dataset_name,
+      synthetic_dataset_name
     });
 
     // Return job submission details
@@ -74,7 +78,8 @@ export const submitPretrainedModelJob = async ({
   model_format = 'pickle',
   real_headers = null,
   synthetic_headers = null,
-  fine_tune = false
+  real_dataset_name = null,
+  synthetic_dataset_name = null,
 }) => {
   try {
     // Validate inputs
@@ -102,10 +107,78 @@ export const submitPretrainedModelJob = async ({
       model_format,
       real_headers,
       synthetic_headers,
-      fine_tune
+      real_dataset_name,
+      synthetic_dataset_name
     });
 
-    // Return job submission details
+    return response.data;
+  } catch (error) {
+    if (error.response) {
+      if (error.response.status === 422) {
+        const detail = error.response.data.detail;
+        if (Array.isArray(detail)) {
+          const errors = detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join('; ');
+          throw new Error(`Validation error: ${errors}`);
+        }
+        throw new Error(`Validation error: ${JSON.stringify(error.response.data)}`);
+      }
+      throw new Error(
+        error.response.data.detail || 
+        `Server error: ${error.response.status}`
+      );
+    } else if (error.request) {
+      throw new Error('No response from server. Please check if the backend is running.');
+    } else {
+      throw error;
+    }
+  }
+};
+
+export const submitPretrainedModelFromHistoryJob = async ({
+  real_data,
+  synthetic_data,
+  method = 'umap',
+  pretrained_model_job_id,
+  real_headers = null,
+  synthetic_headers = null,
+  n_real_samples = 1000,
+  n_synth_samples = 1000,
+  real_dataset_name = null,
+  synthetic_dataset_name = null
+}) => {
+  try {
+    // Validate inputs
+    if (!Array.isArray(real_data) || !Array.isArray(synthetic_data)) {
+      throw new Error('Input data must be arrays');
+    }
+
+    if (real_data.length === 0 || synthetic_data.length === 0) {
+      throw new Error('Data arrays cannot be empty');
+    }
+
+    if (!['umap', 'tsne'].includes(method)) {
+      throw new Error('Invalid method. Must be either "umap" or "tsne"');
+    }
+
+    if (!pretrained_model_job_id) {
+      throw new Error('pretrained_model_job_id is required');
+    }
+
+    const response = await api.post('/embed-pretrained-from-history', {
+      real_data,
+      synthetic_data,
+      method,
+      pretrained_model_job_id,
+      real_headers,
+      synthetic_headers,
+      real_dataset_name,
+      synthetic_dataset_name,
+      params: {
+        n_real_samples,
+        n_synth_samples
+      }
+    });
+
     return response.data;
   } catch (error) {
     if (error.response) {
@@ -363,10 +436,24 @@ export const downloadModelBinary = async (jobId) => {
 
 export const getJobStats = async () => {
   try {
-    const response = await api.get('/stats');
+    const response = await api.get('/history/stats');
     return response.data;
   } catch (error) {
-    console.error('Failed to fetch job stats:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to fetch job statistics');
+    if (error.response) {
+      throw new Error(error.response.data.detail || 'Failed to get job statistics');
+    }
+    throw error;
+  }
+};
+
+export const getAvailableModels = async () => {
+  try {
+    const response = await api.get('/available-models');
+    return response.data;
+  } catch (error) {
+    if (error.response) {
+      throw new Error(error.response.data.detail || 'Failed to get available models');
+    }
+    throw error;
   }
 }; 

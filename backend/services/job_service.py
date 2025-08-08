@@ -10,9 +10,9 @@ from typing import Dict, Any, Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_
 
-from database.connection import get_db
-from database.models import Job, JobResult, CompressedData
-from utils.logging_config import get_logger
+from backend.database.connection import get_db
+from backend.database.models import Job, JobResult, CompressedData
+from backend.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -25,15 +25,19 @@ class JobService:
         method: str,
         params: Dict[str, Any],
         n_samples: Optional[int] = None,
-        status: str = "queued"
+        status: str = "queued",
+        dataset_description: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create a new job record."""
         try:
             db = next(get_db())
             
+            # Use provided description or default
+            job_name = dataset_description if dataset_description else f"{method.upper()} Embedding"
+            
             job = Job(
                 job_id=job_id,
-                name=f"{method.upper()} Embedding",
+                name=job_name,
                 method=method,
                 parameters=json.dumps(params),
                 status=status,
@@ -219,33 +223,22 @@ class JobService:
             # Store model if provided (re-enabled with proper error handling)
             if model is not None:
                 try:
-                    import pickle
+                    import joblib
                     import base64
+                    import io
                     
                     logger.info(f"Attempting to store model for job {job_id}")
                     logger.info(f"Model type: {type(model).__name__}")
                     logger.info(f"Model attributes: {[attr for attr in dir(model) if not attr.startswith('_')]}")
                     
-                    # Special handling for t-SNE models (openTSNE has serialization issues with pickle)
-                    model_type = type(model).__name__
-                    if "TSNEEmbedding" in model_type or "TSNE" in model_type:
-                        logger.info(f"Detected t-SNE model, using joblib for serialization")
-                        import joblib
-                        import io
-                        
-                        # Use joblib for t-SNE models (handles complex objects better)
-                        buffer = io.BytesIO()
-                        joblib.dump(model, buffer)
-                        model_bytes = buffer.getvalue()
-                        buffer.close()
-                        
-                        logger.info(f"t-SNE model serialized with joblib. Size: {len(model_bytes)} bytes")
-                        job_result.model_format = 'joblib'
-                    else:
-                        # Use pickle for other models (UMAP, etc.)
-                        model_bytes = pickle.dumps(model)
-                        logger.info(f"Model pickled successfully. Size: {len(model_bytes)} bytes")
-                        job_result.model_format = 'pickle'
+                    # Use joblib for all models (more reliable than pickle for complex objects)
+                    buffer = io.BytesIO()
+                    joblib.dump(model, buffer)
+                    model_bytes = buffer.getvalue()
+                    buffer.close()
+                    
+                    logger.info(f"Model serialized with joblib. Size: {len(model_bytes)} bytes")
+                    job_result.model_format = 'joblib'
                     
                     model_b64 = base64.b64encode(model_bytes).decode('utf-8')
                     logger.info(f"Model base64 encoded successfully. Size: {len(model_b64)} characters")
@@ -425,7 +418,7 @@ class JobService:
     ) -> bool:
         """Compress and store original data asynchronously."""
         try:
-            from services.compression_service import CompressionService
+            from .compression_service import CompressionService
             
             compression_service = CompressionService()
             

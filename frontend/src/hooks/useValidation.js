@@ -47,34 +47,39 @@ export const useValidation = () => {
       
       const aiResults = await aiAnalysisService.analyzeValidationResults(rawResults, datasetInfo);
       
+      // Extract the actual analysis data from the response structure
+      const actualAnalysis = aiResults.analysis || aiResults;
+      
       // Step 3: Combine raw results with AI analysis
       const combinedResults = {
         ...rawResults,
-        aiAnalysis: aiResults
+        aiAnalysis: actualAnalysis
       };
       
       setValidationResults(combinedResults);
-      setAiAnalysis(aiResults);
+      setAiAnalysis(actualAnalysis);
       
       // Check for critical issues that need immediate attention
       const critical = [];
-      Object.values(rawResults.tests).forEach(testGroup => {
-        if (testGroup.tests) {
-          testGroup.tests.forEach(test => {
-            if (test.issues) {
-              test.issues.forEach(issue => {
-                if (issue.severity === 'HIGH') {
-                  critical.push({
-                    column: test.column,
-                    type: test.type,
-                    ...issue
-                  });
-                }
-              });
-            }
-          });
-        }
-      });
+      if (rawResults.tests) {
+        Object.values(rawResults.tests).forEach(testGroup => {
+          if (testGroup && testGroup.tests) {
+            testGroup.tests.forEach(test => {
+              if (test && test.issues) {
+                test.issues.forEach(issue => {
+                  if (issue && issue.severity === 'HIGH') {
+                    critical.push({
+                      column: test.column || 'Unknown',
+                      type: test.type || 'Unknown',
+                      ...issue
+                    });
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
       
       setCriticalIssues(critical);
       
@@ -82,8 +87,6 @@ export const useValidation = () => {
       if (critical.length > 0) {
         setShowValidationPopup(true);
       }
-      
-
       
       return combinedResults;
     } catch (error) {
@@ -122,18 +125,20 @@ export const useValidation = () => {
     
     return {
       overallStatus,
-      totalTests: summary.totalTests,
+      totalTests: summary?.totalTests || 0,
       recommendations: 0, // AI provides recommendations in text format, not structured
       aiAnalysis: aiAnalysis
     };
   }, [validationResults, aiAnalysis]);
 
   const getIssuesByCategory = useCallback(() => {
-    if (!validationResults) return {};
+    if (!validationResults || !validationResults.tests) return {};
     
     const categories = {};
     
     Object.entries(validationResults.tests).forEach(([category, testGroup]) => {
+      if (!testGroup) return;
+      
       categories[category] = {
         name: testGroup.testType || category,
         description: testGroup.description || '',
@@ -143,10 +148,10 @@ export const useValidation = () => {
       
       if (testGroup.tests) {
         testGroup.tests.forEach(test => {
-          if (test.issues && test.issues.length > 0) {
+          if (test && test.issues && test.issues.length > 0) {
             categories[category].issues.push({
-              column: test.column,
-              testType: test.type,
+              column: test.column || 'Unknown',
+              testType: test.type || 'Unknown',
               issues: test.issues
             });
           }

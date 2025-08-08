@@ -35,6 +35,7 @@ import {
 import ResultsPane from './ResultsPane';
 import AiReportDialog from './AiReportDialog';
 import pdfGenerator from '../services/pdfGenerator';
+import logger from '../utils/logger';
 // No date utilities needed
 
 const SummaryTab = ({ 
@@ -90,7 +91,7 @@ const SummaryTab = ({
       );
 
       if (success) {
-        console.log('PDF report generated successfully');
+        logger.info('PDF report generated successfully');
       } else {
         console.error('PDF generation failed');
       }

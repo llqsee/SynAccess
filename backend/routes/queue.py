@@ -10,9 +10,9 @@ import json
 import zmq
 import zmq.asyncio
 
-from services.task_queue import get_task_queue_manager, JobStatus
-from services.job_service import JobService
-from utils.logging_config import get_logger
+from backend.services.task_queue import get_task_queue_manager, JobStatus
+from backend.services.job_service import JobService
+from backend.utils.logging_config import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)

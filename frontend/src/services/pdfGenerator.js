@@ -1,4 +1,4 @@
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 
 class PDFGenerator {
   constructor() {
@@ -30,6 +30,7 @@ class PDFGenerator {
       this.pdf.save('ai-validation-report.pdf');
       return true;
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.error('PDF generation error:', error);
       return false;
     }
@@ -131,10 +132,8 @@ class PDFGenerator {
     // AI Analysis Metadata - Handle both direct and nested formats
     let aiTimestamp = null;
     if (aiAnalysis?.timestamp) {
-      // Direct AI response format
       aiTimestamp = aiAnalysis.timestamp;
     } else if (aiAnalysis?.analysis?.timestamp) {
-      // Nested backend response format
       aiTimestamp = aiAnalysis.analysis.timestamp;
     }
     
@@ -166,30 +165,14 @@ class PDFGenerator {
 
   addWrappedText(text, x, y, maxWidth) {
     if (!text) return;
-    
-    // Use jsPDF's built-in splitTextToSize method for proper text wrapping
     const lines = this.pdf.splitTextToSize(text, maxWidth);
-    
-    // Check if we need a page break before starting
-    if (y > 270) {
-      this.addNewPage();
-      y = 20;
-    }
-    
+    if (y > 270) { this.addNewPage(); y = 20; }
     let currentY = y;
-    
     for (let i = 0; i < lines.length; i++) {
-      // Check if we need a page break for this line
-      if (currentY > 270) {
-        this.addNewPage();
-        currentY = 20;
-      }
-      
+      if (currentY > 270) { this.addNewPage(); currentY = 20; }
       this.pdf.text(lines[i], x, currentY);
       currentY += this.lineHeight;
     }
-    
-    // Update currentY to the position after the last line
     this.currentY = currentY;
   }
 }

@@ -180,264 +180,94 @@ const AIValidationAnalysis = ({
 
         {analysis && (
           <>
-            {/* Executive Summary */}
+            {/* AI Analysis Content */}
             <Card sx={{ mb: 3, bgcolor: 'background.paper' }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Assessment />
-                  Executive Summary
+                  Claude AI Analysis Report
                 </Typography>
                 
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
-                    <Box sx={{ textAlign: 'center', p: 2 }}>
-                      <Typography variant="h4" color={analysis.summary?.overall_status === 'EXCELLENT' ? 'success.main' : 'warning.main'}>
-                        {analysis.summary?.overall_status || 'UNKNOWN'}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Overall Quality Status
-                      </Typography>
-                    </Box>
-                  </Grid>
+                {/* Extract the actual analysis data from the response structure */}
+                {(() => {
+                  const analysisData = analysis.analysis || analysis;
                   
-                  <Grid item xs={12} md={6}>
-                    <Box sx={{ textAlign: 'center', p: 2 }}>
-                      <Typography variant="h4" color={getQualityColor(analysis.summary?.quality_score || 0)}>
-                        {analysis.summary?.quality_score || 0}%
+                  if (analysisData.result_summary) {
+                    return (
+                      <Typography 
+                        variant="body1" 
+                        paragraph 
+                        sx={{ 
+                          whiteSpace: 'pre-wrap',
+                          lineHeight: 1.6,
+                          textAlign: 'justify',
+                          bgcolor: 'grey.50',
+                          p: 2,
+                          borderRadius: 1
+                        }}
+                      >
+                        {analysisData.result_summary}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Quality Score
+                    );
+                  } else {
+                    return (
+                      <Typography variant="body1" color="text.secondary">
+                        No analysis content available.
                       </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-
-                <Divider sx={{ my: 2 }} />
-
-                <Grid container spacing={2}>
-                  <Grid item xs={6} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h6" color="error.main">
-                        {analysis.summary?.critical_issues || 0}
-                      </Typography>
-                      <Typography variant="caption">Critical Issues</Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h6" color="warning.main">
-                        {analysis.summary?.warning_issues || 0}
-                      </Typography>
-                      <Typography variant="caption">Warnings</Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h6" color="success.main">
-                        {analysis.summary?.passed_tests || 0}
-                      </Typography>
-                      <Typography variant="caption">Passed Tests</Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h6" color="info.main">
-                        {analysis.summary?.pass_rate || '0%'}
-                      </Typography>
-                      <Typography variant="caption">Pass Rate</Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
+                    );
+                  }
+                })()}
               </CardContent>
             </Card>
 
-            {/* Risk Assessment */}
-            {analysis.risk_assessment && (
-              <Card sx={{ mb: 3, bgcolor: 'background.paper' }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Security />
-                    Risk Assessment
-                  </Typography>
-                  
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                    <Chip 
-                      label={analysis.risk_assessment.level}
-                      color={getRiskColor(analysis.risk_assessment.level)}
-                      variant="outlined"
-                      size="large"
-                    />
-                    <Typography variant="body2" color="text.secondary">
-                      Risk Score: {analysis.risk_assessment.score}/100
-                    </Typography>
-                  </Box>
-                  
-                  <Typography variant="body2" color="text.secondary">
-                    {analysis.risk_assessment.description}
-                  </Typography>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* AI Insights */}
-            {analysis.insights && analysis.insights.length > 0 && (
-              <Card sx={{ mb: 3, bgcolor: 'background.paper' }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Lightbulb />
-                    Claude AI Insights
-                  </Typography>
-                  
-                  <List>
-                    {analysis.insights.map((insight, index) => (
-                      <ListItem key={index} sx={{ alignItems: 'flex-start' }}>
-                        <ListItemIcon sx={{ mt: 0.5 }}>
-                          {getInsightIcon(insight.type)}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                              <Typography variant="subtitle2">
-                                {insight.type?.charAt(0).toUpperCase() + insight.type?.slice(1) || 'General'} Analysis
-                              </Typography>
-                              <Chip 
-                                size="small"
-                                label={insight.severity}
-                                color={insight.severity === 'high' ? 'error' : 'warning'}
-                                variant="outlined"
-                              />
-                            </Box>
-                          }
-                          secondary={
-                            <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                              <Typography variant="body2" sx={{ mb: 1 }}>
-                                {insight.message}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                <strong>Impact:</strong> {insight.impact}
-                              </Typography>
-                              {insight.columns && insight.columns.length > 0 && (
-                                <Box sx={{ mt: 1 }}>
-                                  <Typography variant="caption" color="text.secondary">
-                                    <strong>Affected Columns:</strong> {insight.columns.join(', ')}
-                                  </Typography>
-                                </Box>
-                              )}
-                            </Paper>
-                          }
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Recommendations */}
-            {analysis.recommendations && analysis.recommendations.length > 0 && (
-              <Card sx={{ mb: 3, bgcolor: 'background.paper' }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Speed />
-                    Claude AI Recommendations
-                  </Typography>
-                  
-                  {analysis.recommendations.map((rec, index) => (
-                    <Accordion key={index} sx={{ mb: 1 }}>
-                      <AccordionSummary expandIcon={<ExpandMore />}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
-                          <Chip 
-                            label={rec.priority}
-                            color={rec.priority === 'HIGH' ? 'error' : 'warning'}
-                            size="small"
-                          />
-                          <Typography variant="subtitle2">
-                            {rec.category}: {rec.action}
-                          </Typography>
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Typography variant="body2" sx={{ mb: 2 }}>
-                          {rec.description}
+            {/* Analysis Status */}
+            {(() => {
+              const analysisData = analysis.analysis || analysis;
+              
+              if (analysisData.status) {
+                return (
+                  <Card sx={{ mb: 3, bgcolor: analysisData.status === 'success' ? 'success.50' : 'error.50' }}>
+                    <CardContent>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Analysis Status
+                      </Typography>
+                      <Chip 
+                        label={analysisData.status === 'success' ? 'Success' : 'Error'}
+                        color={analysisData.status === 'success' ? 'success' : 'error'}
+                        size="small"
+                      />
+                      {analysisData.error && (
+                        <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                          Error: {analysisData.error}
                         </Typography>
-                        {rec.steps && rec.steps.length > 0 && (
-                          <>
-                            <Typography variant="subtitle2" gutterBottom>
-                              Recommended Steps:
-                            </Typography>
-                            <List dense>
-                              {rec.steps.map((step, stepIndex) => (
-                                <ListItem key={stepIndex} sx={{ py: 0.5 }}>
-                                  <ListItemIcon sx={{ minWidth: 30 }}>
-                                    <Typography variant="caption" color="primary">
-                                      {stepIndex + 1}.
-                                    </Typography>
-                                  </ListItemIcon>
-                                  <ListItemText 
-                                    primary={step}
-                                    primaryTypographyProps={{ variant: 'body2' }}
-                                  />
-                                </ListItem>
-                              ))}
-                            </List>
-                          </>
-                        )}
-                      </AccordionDetails>
-                    </Accordion>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              }
+              return null;
+            })()}
 
-            {/* Action Items */}
-            {analysis.action_items && analysis.action_items.length > 0 && (
-              <Card sx={{ bgcolor: 'background.paper' }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CheckCircle />
-                    Immediate Action Items
-                  </Typography>
-                  
-                  <List>
-                    {analysis.action_items.map((item, index) => (
-                      <ListItem key={index}>
-                        <ListItemIcon>
-                          <Chip 
-                            label={item.priority}
-                            color={item.priority === 'IMMEDIATE' ? 'error' : 'warning'}
-                            size="small"
-                          />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={item.action}
-                          secondary={
-                            <Box>
-                              <Typography variant="body2" sx={{ mb: 1 }}>
-                                {item.description}
-                              </Typography>
-                              {item.columns && item.columns.length > 0 && (
-                                <Typography variant="caption" color="text.secondary">
-                                  <strong>Columns:</strong> {item.columns.join(', ')}
-                                </Typography>
-                              )}
-                            </Box>
-                          }
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Metadata */}
-            {analysis.metadata && (
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary">
-                  Analysis by {analysis.metadata.model || 'Claude AI'} • {analysis.metadata.timestamp}
-                </Typography>
-              </Box>
-            )}
+            {/* Timestamp */}
+            {(() => {
+              const analysisData = analysis.analysis || analysis;
+              
+              if (analysisData.timestamp) {
+                return (
+                  <Card sx={{ mb: 3, bgcolor: 'grey.50' }}>
+                    <CardContent>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        Analysis Generated
+                      </Typography>
+                      <Typography variant="body2">
+                        {new Date(analysisData.timestamp).toLocaleString()}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                );
+              }
+              return null;
+            })()}
           </>
         )}
       </DialogContent>

@@ -15,7 +15,7 @@ from datetime import datetime
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 
-from utils.logging_config import get_logger
+from backend.utils.logging_config import get_logger
 
 class JobStatus(Enum):
     QUEUED = "queued"
@@ -501,8 +501,8 @@ def get_task_queue_manager() -> TaskQueueManager:
 
 def embedding_worker(worker_id: str, frontend_port: int, status_port: int):
     """Worker process for computing embeddings."""
-    from services.embedding import EmbeddingService
-    from services.job_service import JobService
+    from .embedding import EmbeddingService
+    from .job_service import JobService
     
     logger = get_logger(f"worker_{worker_id}")
     logger.info(f"Worker {worker_id} starting...")

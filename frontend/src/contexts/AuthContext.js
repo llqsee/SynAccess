@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import logger from '../utils/logger';
 
 // Security utilities
 const sanitizeInput = (input) => {
@@ -112,23 +113,23 @@ const savePendingVerifications = (verifications) => {
 const simulateEmailSending = (email, username, verificationToken) => {
   if (!AUTH_CONFIG.IS_DEVELOPMENT) return;
   
-  console.log('📧 EMAIL SIMULATION - Registration Confirmation');
-  console.log('=====================================');
-  console.log(`To: ${email}`);
-  console.log(`Subject: Welcome to MAVIS - Please Confirm Your Email`);
-  console.log('');
-  console.log(`Dear ${username},`);
-  console.log('');
-  console.log('Thank you for registering with MAVIS! To complete your registration,');
-  console.log('please confirm your email address by clicking the link below:');
-  console.log('');
-  console.log(`Verification Link: ${window.location.origin}/?verify=${verificationToken}`);
-  console.log('');
-  console.log('If you did not create this account, please ignore this email.');
-  console.log('');
-  console.log('Best regards,');
-  console.log('The MAVIS Team');
-  console.log('=====================================');
+  logger.info('📧 EMAIL SIMULATION - Registration Confirmation');
+  logger.info('=====================================');
+  logger.info(`To: ${email}`);
+  logger.info(`Subject: Welcome to MAVIS - Please Confirm Your Email`);
+  logger.info('');
+  logger.info(`Dear ${username},`);
+  logger.info('');
+  logger.info('Thank you for registering with MAVIS! To complete your registration,');
+  logger.info('please confirm your email address by clicking the link below:');
+  logger.info('');
+  logger.info(`Verification Link: ${window.location.origin}/?verify=${verificationToken}`);
+  logger.info('');
+  logger.info('If you did not create this account, please ignore this email.');
+  logger.info('');
+  logger.info('Best regards,');
+  logger.info('The MAVIS Team');
+  logger.info('=====================================');
   
   // Also show a browser notification if supported
   if ('Notification' in window && Notification.permission === 'granted') {
@@ -272,7 +273,7 @@ export const AuthProvider = ({ children }) => {
       const inactiveTime = now - lastActivity;
       
       if (inactiveTime > (AUTH_CONFIG.IS_DEVELOPMENT ? 2 * 60 * 60 * 1000 : 30 * 60 * 1000)) {
-        console.log('Session expired due to inactivity');
+        logger.info('Session expired due to inactivity');
         logout();
       }
     }, 60000); // Check every minute

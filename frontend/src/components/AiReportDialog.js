@@ -19,6 +19,7 @@ import {
   PictureAsPdf
 } from '@mui/icons-material';
 import pdfGenerator from '../services/pdfGenerator';
+import logger from '../utils/logger';
 
 const AiReportDialog = ({ open, onClose, aiAnalysis, validationResults }) => {
   if (!aiAnalysis) return null;
@@ -45,7 +46,7 @@ const AiReportDialog = ({ open, onClose, aiAnalysis, validationResults }) => {
       );
 
       if (success) {
-        console.log('PDF report generated successfully');
+        logger.info('PDF report generated successfully');
       } else {
         console.error('PDF generation failed');
       }
@@ -64,6 +65,23 @@ const AiReportDialog = ({ open, onClose, aiAnalysis, validationResults }) => {
       return timestamp;
     }
   };
+
+  // Extract the actual analysis data from the response structure
+  const getAnalysisData = () => {
+    // Handle different possible response structures
+    if (aiAnalysis.analysis) {
+      // If the response has an 'analysis' wrapper (old structure)
+      return aiAnalysis.analysis;
+    } else if (aiAnalysis.timestamp && aiAnalysis.result_summary) {
+      // If the response is the analysis directly (new structure)
+      return aiAnalysis;
+    } else {
+      // Fallback
+      return aiAnalysis;
+    }
+  };
+
+  const analysisData = getAnalysisData();
 
   return (
     <Dialog
@@ -92,7 +110,7 @@ const AiReportDialog = ({ open, onClose, aiAnalysis, validationResults }) => {
                 Analysis Generated
               </Typography>
               <Typography variant="body2">
-                {formatTimestamp(aiAnalysis.timestamp)}
+                {formatTimestamp(analysisData.timestamp)}
               </Typography>
             </CardContent>
           </Card>
@@ -104,7 +122,7 @@ const AiReportDialog = ({ open, onClose, aiAnalysis, validationResults }) => {
                 Expert Analysis Report
               </Typography>
               
-              {aiAnalysis.result_summary ? (
+              {analysisData.result_summary ? (
                 <Typography 
                   variant="body1" 
                   paragraph 
@@ -114,7 +132,7 @@ const AiReportDialog = ({ open, onClose, aiAnalysis, validationResults }) => {
                     textAlign: 'justify'
                   }}
                 >
-                  {aiAnalysis.result_summary}
+                  {analysisData.result_summary}
                 </Typography>
               ) : (
                 <Typography variant="body1" color="text.secondary">
@@ -143,6 +161,27 @@ const AiReportDialog = ({ open, onClose, aiAnalysis, validationResults }) => {
                     color="secondary"
                   />
                 </Box>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Analysis Status */}
+          {analysisData.status && (
+            <Card sx={{ mb: 2, bgcolor: analysisData.status === 'success' ? 'success.50' : 'error.50' }}>
+              <CardContent>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Analysis Status
+                </Typography>
+                <Chip 
+                  label={analysisData.status === 'success' ? 'Success' : 'Error'}
+                  color={analysisData.status === 'success' ? 'success' : 'error'}
+                  size="small"
+                />
+                {analysisData.error && (
+                  <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                    Error: {analysisData.error}
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           )}
