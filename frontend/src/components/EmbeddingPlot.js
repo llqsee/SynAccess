@@ -1987,6 +1987,89 @@ const EmbeddingPlot = ({
         console.warn('🔵 No valid bounds found in grid info:', bounds);
         console.warn('🔵 Grid info structure:', anomalyResults.grid_info);
       }
+
+      // Provide grid hover information without enabling pointer events on grid cells
+      // We compute the hovered cell from mouse position and backend bin edges
+      const ensureGridTooltip = () => {
+        let tip = d3.select('body').select('.grid-cell-tooltip');
+        if (tip.empty()) {
+          tip = d3.select('body')
+            .append('div')
+            .attr('class', 'grid-cell-tooltip')
+            .style('position', 'fixed')
+            .style('background', 'rgba(0,0,0,0.9)')
+            .style('color', 'white')
+            .style('border', '1px solid #555')
+            .style('border-radius', '4px')
+            .style('padding', '6px 8px')
+            .style('font-size', '11px')
+            .style('font-family', 'Arial, sans-serif')
+            .style('pointer-events', 'none')
+            .style('z-index', '9999')
+            .style('box-shadow', '0 2px 6px rgba(0,0,0,0.3)')
+            .style('visibility', 'hidden');
+        }
+        return tip;
+      };
+
+      const svgRootForHover = d3.select(svgRef.current);
+      svgRootForHover.on('mousemove.gridHover', null).on('mouseleave.gridHover', null);
+      svgRootForHover
+        .on('mousemove.gridHover', function(event) {
+          // If hovering a point, prefer point tooltip
+          const target = event.target;
+          if (target && target.tagName && target.tagName.toLowerCase() === 'circle') {
+            d3.select('body').select('.grid-cell-tooltip').style('visibility', 'hidden');
+            return;
+          }
+
+          const tip = ensureGridTooltip();
+          const [mx, my] = d3.pointer(event, g.node());
+          const dataX = xScale.invert(mx);
+          const dataY = yScale.invert(my);
+          if (Number.isNaN(dataX) || Number.isNaN(dataY)) {
+            tip.style('visibility', 'hidden');
+            return;
+          }
+
+          // Determine cell indices using strict backend bin edges
+          let cellXIdx = -1;
+          let cellYIdx = -1;
+          for (let i = 0; i < xBins.length - 1; i++) {
+            if (dataX >= xBins[i] && dataX < xBins[i + 1]) { cellXIdx = i; break; }
+          }
+          for (let j = 0; j < yBins.length - 1; j++) {
+            if (dataY >= yBins[j] && dataY < yBins[j + 1]) { cellYIdx = j; break; }
+          }
+
+          if (cellXIdx < 0 || cellYIdx < 0) {
+            tip.style('visibility', 'hidden');
+            return;
+          }
+
+          const cellData = anomalyResults.cell_anomalies?.find(a => a.cell_x === cellXIdx && a.cell_y === cellYIdx);
+          if (!cellData) {
+            tip.style('visibility', 'hidden');
+            return;
+          }
+
+          const fmt = (v) => {
+            if (v === null || v === undefined) return 'N/A';
+            if (typeof v === 'number' && isFinite(v)) return v.toFixed(2);
+            if (v === 'Infinity') return '∞';
+            if (v === '-Infinity') return '-∞';
+            return String(v);
+          };
+
+          const html = `Cell (${cellXIdx},${cellYIdx})<br/>Real: ${cellData.real_count || 0} • Synthetic: ${cellData.synthetic_count || 0}<br/>Z: ${fmt(cellData.z_score)} • ${cellData.anomaly_type === 'real_overrepresentation' ? 'Real heavy' : 'Synthetic heavy'}<br/>Severity: ${cellData.severity || 'unknown'}`;
+          tip.html(html)
+            .style('left', (event.pageX + 12) + 'px')
+            .style('top', (event.pageY + 12) + 'px')
+            .style('visibility', 'visible');
+        })
+        .on('mouseleave.gridHover', function() {
+          d3.select('body').select('.grid-cell-tooltip').style('visibility', 'hidden');
+        });
     } else {
       console.log('🔵 Not drawing grid overlay:', {
         showAnomalies,
@@ -2294,19 +2377,25 @@ const EmbeddingPlot = ({
       .attr("height", scaledPlotHeight - margin.top - margin.bottom)
       .style("fill", "transparent")
       .style("cursor", "crosshair")
-      .style("pointer-events", showAnomalies && anomalyResults ? "none" : "all"); // Disable when anomalies are shown
+      // Keep background passive so point hover/clicks are not blocked
+      .style("pointer-events", "none");
     
-    console.log('🔍 Background pointer-events:', showAnomalies && anomalyResults ? "none" : "all", { showAnomalies, hasAnomalyResults: !!anomalyResults });
+    console.log('🔍 Background pointer-events:', "none", { showAnomalies, hasAnomalyResults: !!anomalyResults });
 
-    background
-      .on("mousedown", function(event) {
+    // Attach selection handlers to the SVG root so they work alongside point/tooltips
+    const svgRoot = d3.select(svgRef.current);
+    svgRoot.on("mousedown.selection", null).on("mousemove.selection", null).on("mouseup.selection", null);
+    svgRoot
+      .on("mousedown.selection", function(event) {
+        // Start selection only when not clicking a point
+        if (event.target && event.target.tagName && event.target.tagName.toLowerCase() === 'circle') return;
         event.preventDefault();
         isDrawing = true;
         hasDragged = false;
         startPoint = d3.pointer(event, g.node());
         selectionCircle = null;
       })
-      .on("mousemove", function(event) {
+      .on("mousemove.selection", function(event) {
         if (!isDrawing || !startPoint) return;
 
         const currentPoint = d3.pointer(event, g.node());
@@ -2328,28 +2417,22 @@ const EmbeddingPlot = ({
 
         if (hasDragged && selectionCircle) {
           const adjustedRadius = Math.max(0, distance - dragThreshold);
-          
           // Make circle expand toward the mouse direction
           const centerX = startPoint[0] + (currentPoint[0] - startPoint[0]) * 0.5;
           const centerY = startPoint[1] + (currentPoint[1] - startPoint[1]) * 0.5;
-          
           selectionCircle
             .attr("cx", centerX)
             .attr("cy", centerY)
-            .attr("r", adjustedRadius / 2); // Smaller radius since center moves
+            .attr("r", adjustedRadius / 2);
         }
       })
-      .on("mouseup", function(event) {
-        event.preventDefault();
-
+      .on("mouseup.selection", function(event) {
         if (!isDrawing || !startPoint) return;
-
+        event.preventDefault();
         if (hasDragged && selectionCircle) {
           const currentPoint = d3.pointer(event, g.node());
           const distance = Math.sqrt((currentPoint[0] - startPoint[0])**2 + (currentPoint[1] - startPoint[1])**2);
           const adjustedRadius = Math.max(0, distance - dragThreshold);
-          
-          // Use the same center positioning as during drag
           const centerX = startPoint[0] + (currentPoint[0] - startPoint[0]) * 0.5;
           const centerY = startPoint[1] + (currentPoint[1] - startPoint[1]) * 0.5;
           const finalRadius = adjustedRadius / 2;
@@ -2364,12 +2447,9 @@ const EmbeddingPlot = ({
             }
           });
 
-
-
           setSelectedPoints(selected);
           selectionCircle.remove();
         }
-
         isDrawing = false;
         hasDragged = false;
         startPoint = null;
