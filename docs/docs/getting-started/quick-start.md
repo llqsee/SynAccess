@@ -115,11 +115,11 @@ Both datasets should have the same columns and data types.
 2. **Click "Run Validation"**
 3. **Review Results**:
 
-   **Quality Metrics:**
+   **Validation Outputs:**
    - **Range Validation**: Check if synthetic data stays within expected bounds
    - **Distribution Validation**: Compare statistical distributions
    - **Correlation Validation**: Preserve feature relationships
-   - **Overall Score**: Composite quality assessment
+   - **Raw Results**: No composite score; review p-values, effect sizes, and summaries
 
    **Issues Detected:**
    - **Critical**: Must be addressed immediately
@@ -128,11 +128,9 @@ Both datasets should have the same columns and data types.
 
 ### Interpret Results
 
-1. **Quality Score**: 0-100 scale
-   - 90-100: Excellent quality
-   - 70-89: Good quality
-   - 50-69: Acceptable quality
-   - Below 50: Needs improvement
+1. **No Overall Score**
+   - Results are provided as raw statistics per test
+   - Interpretation is left to expert review or AI analysis
 
 2. **Distribution Analysis**:
    - Kolmogorov-Smirnov test results

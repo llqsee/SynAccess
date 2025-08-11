@@ -10,15 +10,14 @@ The job management system enables users to submit, monitor, and manage various t
 
 ### Validation Jobs
 - **Statistical Testing**: Comprehensive validation using multiple statistical tests
-- **Quality Assessment**: Overall quality scoring and issue detection
-- **FDR Correction**: False Discovery Rate correction for multiple testing
-- **Report Generation**: Automatic generation of validation reports
+- **Outputs**: Raw results only (no overall quality score). FDR correction available in raw outputs.
+- **Report Generation**: Optional AI‑assisted narrative using raw results
 
 ### Embedding Jobs
 - **UMAP Generation**: Dimensionality reduction using UMAP algorithm
 - **t-SNE Generation**: Dimensionality reduction using t-SNE algorithm
-- **Parameter Optimization**: Automatic parameter tuning for optimal results
 - **Model Training**: Training and saving embedding models for reuse
+- **Fast Path**: Pretrained runs reuse saved ColumnTransformer for faster preprocessing
 
 ### Anomaly Detection Jobs
 - **Grid-Based Analysis**: Spatial analysis using grid-based approach
@@ -30,7 +29,7 @@ The job management system enables users to submit, monitor, and manage various t
 - **Model Training**: Training new embedding models
 - **Model Loading**: Loading existing pretrained models
 - **Model Export**: Exporting models for external use
-- **Model Validation**: Validating model performance and quality
+- **Model Identification**: Human‑readable dataset names (e.g., "Dataset: Insurance") and fingerprints stored with jobs
 
 ## Job Lifecycle
 

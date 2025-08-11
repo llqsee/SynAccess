@@ -10,7 +10,7 @@ The anomaly detection system uses an adaptive logit-based approach to analyze th
 
 ### Visualization
 - **Colored Grid Cells**: Anomalous regions are highlighted as rectangles (no circles). High severity cells are red; medium severity cells are amber.
-- **Compact Tooltips**: Hovering a cell shows a small, on-screen tooltip with counts, z-score, severity, and type. Tooltips are smart-positioned to remain inside the viewport.
+- **Concurrent Interactions**: Grid rectangles are non-interactive; point tooltips and circular selection remain active. Off-point hover shows grid cell info.
 - **Point Opacity**: Real and synthetic points render at opacity 0.5 for clarity.
 
 ### Spatial Partitioning
@@ -69,7 +69,6 @@ The anomaly detection system uses an adaptive logit-based approach to analyze th
 ### Grid Parameters
 - **Grid Size**: Configurable number of cells per dimension
 - **Minimum Density**: Threshold for minimum points per cell
-- **Logit Thresholds**: Adaptive thresholds based on dataset characteristics
 - **Statistical Tests**: Choice of statistical methods for validation
 
 ### Analysis Settings
@@ -81,7 +80,7 @@ The anomaly detection system uses an adaptive logit-based approach to analyze th
 ## Results Interpretation
 
 ### Anomaly Reports
-- **CSV Export**: Global statistics (Global Probability, Global Logit, Logit SD, Thresholds) are populated. Special values (Infinity, -Infinity, NaN) are serialized as strings in the CSV.
+- **CSV Export**: Global statistics (Global Probability, Global Logit, Logit SD) are guaranteed. Special values (Infinity, -Infinity, NaN) are serialized as strings in the CSV. No threshold parameter is included in CSV.
 - **Cell-Level Analysis**: Detailed analysis of each grid cell
 - **Pattern Identification**: Recognition of systematic distribution issues
 - **Severity Assessment**: Priority-based anomaly classification using z-scores
@@ -101,12 +100,8 @@ The system uses the logit transformation: `logit(p) = ln(p/(1-p))` where:
 - The transformation creates an unbounded, symmetric scale
 - Facilitates robust statistical analysis
 
-### Adaptive Thresholds
-Thresholds are calculated as:
-- **Global Logit**: `logit(p_global)` where `p_global = N_real / (N_real + N_synthetic)`
-- **Standard Deviation**: `logit_sd` of all cell-level logit values
-- **Lower Threshold**: `logit_global - logit_sd`
-- **Upper Threshold**: `logit_global + logit_sd`
+### Adaptive Thresholds (Internal)
+We compute global logit and logit SD to characterize dataset behavior. These are used internally to classify anomalies and report z-scores, but are not exposed as user-configurable thresholds nor exported as a separate threshold field in CSV.
 
 ### Z-Score Calculation
 Z-scores are calculated as:

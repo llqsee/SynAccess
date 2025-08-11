@@ -47,10 +47,10 @@
 - **Rationale**: Different tests detect different types of distribution differences. Comprehensive testing ensures robust quality assessment
 - **Implementation**: Scientific libraries with FDR correction and bootstrap validation
 
-#### **8. Quality Scoring System**
-- **Requirement**: EXCELLENT, GOOD, FAIR, POOR classifications with specific recommendations
-- **Rationale**: Users need objective, interpretable quality metrics to make informed decisions
-- **Implementation**: Multi-criteria scoring with detailed explanations
+#### **8. Validation Output Philosophy**
+- **Requirement**: Return raw validation results without composite scores or pass/fail labels
+- **Rationale**: Different tests are not directly comparable; raw outputs enable expert interpretation and reporting
+- **Implementation**: Full-dataset tests with p-values, effect sizes, and summaries (no mixed p-values, no overall score)
 
 #### **9. Anomaly Detection**
 - **Requirement**: Grid-based ratio analysis for detecting synthetic data anomalies
@@ -310,20 +310,19 @@ docker compose --profile production up --build
 - Kolmogorov-Smirnov tests: Formal distribution similarity testing
 - Chi-square analysis: Categorical variable comparison
 - Correlation analysis: Preserve multivariate relationships
-- Quality metrics: Objective scoring and recommendations
+- Raw outputs only: No overall scores; intended for expert interpretation
 
 ### Data Validation & Quality Assessment
 - Comprehensive validation: Professional backend implementation with scientific libraries
 - Statistical tests: KS test, Chi-square, Welch's t-test, Energy test, Total variation distance
-- Quality scoring: EXCELLENT, GOOD, FAIR, POOR classifications
-- Issue detection: Critical, High, Medium, Low priority alerts
-- Recommendations: Specific suggestions for improvement
+- Output: Raw results only (no EXCELLENT/GOOD/FAIR/POOR scoring)
+- Recommendations: Interpreted via AI analysis or expert review
 
 ### Anomaly Detection
 - Grid-based analysis: Divide data space into cells for density analysis
 - Ratio-based detection: Compare real-to-synthetic ratios in each cell
-- Coverage analysis: Identify sparse or crowded regions
-- Mode collapse detection: Find areas where synthetic data is overrepresented
+- Strict backend bins: Frontend uses exact x_bins/y_bins and bounds from backend
+- CSV guarantees: Global Probability, Global Logit, Logit Std Dev always included (no threshold parameter in CSV)
 
 ### Performance Monitoring & Job Management
 - Real-time dashboard: API performance and memory usage
@@ -334,8 +333,8 @@ docker compose --profile production up --build
 
 ### Pretrained Model Support
 - Model history: Access previously trained UMAP/t-SNE models
-- Consistent analysis: Use same model parameters across different datasets
-- Model download: Export trained models for external use
+- Fast path: Reuse saved ColumnTransformer for preprocessing to speed up runs
+- Dataset-aware naming: Human-readable names (e.g., "Dataset: Insurance") in history and tooltips
 - Job management: Track and manage model training jobs
 
 ---

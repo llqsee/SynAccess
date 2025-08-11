@@ -9,7 +9,7 @@ The visualization system offers interactive, high-performance visualizations for
 ## Interactive Scatter Plots
 
 ### UMAP Visualizations
-- **Dimensionality Reduction**: Interactive 2D/3D UMAP embeddings
+- **Dimensionality Reduction**: Interactive 2D UMAP embeddings
 - **Parameter Control**: Real-time adjustment of UMAP parameters
 - **Color Coding**: Distinguish real vs synthetic data points
 - **Zoom and Pan**: Smooth zoom and pan interactions
@@ -17,18 +17,15 @@ The visualization system offers interactive, high-performance visualizations for
 - **Tooltip Information**: Detailed information on hover
 
 ### t-SNE Visualizations
-- **Alternative Embedding**: t-SNE dimensionality reduction option
+- **Alternative Embedding**: t-SNE dimensionality reduction option (2D)
 - **Perplexity Control**: Adjustable perplexity parameter
 - **Learning Rate**: Configurable learning rate for optimization
 - **Iteration Control**: Control over number of iterations
 - **Convergence Monitoring**: Real-time convergence tracking
 
 ### Interactive Features
-- **Brush Selection**: Rectangular and circular brush selection tools
-- **Lasso Selection**: Free-form selection of data points
-- **Multi-selection**: Multiple selection regions
-- **Selection Export**: Export selected data points for analysis
-- **Selection Statistics**: Statistical summary of selected points
+- **Selection**: Circular drag-selection of data points
+- **Distribution Sidebar**: Real vs synthetic histograms for selected points
 
 ## Distribution Comparisons
 
@@ -78,7 +75,8 @@ The visualization system offers interactive, high-performance visualizations for
 
 ### Anomaly Visualization
 - **Anomaly Highlighting**: Visual highlighting of detected anomalies
-- **Grid Overlay**: Grid-based anomaly detection visualization
+- **Grid Overlay**: Strict backend x_bins/y_bins and bounds used for rectangles
+- **Concurrent Interactions**: Grid is non-interactive; point tooltips and selection remain active; off-point hover shows grid cell info
 - **Ratio Maps**: Real-to-synthetic ratio visualization
 - **Coverage Maps**: Data space coverage visualization
 - **Mode Collapse**: Visual identification of mode collapse patterns
@@ -116,7 +114,7 @@ The visualization system offers interactive, high-performance visualizations for
 - **Caching**: Efficient caching of rendered visualizations
 
 ### Rendering Optimization
-- **WebGL Rendering**: Hardware-accelerated rendering
+- **Canvas/SVG Optimization**: Efficient rendering paths
 - **Canvas Optimization**: Optimized canvas rendering
 - **Memory Management**: Efficient memory usage for large datasets
 - **Update Batching**: Batched updates for smooth interactions
