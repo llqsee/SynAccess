@@ -184,10 +184,9 @@ random_state: 42
 - Identify regions where synthetic data differs
 
 ### 5. Validate Quality
-- Overall score: 87/100
-- Range validation: Passed
-- Distribution validation: Minor issues with 'Insulin' feature
-- Correlation validation: Good preservation
+- Review raw validation outputs (per-test statistics, p-values, effect sizes)
+- Distribution validation: Example — minor differences detected in 'Insulin' feature
+- Correlation validation: Example — good preservation
 
 ### 6. Export Results
 - Save visualization as PNG

@@ -9,20 +9,19 @@ MAVIS includes a comprehensive data validation system for synthetic data quality
 - **Correlation Validation**: Feature relationship preservation
 - **Statistical Validation**: Mean, variance, skewness, kurtosis
 
-## Quality Scoring
+## Validation Outputs
 
-- **Pass Rate**: Percentage of tests that pass validation
-- **Status**: PASS/FAIL for test results
-- **Severity Levels**: HIGH, MEDIUM, LOW for issue priority
-- **Overall Status**: EXCELLENT, GOOD, FAIR, POOR
+- Per-test raw results: statistics, p-values, effect sizes, and metadata
+- No overall EXCELLENT/GOOD/FAIR/POOR scoring is produced
+- Avoid mixing p-values across test families; apply FDR per family where applicable
 
 ## Test Results Structure
 
 Each validation test returns:
-- **status**: "PASS" or "FAIL" indicating test result
-- **severity**: "HIGH", "MEDIUM", or "LOW" indicating issue priority
-- **issues**: Array of specific problems found (if any)
-- **metadata**: Test-specific information and statistics
+- **statistic**: Test statistic value
+- **p_value** and optionally **adjusted_p_value** (FDR-corrected)
+- **effect_size** (when applicable)
+- **metadata**: Test-specific additional information
 
 ## Dynamic Sampling Strategy
 

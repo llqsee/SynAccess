@@ -218,11 +218,9 @@ The validation system executes tests in the following order for optimal statisti
 - Provide confidence intervals for bootstrap tests
 - Document sample sizes and sampling methods
 
-### Quality Assessment
-- **Excellent**: All tests non-significant, low effect sizes
-- **Good**: Most tests non-significant, moderate effect sizes
-- **Fair**: Some tests significant, moderate to high effect sizes
-- **Poor**: Many tests significant, high effect sizes
+### Interpretation Guidance
+- Report per-test statistics, p-values (with FDR where applicable), and effect sizes
+- Avoid composite “overall” labels; use domain expertise for decision-making
 
 ## Future Enhancements
 

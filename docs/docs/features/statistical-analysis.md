@@ -108,35 +108,23 @@ The statistical analysis system employs a sophisticated approach combining multi
 - **Consensus Decision**: Overall result based on iteration agreement
 - **Confidence Intervals**: Statistical uncertainty quantification
 
-## Quality Assessment Framework
+## Results and Interpretation
 
-### Test Result Structure
+### Test Result Structure (Example)
 ```json
 {
   "test_name": "Kolmogorov-Smirnov",
   "variable": "feature_name",
   "statistic": 0.123,
   "p_value": 0.045,
-  "adjusted_p_value": 0.052,
-  "status": "FAIL",
-  "severity": "MEDIUM",
-  "iterations": 5,
-  "rejection_rate": 0.6,
-  "confidence_interval": [0.098, 0.148]
+  "adjusted_p_value": 0.052
 }
 ```
 
-### Severity Classification
-- **HIGH**: Significant statistical difference (p < 0.01)
-- **MEDIUM**: Moderate difference (0.01 ≤ p < 0.05)
-- **LOW**: Minor difference (0.05 ≤ p < 0.1)
-- **PASS**: No significant difference (p ≥ 0.1)
-
-### Overall Quality Scoring
-- **EXCELLENT**: 90-100% of tests pass
-- **GOOD**: 75-89% of tests pass
-- **FAIR**: 60-74% of tests pass
-- **POOR**: <60% of tests pass
+### Interpretation Guidance
+- MAVIS returns raw statistical outputs. There is no composite “overall quality score.”
+- Do not mix p-values across different test families; apply FDR per family where applicable.
+- Use effect sizes and domain knowledge to judge practical significance.
 
 ## Statistical Best Practices
 
