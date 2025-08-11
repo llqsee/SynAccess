@@ -16,4 +16,9 @@ Learn how to explore and interact with your visualization results.
 - **Distribution Sidebar**: Statistical comparisons
 - **Variable Selection**: Switch between features
 
-*This page is under construction. More detailed content will be added soon.*
+### Working with Anomaly Overlay
+
+- **Concurrent Interactions**: When anomaly overlay is enabled, data points remain fully interactive.
+- **Point Tooltips**: Hovering a point shows its tooltip as usual.
+- **Selection**: Drag a circular region to select points; distribution sidebar updates accordingly.
+- **Grid Hover**: Moving the cursor off points shows grid cell information derived from backend x_bins/y_bins; grid rectangles themselves are non-interactive.
