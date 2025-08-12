@@ -1,0 +1,11 @@
+services:
+  mavis-app:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-1}
+              capabilities: [gpu]
+    runtime: ${GPU_RUNTIME:-nvidia}
+

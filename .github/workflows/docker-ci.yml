@@ -52,7 +52,7 @@ jobs:
       if: ${{ github.event_name != 'pull_request' }}
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-    - name: Build and test with Docker Compose
+    - name: Build and test with Docker Compose (CPU only)
       run: |
         # Build the application
         echo "🏗️ Building MAVIS application with Docker Compose..."

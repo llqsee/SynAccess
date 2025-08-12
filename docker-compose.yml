@@ -25,15 +25,7 @@ services:
       - ./backend:/app/backend:delegated
     restart: unless-stopped
     command: ${STARTUP_COMMAND:-./start.sh}
-    # GPU runtime configuration
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: ${GPU_COUNT:-1}
-              capabilities: [gpu]
-    runtime: ${GPU_RUNTIME:-}
+    # GPU runtime configuration moved to optional override file (docker-compose.gpu.yml)
 
   # Add nginx for production
   nginx:
