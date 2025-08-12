@@ -1,106 +1,143 @@
 import pytest
-import tempfile
-import os
+import asyncio
+from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from database.models import Base
-from database.connection import get_db
-from main import app
+import sys
+import os
 
-# Test database
-TEST_DATABASE_URL = "sqlite:///./test.db"
-
-engine = create_engine(
-    TEST_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
+# Add the backend directory to the Python path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 @pytest.fixture(scope="session")
-def test_db():
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
+def event_loop():
+    """Create an instance of the default event loop for the test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 @pytest.fixture
-def client(test_db):
-    return TestClient(app)
+def mock_app():
+    """Mock FastAPI app for testing."""
+    from fastapi import FastAPI
+    app = FastAPI()
+    
+    @app.get("/health")
+    async def health_check():
+        return {"status": "healthy"}
+    
+    return app
 
 @pytest.fixture
-def sample_data():
+def client(mock_app):
+    """Create a test client for the FastAPI app."""
+    with patch('backend.main.app', mock_app):
+        from backend.main import app
+        with TestClient(app) as test_client:
+            yield test_client
+
+@pytest.fixture
+def mock_embedding_service():
+    """Mock embedding service for testing."""
+    with patch('backend.services.embedding.EmbeddingService') as mock_service:
+        mock_instance = MagicMock()
+        mock_service.return_value = mock_instance
+        yield mock_instance
+
+@pytest.fixture
+def mock_validation_service():
+    """Mock validation service for testing."""
+    with patch('backend.services.validation_service.validation_service') as mock_service:
+        yield mock_service
+
+@pytest.fixture
+def mock_anomaly_detection_service():
+    """Mock anomaly detection service for testing."""
+    with patch('backend.services.anomaly_detection_service.RatioBasedGridAnomalyDetectionService') as mock_service:
+        mock_instance = MagicMock()
+        mock_service.return_value = mock_instance
+        yield mock_instance
+
+@pytest.fixture
+def mock_gpu_monitoring_service():
+    """Mock GPU monitoring service for testing."""
+    with patch('backend.services.gpu_monitoring.GPUMonitoringService') as mock_service:
+        mock_instance = MagicMock()
+        mock_service.return_value = mock_instance
+        yield mock_instance
+
+@pytest.fixture
+def mock_job_service():
+    """Mock job service for testing."""
+    with patch('backend.services.job_service.JobService') as mock_service:
+        mock_instance = MagicMock()
+        mock_service.return_value = mock_instance
+        yield mock_instance
+
+@pytest.fixture
+def mock_task_queue():
+    """Mock task queue for testing."""
+    with patch('backend.services.task_queue.get_task_queue_manager') as mock_queue:
+        mock_instance = MagicMock()
+        mock_queue.return_value = mock_instance
+        yield mock_instance
+
+@pytest.fixture
+def sample_real_data():
+    """Sample real data for testing."""
     return {
-        "real_data": {
-            "headers": ["feature1", "feature2", "feature3"],
-            "data": [
-                [1.0, 2.0, 3.0],
-                [4.0, 5.0, 6.0],
-                [7.0, 8.0, 9.0]
-            ]
+        'data': [
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0],
+            [7.0, 8.0, 9.0]
+        ],
+        'headers': ['x', 'y', 'z']
+    }
+
+@pytest.fixture
+def sample_synthetic_data():
+    """Sample synthetic data for testing."""
+    return {
+        'data': [
+            [1.1, 2.1, 3.1],
+            [4.1, 5.1, 6.1],
+            [7.1, 8.1, 9.1]
+        ],
+        'headers': ['x', 'y', 'z']
+    }
+
+@pytest.fixture
+def sample_embedding_data():
+    """Sample embedding data for testing."""
+    return {
+        'real': [[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]],
+        'synthetic': [[1.1, 1.1], [2.1, 2.1], [3.1, 3.1]]
+    }
+
+@pytest.fixture
+def sample_anomaly_results():
+    """Sample anomaly detection results for testing."""
+    return {
+        'status': 'success',
+        'statistics': {
+            'total_real': 100,
+            'total_synthetic': 100,
+            'real_anomalies': 10,
+            'synthetic_anomalies': 15,
+            'logit_global': 0.69,
+            'logit_sd': 0.5
         },
-        "synthetic_data": {
-            "headers": ["feature1", "feature2", "feature3"],
-            "data": [
-                [1.1, 2.1, 3.1],
-                [4.1, 5.1, 6.1],
-                [7.1, 8.1, 9.1]
-            ]
-        }
-    }
-
-@pytest.fixture
-def mock_embedding_result():
-    return {
-        "real_embeddings": [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]],
-        "synthetic_embeddings": [[0.7, 0.8], [0.9, 1.0], [1.1, 1.2]],
-        "metadata": {
-            "method": "umap",
-            "runtime": 15.5,
-            "parameters": {"n_neighbors": 15, "min_dist": 0.1}
-        }
-    }
-
-@pytest.fixture
-def mock_distribution_plot():
-    return {
-        "plot_data": {
-            "data": [
-                {
-                    "x": [1, 2, 3, 4, 5],
-                    "y": [2, 4, 3, 5, 1],
-                    "type": "histogram",
-                    "name": "Real Data"
-                },
-                {
-                    "x": [1.1, 2.1, 3.1, 4.1, 5.1],
-                    "y": [1, 3, 4, 2, 5],
-                    "type": "histogram",
-                    "name": "Synthetic Data"
-                }
-            ],
-            "layout": {
-                "title": "Distribution Comparison",
-                "xaxis": {"title": "Value"},
-                "yaxis": {"title": "Frequency"}
+        'cell_anomalies': [
+            {
+                'cell_x': 0,
+                'cell_y': 0,
+                'real_count': 5,
+                'synthetic_count': 10,
+                'p_cell': 0.33,
+                'logit_value': -0.405,
+                'z_score': -2.19,
+                'anomaly_type': 'synthetic_overrepresentation',
+                'severity': 'high',
+                'color': '#8B0000'
             }
-        }
-    }
-
-@pytest.fixture
-def temp_file():
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
-        f.write("col1,col2,col3\n1,2,3\n4,5,6\n")
-        temp_path = f.name
-    
-    yield temp_path
-    
-    if os.path.exists(temp_path):
-        os.unlink(temp_path) 
+        ]
+    } 

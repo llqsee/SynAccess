@@ -15,6 +15,6 @@ Learn how to validate synthetic data quality using MAVIS.
 - **Range Validation**: Check data bounds
 - **Distribution Validation**: Statistical similarity
 - **Correlation Validation**: Feature relationships
-- **Overall Quality Score**: Percentage passed
+- Review raw validation outputs (per-test statistics, p-values, adjusted p-values, effect sizes)
 
 *This page is under construction. More detailed content will be added soon.*

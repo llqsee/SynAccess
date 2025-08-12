@@ -1,8 +1,8 @@
 import pytest
 import pandas as pd
 import numpy as np
-from utils.data_preprocessing import preprocess_data
-from utils.validation import validate_embedding_params
+from backend.utils.data_preprocessing import preprocess_data
+from backend.utils.validation import validate_embedding_params
 
 class TestDataPreprocessing:
     def test_preprocess_data_numeric_only(self):

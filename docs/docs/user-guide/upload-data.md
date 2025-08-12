@@ -5,7 +5,7 @@ Learn how to upload and prepare your data for analysis in MAVIS.
 ## File Requirements
 
 - **Supported Formats**: CSV, Excel (.xlsx, .xls), JSON
-- **File Size**: Maximum 100MB per file
+- **File Size**: No File size Limit
 - **Data Types**: Numeric, categorical, datetime
 - **Structure**: Real and synthetic datasets must have same columns
 

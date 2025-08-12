@@ -1,7 +1,10 @@
 import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
-from services.embedding import EmbeddingService
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+from backend.services.embedding import EmbeddingService
 
 class TestEmbeddingService:
     def setup_method(self):

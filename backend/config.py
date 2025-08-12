@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = Field(default=3600, env="CACHE_TTL_SECONDS")  # 1 hour
     max_workers: int = Field(default=4, env="MAX_WORKERS")
     
+    # AI/Claude Configuration
+    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
+    enable_ai_analysis: bool = Field(default=True, env="ENABLE_AI_ANALYSIS")
+    claude_model: str = Field(default="claude-3-5-sonnet-20241022", env="CLAUDE_MODEL")
+    ai_analysis_timeout: int = Field(default=60, env="AI_ANALYSIS_TIMEOUT")  # 60 seconds
+    
     # Embedding Configuration
     max_data_points: int = Field(default=999999999, env="MAX_DATA_POINTS")
     embedding_timeout: int = Field(default=240, env="EMBEDDING_TIMEOUT")  # 4 minutes - reduced from 10 minutes

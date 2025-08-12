@@ -27,7 +27,8 @@ import {
   Error as ErrorIcon,
   AutorenewRounded,
   Menu,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
@@ -35,6 +36,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import EmbeddingPlot from './components/EmbeddingPlot';
 import DistributionPlot from './components/DistributionPlot';
+
 import ResultsPane from './components/ResultsPane';
 import History from './components/History';
 import SummaryTab from './components/SummaryTab';
@@ -119,19 +121,17 @@ function AppContent() {
     embeddingMetadata,
     loading,
     error: embeddingError,
-    processingStatus,
-    currentJobId,
-    currentTaskId,
-    progress,
-    queuePosition,
-    estimatedWaitTime,
-    canCancel,
     originalRealData,
     originalSyntheticData,
+    processingStatus,
+    progress,
+    canCancel,
     setError: setEmbeddingError,
     handleVisualize,
+    handleVisualizeWithPretrainedModel,
     handleCancel,
-    loadFromHistory
+    loadFromHistory,
+    resetState: resetEmbeddingState
   } = useEmbedding();
 
   const {
@@ -145,6 +145,9 @@ function AppContent() {
     clearValidation,
     getValidationSummary
   } = useValidation();
+
+  // Manual validation trigger - removed automatic validation
+  // Users must now click "Run Validation" button in Summary tab
 
   const error = uploadError || embeddingError || validationError;
   
@@ -168,7 +171,16 @@ function AppContent() {
 
   const onVisualize = (params) => {
     setCurrentAlgorithm(params.method);
-    handleVisualize(realData, syntheticData, params, backendStatus === 'connected');
+    
+    // Handle pretrained models from history
+    if (params.method === 'pretrained' && params.pretrainedModelJobId) {
+      // Use the new pretrained model from history approach
+      handleVisualizeWithPretrainedModel(realData, syntheticData, params, backendStatus === 'connected');
+    } else {
+      // Use the regular embedding approach
+      handleVisualize(realData, syntheticData, params, backendStatus === 'connected');
+    }
+    
     // Auto-switch to embeddings tab after visualization starts
     if (backendStatus === 'connected') {
       setActiveTab(2);
@@ -233,10 +245,8 @@ function AppContent() {
             {validationResults && !validating && (
               <Chip
                 icon={<CheckCircle />}
-                label={`Validation Complete (${getValidationSummary()?.score || 0}% quality score)`}
-                color={getValidationSummary()?.overallStatus === 'EXCELLENT' ? 'success' : 
-                       getValidationSummary()?.overallStatus === 'GOOD' ? 'info' :
-                       getValidationSummary()?.overallStatus === 'FAIR' ? 'warning' : 'error'}
+                label="Validation Complete"
+                color="success"
                 size="small"
                 variant="outlined"
               />
@@ -321,6 +331,7 @@ function AppContent() {
                   iconPosition="start"
                   disabled={!tabsEnabled.distributions}
                 />
+
                 <Tab 
                   icon={<HistoryIcon />} 
                   label="History" 
@@ -538,6 +549,8 @@ function AppContent() {
                   )}
                 </Box>
               </TabPanel>
+
+
 
               {/* History Tab */}
               <TabPanel value={activeTab} index={4}>

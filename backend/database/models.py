@@ -34,6 +34,10 @@ class Job(Base):
     # Results tracking
     has_results = Column(Boolean, default=False)
     has_compressed_data = Column(Boolean, default=False)
+    has_model = Column(Boolean, default=False)  # New field for model tracking
+
+    # User preferences
+    is_favorite = Column(Boolean, default=False)
 
 class JobResult(Base):
     """Job results model for storing embedding results."""
@@ -44,6 +48,8 @@ class JobResult(Base):
     embedding_real = Column(Text, nullable=True)  # JSON string of real embeddings
     embedding_synthetic = Column(Text, nullable=True)  # JSON string of synthetic embeddings
     preprocessing_info = Column(Text, nullable=True)  # JSON string of preprocessing info
+    model_data = Column(Text, nullable=True)  # Base64 encoded pickled model
+    model_format = Column(String, nullable=True)  # 'pickle' or 'joblib'
     real_processed_samples = Column(Integer, nullable=True)
     synthetic_processed_samples = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

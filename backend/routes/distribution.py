@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException
-from typing import List, Any, Optional
-import numpy as np
-import pandas as pd
 from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+import logging
+import pandas as pd
+import numpy as np
+from backend.utils.data_preprocessing import preprocess_data
 from collections import Counter
-from utils.data_preprocessing import preprocess_data
-
 
 
 router = APIRouter()
@@ -16,7 +16,8 @@ class DistributionRequest(BaseModel):
     column: str
     plot_type: str
     real_headers: Optional[List[str]] = None
-    synthetic_headers: Optional[List[str]] = None    
+    synthetic_headers: Optional[List[str]] = None
+    data_type_filter: Optional[str] = "mixed"  # "real-only", "synthetic-only", or "mixed"
 
 def get_column_data(data, headers, column_name):
     """Extract column data from the dataset using existing headers."""
@@ -76,6 +77,7 @@ async def generate_distribution_plot(request: DistributionRequest):
             - plot_type: Type of plot to generate
             - real_headers: Optional list of real data headers
             - synthetic_headers: Optional list of synthetic data headers
+            - data_type_filter: Optional filter for data type ("real-only", "synthetic-only", "mixed")
             
     Returns:
         dict: Contains plot data and statistics
@@ -89,6 +91,15 @@ async def generate_distribution_plot(request: DistributionRequest):
         )
         
         plot_type = request.plot_type
+        data_type_filter = request.data_type_filter or "mixed"
+
+        # Handle single data type cases
+        if data_type_filter == "real-only":
+            # Only show real data
+            synthetic_values = []
+        elif data_type_filter == "synthetic-only":
+            # Only show synthetic data
+            real_values = []
 
         # Generate the requested plot type
         if plot_type == "histogram":
@@ -99,7 +110,8 @@ async def generate_distribution_plot(request: DistributionRequest):
             return {
                 "plot_type": "histogram",
                 "real_values": real_values,
-                "synthetic_values": synthetic_values,                
+                "synthetic_values": synthetic_values,
+                "data_type_filter": data_type_filter
             }
                 
         elif plot_type == "histogram_comparison":
@@ -110,7 +122,8 @@ async def generate_distribution_plot(request: DistributionRequest):
             return {
                 "plot_type": "histogram_comparison",
                 "real_values": real_values,
-                "synthetic_values": synthetic_values
+                "synthetic_values": synthetic_values,
+                "data_type_filter": data_type_filter
             }
                 
         elif plot_type == "violin":
@@ -121,7 +134,8 @@ async def generate_distribution_plot(request: DistributionRequest):
             return {
                 "plot_type": "violin",
                 "real_values": real_values,
-                "synthetic_values": synthetic_values
+                "synthetic_values": synthetic_values,
+                "data_type_filter": data_type_filter
             }
                 
         elif plot_type == "bar":
@@ -140,7 +154,8 @@ async def generate_distribution_plot(request: DistributionRequest):
                 "plot_type": "bar",
                 "categories": all_categories,
                 "real_counts": real,
-                "synthetic_counts": synth
+                "synthetic_counts": synth,
+                "data_type_filter": data_type_filter
             }
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported plot type: {plot_type}")

@@ -9,7 +9,7 @@ import numpy as np
 from typing import Dict, List, Any, Tuple, Optional, Union
 from io import BytesIO
 import sys
-from utils.logging_config import get_logger
+from backend.utils.logging_config import get_logger
 
 class CompressionService:
     """Service for compressing and decompressing datasets for storage."""

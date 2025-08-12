@@ -115,11 +115,11 @@ Both datasets should have the same columns and data types.
 2. **Click "Run Validation"**
 3. **Review Results**:
 
-   **Quality Metrics:**
+   **Validation Outputs:**
    - **Range Validation**: Check if synthetic data stays within expected bounds
    - **Distribution Validation**: Compare statistical distributions
    - **Correlation Validation**: Preserve feature relationships
-   - **Overall Score**: Composite quality assessment
+   - **Raw Results**: No composite score; review p-values, effect sizes, and summaries
 
    **Issues Detected:**
    - **Critical**: Must be addressed immediately
@@ -128,11 +128,9 @@ Both datasets should have the same columns and data types.
 
 ### Interpret Results
 
-1. **Quality Score**: 0-100 scale
-   - 90-100: Excellent quality
-   - 70-89: Good quality
-   - 50-69: Acceptable quality
-   - Below 50: Needs improvement
+1. **No Overall Score**
+   - Results are provided as raw statistics per test
+   - Interpretation is left to expert review or AI analysis
 
 2. **Distribution Analysis**:
    - Kolmogorov-Smirnov test results
@@ -186,10 +184,9 @@ random_state: 42
 - Identify regions where synthetic data differs
 
 ### 5. Validate Quality
-- Overall score: 87/100
-- Range validation: Passed
-- Distribution validation: Minor issues with 'Insulin' feature
-- Correlation validation: Good preservation
+- Review raw validation outputs (per-test statistics, p-values, effect sizes)
+- Distribution validation: Example — minor differences detected in 'Insulin' feature
+- Correlation validation: Example — good preservation
 
 ### 6. Export Results
 - Save visualization as PNG
@@ -240,7 +237,7 @@ random_state: 42
 
 **Upload Fails**:
 - Check file format (CSV, Excel, JSON)
-- Verify file size (max 100MB)
+- Verify file size
 - Ensure consistent column names
 
 **Processing Slow**:

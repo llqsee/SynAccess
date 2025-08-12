@@ -1,10 +1,12 @@
-version: '3.8'
-
 services:
   mavis-app:
-    build: 
+    image: ${IMAGE_NAME:-ghcr.io/example/mavis:latest}
+    build:
       context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}
+      dockerfile: Dockerfile
+      args:
+        ENV_FILE: ${ENV_FILE:-environment.yml}  # Use environment-gpu.yml for GPU build
+        GPU_ENABLED: ${GPU_ENABLED:-false}  # Enable GPU support
     ports:
       - "8000:8000"
       - "3000:3000"
@@ -14,6 +16,8 @@ services:
       - NODE_ENV=${NODE_ENV:-production}
       - STARTUP_COMMAND=${STARTUP_COMMAND:-./start.sh}
       - DOCKERFILE=${DOCKERFILE:-Dockerfile}
+      - ENABLE_GPU=${ENABLE_GPU:-false}
+      - API_V1_PREFIX=/api/v1
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -21,6 +25,7 @@ services:
       - ./backend:/app/backend:delegated
     restart: unless-stopped
     command: ${STARTUP_COMMAND:-./start.sh}
+    # GPU runtime configuration moved to optional override file (docker-compose.gpu.yml)
 
   # Add nginx for production
   nginx:
@@ -35,4 +40,15 @@ services:
       - mavis-app
     restart: unless-stopped
     profiles:
-      - production 
+      - production
+
+# ---
+# To build for CPU (default):
+#   docker compose up --build
+#
+# To build for GPU:
+#   ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true docker compose up --build
+#
+# To run with specific GPU runtime:
+#   GPU_RUNTIME=nvidia ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true docker compose up --build
+# --- 

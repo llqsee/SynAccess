@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { validationService } from '../services/validationService';
+import aiAnalysisService from '../services/aiAnalysisService';
 
 export const useValidation = () => {
   const [validationResults, setValidationResults] = useState(null);
@@ -7,6 +8,7 @@ export const useValidation = () => {
   const [validationError, setValidationError] = useState(null);
   const [criticalIssues, setCriticalIssues] = useState([]);
   const [showValidationPopup, setShowValidationPopup] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
 
   const runValidation = useCallback(async (realData, syntheticData, options = {}) => {
     if (!realData || !syntheticData) {
@@ -17,10 +19,10 @@ export const useValidation = () => {
     try {
       setValidating(true);
       setValidationError(null);
+      setAiAnalysis(null);
       
-      console.log('Starting validation analysis...');
-      
-      const results = await validationService.validateDatasets(
+      // Step 1: Get raw validation statistics
+      const rawResults = await validationService.computeValidationStatistics(
         realData, 
         syntheticData, 
         {
@@ -29,27 +31,55 @@ export const useValidation = () => {
         }
       );
       
-      setValidationResults(results);
+      // Step 2: Get AI analysis of the results
+      const datasetInfo = {
+        real: {
+          rows: realData.data?.length || 0,
+          columns: realData.headers?.length || 0,
+          headers: realData.headers || []
+        },
+        synthetic: {
+          rows: syntheticData.data?.length || 0,
+          columns: syntheticData.headers?.length || 0,
+          headers: syntheticData.headers || []
+        }
+      };
+      
+      const aiResults = await aiAnalysisService.analyzeValidationResults(rawResults, datasetInfo);
+      
+      // Extract the actual analysis data from the response structure
+      const actualAnalysis = aiResults.analysis || aiResults;
+      
+      // Step 3: Combine raw results with AI analysis
+      const combinedResults = {
+        ...rawResults,
+        aiAnalysis: actualAnalysis
+      };
+      
+      setValidationResults(combinedResults);
+      setAiAnalysis(actualAnalysis);
       
       // Check for critical issues that need immediate attention
       const critical = [];
-      Object.values(results.tests).forEach(testGroup => {
-        if (testGroup.tests) {
-          testGroup.tests.forEach(test => {
-            if (test.issues) {
-              test.issues.forEach(issue => {
-                if (issue.severity === 'CRITICAL' || issue.severity === 'HIGH') {
-                  critical.push({
-                    column: test.column,
-                    type: test.type,
-                    ...issue
-                  });
-                }
-              });
-            }
-          });
-        }
-      });
+      if (rawResults.tests) {
+        Object.values(rawResults.tests).forEach(testGroup => {
+          if (testGroup && testGroup.tests) {
+            testGroup.tests.forEach(test => {
+              if (test && test.issues) {
+                test.issues.forEach(issue => {
+                  if (issue && issue.severity === 'HIGH') {
+                    critical.push({
+                      column: test.column || 'Unknown',
+                      type: test.type || 'Unknown',
+                      ...issue
+                    });
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
       
       setCriticalIssues(critical);
       
@@ -58,11 +88,8 @@ export const useValidation = () => {
         setShowValidationPopup(true);
       }
       
-      console.log(`Validation completed: ${results.summary.totalTests} tests run, ${critical.length} critical issues found`);
-      
-      return results;
+      return combinedResults;
     } catch (error) {
-      console.error('Validation failed:', error);
       setValidationError(error.message);
       return null;
     } finally {
@@ -79,33 +106,39 @@ export const useValidation = () => {
     setValidationError(null);
     setCriticalIssues([]);
     setShowValidationPopup(false);
+    setAiAnalysis(null);
   }, []);
 
   const getValidationSummary = useCallback(() => {
     if (!validationResults) return null;
     
     const { summary } = validationResults;
-    const totalIssues = summary.warnings + summary.failures + summary.critical;
+    
+    // Use AI analysis for expert assessment if available
+    let overallStatus = 'UNKNOWN';
+    if (aiAnalysis && aiAnalysis.result_summary) {
+      // AI analysis is available, mark as completed
+      overallStatus = 'COMPLETED';
+    } else {
+      overallStatus = 'COMPLETED'; // Default status since no quality metrics
+    }
     
     return {
-      overallStatus: totalIssues === 0 ? 'EXCELLENT' : 
-                    summary.failures === 0 ? 'GOOD' : 
-                    summary.critical === 0 ? 'FAIR' : 'POOR',
-      score: Math.round(((summary.passed / summary.totalTests) * 100)),
-      totalTests: summary.totalTests,
-      passed: summary.passed,
-      issues: totalIssues,
-      criticalCount: criticalIssues.length,
-      recommendations: validationResults.recommendations?.length || 0
+      overallStatus,
+      totalTests: summary?.totalTests || 0,
+      recommendations: 0, // AI provides recommendations in text format, not structured
+      aiAnalysis: aiAnalysis
     };
-  }, [validationResults, criticalIssues]);
+  }, [validationResults, aiAnalysis]);
 
   const getIssuesByCategory = useCallback(() => {
-    if (!validationResults) return {};
+    if (!validationResults || !validationResults.tests) return {};
     
     const categories = {};
     
     Object.entries(validationResults.tests).forEach(([category, testGroup]) => {
+      if (!testGroup) return;
+      
       categories[category] = {
         name: testGroup.testType || category,
         description: testGroup.description || '',
@@ -115,10 +148,10 @@ export const useValidation = () => {
       
       if (testGroup.tests) {
         testGroup.tests.forEach(test => {
-          if (test.issues && test.issues.length > 0) {
+          if (test && test.issues && test.issues.length > 0) {
             categories[category].issues.push({
-              column: test.column,
-              testType: test.type,
+              column: test.column || 'Unknown',
+              testType: test.type || 'Unknown',
               issues: test.issues
             });
           }
@@ -135,6 +168,7 @@ export const useValidation = () => {
     validationError,
     criticalIssues,
     showValidationPopup,
+    aiAnalysis,
     runValidation,
     dismissValidationPopup,
     clearValidation,

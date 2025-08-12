@@ -25,7 +25,9 @@ import {
   Alert,
   IconButton,
   Tooltip,
-  LinearProgress
+  LinearProgress,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import {
   CloudUpload,
@@ -44,6 +46,7 @@ import {
   ArrowForward,
   Info
 } from '@mui/icons-material';
+import logger from '../utils/logger';
 
 const LandingPage = ({ 
   onRealDataUpload, 
@@ -64,22 +67,33 @@ const LandingPage = ({
   const [nSynthSamples, setNSynthSamples] = useState(1000);
   const [showParameters, setShowParameters] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [useGpu, setUseGpu] = useState(false);
+
 
   const handleFileSelection = async (event, isReal) => {
+    logger.debug('handleFileSelection', { isReal });
     const file = event.target.files[0];
     if (file) {
+      logger.debug('File selected', { name: file.name });
       if (isReal) {
+        logger.debug('Uploading real data');
         onRealDataUpload(file, null);
         if (!syntheticDataLoaded) setCurrentStep(1);
       } else {
+        logger.debug('Uploading synthetic data');
         onSyntheticDataUpload(file, null);
         setCurrentStep(2);
+        logger.debug('Setting showParameters=true');
         setShowParameters(true);
       }
     }
   };
 
+
+
   const handleGenerate = () => {
+    logger.debug('handleGenerate', { method, useGpu, showParameters });
+    
     const params = {
       method,
       params: method === 'umap' 
@@ -87,7 +101,8 @@ const LandingPage = ({
             n_neighbors: nNeighbors, 
             min_dist: minDist,
             n_real_samples: nRealSamples,
-            n_synth_samples: nSynthSamples
+            n_synth_samples: nSynthSamples,
+            use_gpu: useGpu
           }
         : { 
             perplexity: perplexity, 
@@ -96,10 +111,13 @@ const LandingPage = ({
             n_synth_samples: nSynthSamples
           }
     };
+    logger.debug('visualize params', params);
     onVisualize(params);
   };
 
   const isReadyToGenerate = realDataLoaded && syntheticDataLoaded && backendConnected && !loading;
+  
+
 
   return (
     <Box sx={{ 
@@ -323,6 +341,13 @@ const LandingPage = ({
                         </Box>
 
                         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          {/* Debug Info */}
+                          <Box sx={{ p: 1, bgcolor: '#f0f0f0', borderRadius: 1, fontSize: '12px' }}>
+                            <Typography variant="caption">
+                              Debug: method={method}, showParameters={showParameters.toString()}, useGpu={useGpu.toString()}
+                            </Typography>
+                          </Box>
+                          
                           {/* Method Selection */}
                           <FormControl fullWidth>
                             <InputLabel>Embedding Method</InputLabel>
@@ -354,11 +379,12 @@ const LandingPage = ({
                                   </Box>
                                 </Box>
                               </MenuItem>
+
                             </Select>
                           </FormControl>
 
                           {/* Method-specific parameters */}
-                          {method === 'umap' ? (
+                          {method === 'umap' && (
                             <>
                               <Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -397,8 +423,60 @@ const LandingPage = ({
                                   sx={{ color: '#7c3aed' }}
                                 />
                               </Box>
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    checked={useGpu}
+                                    onChange={e => {
+                                      logger.debug('GPU checkbox changed:', e.target.checked);
+                                      setUseGpu(e.target.checked);
+                                    }}
+                                    color="primary"
+                                    disabled={!showParameters}
+                                  />
+                                }
+                                label="Use GPU (if available)"
+                                sx={{ 
+                                  mt: 1,
+                                  p: 1,
+                                  border: '2px solid red',
+                                  borderRadius: 1,
+                                  bgcolor: '#fff3cd'
+                                }}
+                              />
                             </>
-                          ) : (
+                          )}
+                          
+                          {/* ALWAYS SHOW GPU CHECKBOX FOR TESTING */}
+                          <Box sx={{ p: 2, bgcolor: '#ffebee', border: '2px solid #f44336', borderRadius: 1, mt: 2 }}>
+                            <Typography variant="h6" color="error" gutterBottom>
+                              🧪 TESTING: GPU Checkbox (Always Visible)
+                            </Typography>
+                            <FormControlLabel
+                              control={
+                                <Checkbox
+                                  checked={useGpu}
+                                  onChange={e => {
+                                    logger.debug('TEST GPU checkbox changed:', e.target.checked);
+                                    setUseGpu(e.target.checked);
+                                  }}
+                                  color="primary"
+                                />
+                              }
+                              label="🧪 TEST: Use GPU (if available)"
+                              sx={{ 
+                                p: 1,
+                                border: '2px solid blue',
+                                borderRadius: 1,
+                                bgcolor: '#e3f2fd'
+                              }}
+                            />
+                            <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                              Current state: method={method}, showParameters={showParameters.toString()}, useGpu={useGpu.toString()}
+                            </Typography>
+                          </Box>
+                          
+                          {method === 'tsne' && (
                             <>
                               <Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -438,6 +516,8 @@ const LandingPage = ({
                               </Box>
                             </>
                           )}
+
+
 
                           {/* Sample Size Controls */}
                           <Box>

@@ -129,6 +129,7 @@ nav:
       - UMAP Configuration: technical/umap-configuration.md
       - Data Validation: technical/data-validation.md
       - Performance Monitoring: technical/performance-monitoring.md
+      - Multivariate Statistical Tests: technical/multivariate-statistical-tests.md
   - Development:
       - Setup: development/setup.md
       - Testing: development/testing.md

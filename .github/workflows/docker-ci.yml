@@ -21,6 +21,7 @@ on:
   push:
     branches:
       - init-branch
+      - main
 
   pull_request:
     branches:
@@ -29,6 +30,11 @@ on:
 jobs:
   docker-build-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
     
     steps:
     - name: Checkout code
@@ -37,27 +43,45 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       
-    - name: Build and test with Docker Compose
+    - name: Set image name (lowercase)
+      run: |
+        OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}
+        echo "IMAGE_NAME=ghcr.io/${OWNER_LC}/mavis" >> $GITHUB_ENV
+
+    - name: Log in to GHCR
+      if: ${{ github.event_name != 'pull_request' }}
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+    - name: Build and test with Docker Compose (CPU only)
       run: |
         # Build the application
         echo "🏗️ Building MAVIS application with Docker Compose..."
-        docker compose build
+        IMAGE_NAME=${IMAGE_NAME} docker compose build
         
         # Test the application startup
         echo "🚀 Testing application startup..."
-        docker compose up -d
-        sleep 30
+        IMAGE_NAME=${IMAGE_NAME} docker compose up -d
+        
+        # Wait for backend health to be ready
+        echo "⏳ Waiting for backend health endpoint..."
+        for i in {1..30}; do
+          if curl -fsS http://localhost:8000/api/v1/health >/dev/null; then
+            echo "✅ Backend is healthy"; break; fi; echo "⏳ retry $i"; sleep 3; done
+        
+        # Final health assertion
+        echo "🔍 Verifying health endpoint..."
+        curl -f http://localhost:8000/api/v1/health || (echo "Backend health check failed" && IMAGE_NAME=${IMAGE_NAME} docker compose logs mavis-app && exit 1)
         
         # Check if services are running
         echo "📊 Checking service health..."
         docker compose ps
         
-        # Test API endpoints
+        # Test API endpoints (additional basic checks)
         echo "🔍 Testing API endpoints..."
-        curl -f http://localhost:8000/health || echo "Backend health check failed"
+        curl -sSf http://localhost:8000/api/v1/docs >/dev/null || echo "OpenAPI docs may be disabled"
         
         # Stop services
-        docker compose down
+        IMAGE_NAME=${IMAGE_NAME} docker compose down
         
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -69,16 +93,12 @@ jobs:
           frontend/coverage/
           logs/
         
-    - name: Build and push Docker image (if requested)
-      if: ${{ inputs.push_image == 'true' }}
+    - name: Build and push Docker image to GHCR (if requested)
+      if: ${{ github.event_name != 'pull_request' && inputs.push_image == 'true' }}
       run: |
-        echo "🐳 Building and pushing Docker image..."
-        # Add your Docker registry login here if needed
-        # docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-        
-        # Build and push
-        docker compose build
-        # docker compose push  # Uncomment when registry is configured
+        echo "🐳 Building and pushing Docker image to GHCR..."
+        IMAGE_NAME=${IMAGE_NAME} docker compose build
+        IMAGE_NAME=${IMAGE_NAME} docker compose push
         
     - name: Cleanup
       if: always()

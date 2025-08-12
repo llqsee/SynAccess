@@ -29,9 +29,13 @@ import {
   TrendingUp,
   ExpandMore,
   Refresh,
-  Download
+  Description,
+  PictureAsPdf
 } from '@mui/icons-material';
 import ResultsPane from './ResultsPane';
+import AiReportDialog from './AiReportDialog';
+import pdfGenerator from '../services/pdfGenerator';
+import logger from '../utils/logger';
 // No date utilities needed
 
 const SummaryTab = ({ 
@@ -43,46 +47,86 @@ const SummaryTab = ({
   validating, 
   onRunValidation 
 }) => {
-  // Note: Removed automatic validation to prevent freezing issues
-  // Users can manually trigger validation using the "Run Validation Analysis" button
+  const [showAiReportDialog, setShowAiReportDialog] = useState(false);
+
+  // Manual validation - users must click "Run Validation Analysis" button
+  // This prevents automatic validation that could freeze the UI
 
   const dataUploaded = realData && syntheticData;
   const embeddingGenerated = embeddingData && embeddingMetadata;
 
+  const exportRawValidationResults = () => {
+    const dataStr = JSON.stringify(validationResults, null, 2);
+    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'validation-report.json';
+    link.click();
+  };
+
+
+
+  const exportPDFReport = async () => {
+    if (!validationResults?.aiAnalysis) return;
+    
+    try {
+      const datasetInfo = {
+        real: {
+          rows: realData?.data?.length || 0,
+          columns: realData?.headers?.length || 0,
+          headers: realData?.headers || []
+        },
+        synthetic: {
+          rows: syntheticData?.data?.length || 0,
+          columns: syntheticData?.headers?.length || 0,
+          headers: syntheticData?.headers || []
+        }
+      };
+
+      const success = await pdfGenerator.generateAndDownloadPDF(
+        validationResults.aiAnalysis, 
+        validationResults, 
+        datasetInfo
+      );
+
+      if (success) {
+        logger.info('PDF report generated successfully');
+      } else {
+        console.error('PDF generation failed');
+      }
+    } catch (error) {
+      console.error('PDF generation error:', error);
+    }
+  };
+
   const getValidationStatusChip = () => {
+    // Don't show any chip during validation
     if (validating) {
+      return null;
+    }
+
+    if (validationResults) {
+      const summary = validationResults.summary;
+
       return (
         <Chip
-          icon={<CircularProgress size={16} />}
-          label="Validating..."
-          color="info"
+          icon={<Assessment />}
+          label={`${summary.totalTests} Tests Completed`}
+          color="primary"
           size="small"
           variant="outlined"
         />
       );
     }
 
-    if (validationResults) {
-      const summary = validationResults.summary;
-      const overallScore = Math.round((summary.passed / summary.totalTests) * 100);
-      
-      let color = 'success';
-      let icon = <CheckCircle />;
-      let label = `${overallScore}% Quality Score`;
-      
-      if (overallScore < 70) {
-        color = 'error';
-        icon = <ErrorIcon />;
-      } else if (overallScore < 90) {
-        color = 'warning';
-        icon = <Warning />;
-      }
-
+    // Show "Not Run" chip when data is uploaded but validation hasn't been run
+    if (dataUploaded) {
       return (
         <Chip
-          icon={icon}
-          label={label}
-          color={color}
+          icon={<Warning />}
+          label="Validation Not Run"
+          color="warning"
           size="small"
           variant="outlined"
         />
@@ -100,169 +144,175 @@ const SummaryTab = ({
             variant="contained"
             startIcon={<Assessment />}
             onClick={() => onRunValidation(realData, syntheticData, { enableAdvancedTests: true })}
-            disabled={validating}
+            disabled={validating || !dataUploaded}
             fullWidth
             sx={{ mb: 2 }}
           >
-            Run Data Validation Analysis
+            {validating ? 'Running Analysis...' : 'Run Data Validation Analysis'}
           </Button>
           <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-            Get comprehensive quality assessment and recommendations for your synthetic data.
+            {validating ? 'AI analysis will be available once validation completes' : 
+             !dataUploaded ? 'Upload real and synthetic data files to enable validation' :
+             'Get comprehensive quality assessment and recommendations for your synthetic data.'}
           </Typography>
         </Box>
       );
     }
 
     const summary = validationResults.summary;
-    const overallScore = Math.round((summary.passed / summary.totalTests) * 100);
-    
-    // Get top issues for quick insights
-    const criticalIssues = [];
-    Object.values(validationResults.tests).forEach(testGroup => {
-      if (testGroup.tests) {
-        testGroup.tests.forEach(test => {
-          if (test.issues) {
-            test.issues.forEach(issue => {
-              if (issue.severity === 'CRITICAL' || issue.severity === 'HIGH') {
-                criticalIssues.push({
-                  column: test.column,
-                  message: issue.message,
-                  severity: issue.severity
-                });
-              }
-            });
-          }
-        });
-      }
-    });
 
     return (
       <Box sx={{ mt: 2 }}>
         {/* Validation Status Card */}
-        <Card sx={{ mb: 2, bgcolor: overallScore >= 90 ? 'success.light' : overallScore >= 70 ? 'warning.light' : 'error.light' }}>
+        <Card sx={{ mb: 2, bgcolor: 'primary.light' }}>
           <CardContent sx={{ py: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="h6" sx={{ color: overallScore >= 90 ? 'success.dark' : overallScore >= 70 ? 'warning.dark' : 'error.dark' }}>
-                {overallScore}% Quality Score
+              <Typography variant="h6" sx={{ color: 'white', fontWeight: 'bold' }}>
+                {summary.totalTests} Statistical Tests Completed
               </Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
+            </Box>
+            <Typography variant="body2" sx={{ color: 'white', fontWeight: 'medium' }}>
+              Raw statistical results available for AI expert analysis
+            </Typography>
+            
+            {/* Export Buttons */}
+            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
                 <Button
                   size="small"
                   startIcon={<Refresh />}
                   onClick={() => onRunValidation(realData, syntheticData, { enableAdvancedTests: true })}
                   disabled={validating}
+                sx={{ 
+                  color: 'white',
+                  borderColor: 'white',
+                  '&:hover': {
+                    backgroundColor: 'white',
+                    color: 'primary.main'
+                  }
+                }}
+                variant="outlined"
                 >
                   Re-run
                 </Button>
                 <Button
                   size="small"
-                  startIcon={<Download />}
-                  onClick={() => {
-                    const dataStr = JSON.stringify(validationResults, null, 2);
-                    const dataBlob = new Blob([dataStr], {type: 'application/json'});
-                    const url = URL.createObjectURL(dataBlob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = 'validation-report.json';
-                    link.click();
-                  }}
+                startIcon={<Description />}
+                onClick={exportRawValidationResults}
+                sx={{ 
+                  color: 'white',
+                  borderColor: 'white',
+                  '&:hover': {
+                    backgroundColor: 'white',
+                    color: 'primary.main'
+                  }
+                }}
+                variant="outlined"
                 >
-                  Export
+                Export Raw
                 </Button>
-              </Box>
             </Box>
-            <Grid container spacing={2}>
-              <Grid item xs={3}>
-                <Typography variant="h6" color="success.main" sx={{ textAlign: 'center' }}>
-                  {summary.passed}
-                </Typography>
-                <Typography variant="caption" sx={{ textAlign: 'center', display: 'block' }}>
-                  Passed
-                </Typography>
-              </Grid>
-              <Grid item xs={3}>
-                <Typography variant="h6" color="warning.main" sx={{ textAlign: 'center' }}>
-                  {summary.warnings}
-                </Typography>
-                <Typography variant="caption" sx={{ textAlign: 'center', display: 'block' }}>
-                  Warnings
-                </Typography>
-              </Grid>
-              <Grid item xs={3}>
-                <Typography variant="h6" color="error.main" sx={{ textAlign: 'center' }}>
-                  {summary.failures}
-                </Typography>
-                <Typography variant="caption" sx={{ textAlign: 'center', display: 'block' }}>
-                  Failures
-                </Typography>
-              </Grid>
-              <Grid item xs={3}>
-                <Typography variant="h6" color="text.primary" sx={{ textAlign: 'center' }}>
-                  {summary.totalTests}
-                </Typography>
-                <Typography variant="caption" sx={{ textAlign: 'center', display: 'block' }}>
-                  Total
-                </Typography>
-              </Grid>
-            </Grid>
           </CardContent>
         </Card>
 
-        {/* Critical Issues Alert */}
-        {criticalIssues.length > 0 && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              {criticalIssues.length} Critical Issue(s) Found
-            </Typography>
-            <Typography variant="body2">
-              {criticalIssues.slice(0, 2).map((issue, idx) => (
-                <span key={idx}>
-                  <strong>{issue.column}:</strong> {issue.message}
-                  {idx < Math.min(criticalIssues.length, 2) - 1 && <br />}
-                </span>
-              ))}
-              {criticalIssues.length > 2 && ` ... and ${criticalIssues.length - 2} more`}
-            </Typography>
-          </Alert>
-        )}
-
-        {/* Top Recommendations */}
-        {validationResults.recommendations && validationResults.recommendations.length > 0 && (
+        {/* Test Categories Summary */}
           <Accordion sx={{ mb: 2 }}>
             <AccordionSummary expandIcon={<ExpandMore />}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Lightbulb color="primary" />
-                <Typography variant="subtitle2">
-                  Top Recommendations ({validationResults.recommendations.length})
+              <Assessment color="primary" />
+              <Typography variant="h6" color="primary.main">
+                Test Categories
                 </Typography>
               </Box>
             </AccordionSummary>
             <AccordionDetails>
-              <List dense>
-                {validationResults.recommendations.slice(0, 3).map((rec, index) => (
-                  <ListItem key={index} sx={{ pl: 0 }}>
-                    <ListItemIcon>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Expand each category to view detailed test results and statistics.
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              {Object.entries(validationResults.tests).map(([category, testGroup]) => (
+                <Accordion key={category} sx={{ mb: 1 }}>
+                  <AccordionSummary expandIcon={<ExpandMore />}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
+                        {testGroup.testType}
+                      </Typography>
                       <Chip 
-                        label={rec.priority} 
+                        label={`${testGroup.summary?.total || 0} tests`}
                         size="small"
-                        color={rec.priority === 'CRITICAL' ? 'error' : 'warning'}
+                        color="primary"
                         variant="outlined"
                       />
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      {testGroup.description}
+                    </Typography>
+                    {testGroup.tests && testGroup.tests.length > 0 && (
+                      <Box>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Test Results:
+                        </Typography>
+                        <List dense>
+                          {testGroup.tests.slice(0, 5).map((test, index) => (
+                            <ListItem key={index} sx={{ py: 0.5 }}>
+                              <ListItemIcon sx={{ minWidth: 32 }}>
+                                <Assessment fontSize="small" color="primary" />
                     </ListItemIcon>
                     <ListItemText 
-                      primary={rec.column ? `${rec.column}` : 'General'}
-                      secondary={rec.recommendation}
+                                primary={test.column || `Test ${index + 1}`}
+                                secondary={
+                                  test.type === 'ks_test' ? `KS Statistic: ${test.statistic?.toFixed(4) || 'N/A'}` :
+                                  test.type === 'welch_t_test' ? `T-Statistic: ${test.statistic?.toFixed(4) || 'N/A'}` :
+                                  test.type === 'chi_square_test' ? `Chi-Square: ${test.statistic?.toFixed(4) || 'N/A'}` :
+                                  test.type === 'range_test' ? `Range Analysis` :
+                                  test.type === 'outlier_test' ? `Outlier Detection` :
+                                  `Test Type: ${test.type}`
+                                }
                     />
                   </ListItem>
                 ))}
-                {validationResults.recommendations.length > 3 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', textAlign: 'center' }}>
-                    ... and {validationResults.recommendations.length - 3} more recommendations available in full report
-                  </Typography>
+                          {testGroup.tests.length > 5 && (
+                            <ListItem>
+                              <ListItemText
+                                secondary={`... and ${testGroup.tests.length - 5} more tests`}
+                                sx={{ fontStyle: 'italic' }}
+                              />
+                            </ListItem>
                 )}
               </List>
+                      </Box>
+                    )}
+                  </AccordionDetails>
+                </Accordion>
+              ))}
+            </Box>
             </AccordionDetails>
           </Accordion>
+
+        {/* AI Analysis Section */}
+        {validationResults.aiAnalysis && (
+          <Card sx={{ mb: 2, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200' }}>
+            <CardContent sx={{ py: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Assessment color="primary" />
+                <Typography variant="h6" color="primary.main" sx={{ fontWeight: 'bold' }}>
+                  ✅ AI Expert Analysis Ready
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Professional AI analysis completed. View detailed insights and recommendations.
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<Description />}
+                onClick={() => setShowAiReportDialog(true)}
+              >
+                View AI Report
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
         {/* Processing Info */}
@@ -343,7 +393,22 @@ const SummaryTab = ({
                   <Box sx={{ mt: 2 }}>
                     <LinearProgress sx={{ mb: 1 }} />
                     <Typography variant="body2" color="text.secondary">
-                      Running comprehensive validation analysis...
+                      🔄 Running comprehensive validation analysis...
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      AI analysis will be available once validation completes
+                    </Typography>
+                  </Box>
+                )}
+
+                {!validating && !validationResults && dataUploaded && (
+                  <Box sx={{ mt: 2, p: 2, bgcolor: 'warning.50', borderRadius: 1, border: '1px solid', borderColor: 'warning.200' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      <Warning color="warning" fontSize="small" />
+                      <strong>Validation Not Run</strong>
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Click "Run Data Validation Analysis" above to perform comprehensive quality assessment of your synthetic data.
                     </Typography>
                   </Box>
                 )}
@@ -366,6 +431,14 @@ const SummaryTab = ({
           </Box>
         </Paper>
       )}
+
+      {/* AI Report Dialog */}
+      <AiReportDialog
+        open={showAiReportDialog}
+        onClose={() => setShowAiReportDialog(false)}
+        aiAnalysis={validationResults?.aiAnalysis}
+        validationResults={validationResults}
+      />
     </Box>
   );
 };
