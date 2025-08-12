@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   mavis-app:
+    image: ${IMAGE_NAME:-ghcr.io/example/mavis:latest}
     build:
       context: .
       dockerfile: Dockerfile

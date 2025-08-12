@@ -30,6 +30,12 @@ on:
 jobs:
   docker-build-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/mavis
     
     steps:
     - name: Checkout code
@@ -38,15 +44,18 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       
+    - name: Log in to GHCR
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
     - name: Build and test with Docker Compose
       run: |
         # Build the application
         echo "🏗️ Building MAVIS application with Docker Compose..."
-        docker compose build
+        IMAGE_NAME=${IMAGE_NAME} docker compose build
         
         # Test the application startup
         echo "🚀 Testing application startup..."
-        docker compose up -d
+        IMAGE_NAME=${IMAGE_NAME} docker compose up -d
         
         # Wait for backend health to be ready
         echo "⏳ Waiting for backend health endpoint..."
@@ -56,7 +65,7 @@ jobs:
         
         # Final health assertion
         echo "🔍 Verifying health endpoint..."
-        curl -f http://localhost:8000/api/v1/health || (echo "Backend health check failed" && docker compose logs mavis-app && exit 1)
+        curl -f http://localhost:8000/api/v1/health || (echo "Backend health check failed" && IMAGE_NAME=${IMAGE_NAME} docker compose logs mavis-app && exit 1)
         
         # Check if services are running
         echo "📊 Checking service health..."
@@ -67,7 +76,7 @@ jobs:
         curl -sSf http://localhost:8000/api/v1/docs >/dev/null || echo "OpenAPI docs may be disabled"
         
         # Stop services
-        docker compose down
+        IMAGE_NAME=${IMAGE_NAME} docker compose down
         
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -79,16 +88,12 @@ jobs:
           frontend/coverage/
           logs/
         
-    - name: Build and push Docker image (if requested)
+    - name: Build and push Docker image to GHCR (if requested)
       if: ${{ inputs.push_image == 'true' }}
       run: |
-        echo "🐳 Building and pushing Docker image..."
-        # Add your Docker registry login here if needed
-        # docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-        
-        # Build and push
-        docker compose build
-        # docker compose push  # Uncomment when registry is configured
+        echo "🐳 Building and pushing Docker image to GHCR..."
+        IMAGE_NAME=${IMAGE_NAME} docker compose build
+        IMAGE_NAME=${IMAGE_NAME} docker compose push
         
     - name: Cleanup
       if: always()
