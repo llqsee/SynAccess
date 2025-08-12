@@ -21,6 +21,7 @@ on:
   push:
     branches:
       - init-branch
+      - main
 
   pull_request:
     branches:
@@ -46,15 +47,24 @@ jobs:
         # Test the application startup
         echo "🚀 Testing application startup..."
         docker compose up -d
-        sleep 30
+        
+        # Wait for backend health to be ready
+        echo "⏳ Waiting for backend health endpoint..."
+        for i in {1..30}; do
+          if curl -fsS http://localhost:8000/api/v1/health >/dev/null; then
+            echo "✅ Backend is healthy"; break; fi; echo "⏳ retry $i"; sleep 3; done
+        
+        # Final health assertion
+        echo "🔍 Verifying health endpoint..."
+        curl -f http://localhost:8000/api/v1/health || (echo "Backend health check failed" && docker compose logs mavis-app && exit 1)
         
         # Check if services are running
         echo "📊 Checking service health..."
         docker compose ps
         
-        # Test API endpoints
+        # Test API endpoints (additional basic checks)
         echo "🔍 Testing API endpoints..."
-        curl -f http://localhost:8000/health || echo "Backend health check failed"
+        curl -sSf http://localhost:8000/api/v1/docs >/dev/null || echo "OpenAPI docs may be disabled"
         
         # Stop services
         docker compose down

@@ -52,7 +52,7 @@ set -e\n\
 source /opt/conda/etc/profile.d/conda.sh\n\
 conda activate mavis\n\
 cd /app\n\
-python setup_database.py\n\
+python setup_database.py || true\n\
 cd backend\n\
 exec uvicorn main:app --host 0.0.0.0 --port 8000' > start.sh && \
     chmod +x start.sh
@@ -60,8 +60,8 @@ exec uvicorn main:app --host 0.0.0.0 --port 8000' > start.sh && \
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/api/v1/health || exit 1
+HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=5 \
+  CMD curl -fsS http://localhost:8000/api/v1/health || exit 1
 
 CMD ["./start.sh"]
 

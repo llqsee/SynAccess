@@ -18,6 +18,7 @@ services:
       - STARTUP_COMMAND=${STARTUP_COMMAND:-./start.sh}
       - DOCKERFILE=${DOCKERFILE:-Dockerfile}
       - ENABLE_GPU=${ENABLE_GPU:-false}
+      - API_V1_PREFIX=/api/v1
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
