@@ -11,11 +11,15 @@ router = APIRouter(prefix="/anomaly", tags=["anomaly-detection"])
 class AnomalyDetectionRequest(BaseModel):
     real_data: List[List[float]]
     synthetic_data: List[List[float]]
-    grid_size: int = 20
+    x_bins: int = 20
+    y_bins: int = 20
+    fdr_alpha: float = 0.05
 
 class AnomalyDetectionFromJobRequest(BaseModel):
     job_id: str
-    grid_size: int = 20
+    x_bins: int = 20
+    y_bins: int = 20
+    fdr_alpha: float = 0.05
 
 class AnomalyDetectionResponse(BaseModel):
     status: str
@@ -26,6 +30,8 @@ class AnomalyDetectionResponse(BaseModel):
     normal_synthetic: Optional[List[Dict]] = None
     grid_info: Optional[Dict] = None  # Added grid_info field
     logit_thresholds: Optional[Dict] = None  # CRITICAL: Required for CSV generation global statistics
+    positive_tests: Optional[List[Dict]] = None  # FDR-corrected positive test results
+    negative_tests: Optional[List[Dict]] = None  # FDR-corrected negative test results
     message: Optional[str] = None
 
 @router.post("/detect", response_model=AnomalyDetectionResponse)
@@ -52,24 +58,14 @@ async def detect_anomalies(request: AnomalyDetectionRequest):
         if real_dim != synthetic_dim:
             raise HTTPException(status_code=400, detail="Real and synthetic data must have the same dimensions")
         
-        # Train adaptive logit-based anomaly detector
-        training_result = anomaly_service.train_logit_detector(
-            request.real_data, 
-            request.synthetic_data,
-            request.grid_size
-        )
-        
-        logger.info(f"Training result: {training_result}")
-        
-        if training_result.get("status") != "success":
-            raise HTTPException(status_code=500, detail=f"Training failed: {training_result.get('message', 'Unknown error')}")
-        
-        # Detect anomalies using adaptive logit-based approach
-        logger.info(f"Starting adaptive logit anomaly detection with {len(request.real_data)} real and {len(request.synthetic_data)} synthetic points")
+        # Detect anomalies using histogram-based approach with statistical testing
+        logger.info(f"Starting histogram-based anomaly detection with {len(request.real_data)} real and {len(request.synthetic_data)} synthetic points")
         detection_result = anomaly_service.detect_anomalies(
             request.real_data, 
             request.synthetic_data,
-            request.grid_size
+            request.x_bins,
+            request.y_bins,
+            request.fdr_alpha
         )
         
         logger.info(f"Detection result: {detection_result}")
@@ -83,7 +79,7 @@ async def detect_anomalies(request: AnomalyDetectionRequest):
         logger.info(f"Detection result grid_info: {detection_result.get('grid_info')}")
         logger.info(f"Detection result grid_info bounds: {detection_result.get('grid_info', {}).get('bounds') if detection_result.get('grid_info') else 'None'}")
         
-        logger.info(f"Adaptive logit anomaly detection completed. Found {detection_result['statistics']['synthetic_anomalies']} anomalies.")
+        logger.info(f"Histogram-based anomaly detection completed. Found {detection_result['statistics']['synthetic_anomalies']} anomalies.")
         
         return AnomalyDetectionResponse(
             status="success",
@@ -93,7 +89,9 @@ async def detect_anomalies(request: AnomalyDetectionRequest):
             cell_anomalies=detection_result.get("cell_anomalies"),  # Fixed field name
             normal_synthetic=detection_result.get("normal_synthetic"),
             grid_info=detection_result.get("grid_info"),  # Added grid_info
-            logit_thresholds=detection_result.get("logit_thresholds")  # CRITICAL: Pass logit_thresholds for CSV generation
+            logit_thresholds=detection_result.get("logit_thresholds"),  # CRITICAL: Pass logit_thresholds for CSV generation
+            positive_tests=detection_result.get("positive_tests"),  # FDR-corrected positive test results
+            negative_tests=detection_result.get("negative_tests")   # FDR-corrected negative test results
         )
         
     except HTTPException:
@@ -149,24 +147,14 @@ async def detect_anomalies_from_job(request: AnomalyDetectionFromJobRequest):
         
         logger.info(f"Embedding data shapes: Real {len(embedding_real)}x{real_dim}, Synthetic {len(embedding_synthetic)}x{synthetic_dim}")
         
-        # Train adaptive logit-based anomaly detector on embedding data
-        training_result = anomaly_service.train_logit_detector(
-            embedding_real, 
-            embedding_synthetic,
-            request.grid_size
-        )
-        
-        logger.info(f"Training result: {training_result}")
-        
-        if training_result.get("status") != "success":
-            raise HTTPException(status_code=500, detail=f"Training failed: {training_result.get('message', 'Unknown error')}")
-        
-        # Detect anomalies using adaptive logit-based approach with embedding data
-        logger.info(f"Starting adaptive logit anomaly detection with embedding data: {len(embedding_real)} real and {len(embedding_synthetic)} synthetic points")
+        # Detect anomalies using histogram-based approach with embedding data
+        logger.info(f"Starting histogram-based anomaly detection with embedding data: {len(embedding_real)} real and {len(embedding_synthetic)} synthetic points")
         detection_result = anomaly_service.detect_anomalies(
             embedding_real, 
             embedding_synthetic,
-            request.grid_size
+            request.x_bins,
+            request.y_bins,
+            request.fdr_alpha
         )
         
         logger.info(f"Detection result: {detection_result}")
@@ -174,7 +162,7 @@ async def detect_anomalies_from_job(request: AnomalyDetectionFromJobRequest):
         if detection_result.get("status") != "success":
             raise HTTPException(status_code=500, detail=f"Detection failed: {detection_result.get('message', 'Unknown error')}")
         
-        logger.info(f"Adaptive logit anomaly detection completed using embedding data. Found {detection_result['statistics']['synthetic_anomalies']} anomalies.")
+        logger.info(f"Histogram-based anomaly detection completed using embedding data. Found {detection_result['statistics']['synthetic_anomalies']} anomalies.")
         
         return AnomalyDetectionResponse(
             status="success",
@@ -184,7 +172,9 @@ async def detect_anomalies_from_job(request: AnomalyDetectionFromJobRequest):
             cell_anomalies=detection_result.get("cell_anomalies"),  # Fixed field name
             normal_synthetic=detection_result.get("normal_synthetic"),
             grid_info=detection_result.get("grid_info"),  # Added grid_info
-            logit_thresholds=detection_result.get("logit_thresholds")  # CRITICAL: Pass logit_thresholds for CSV generation
+            logit_thresholds=detection_result.get("logit_thresholds"),  # CRITICAL: Pass logit_thresholds for CSV generation
+            positive_tests=detection_result.get("positive_tests"),  # FDR-corrected positive test results
+            negative_tests=detection_result.get("negative_tests")   # FDR-corrected negative test results
         )
         
     except HTTPException:

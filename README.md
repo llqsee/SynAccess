@@ -52,10 +52,15 @@
 - **Rationale**: Different tests are not directly comparable; raw outputs enable expert interpretation and reporting
 - **Implementation**: Full-dataset tests with p-values, effect sizes, and summaries (no mixed p-values, no overall score)
 
-#### **9. Anomaly Detection**
-- **Requirement**: Grid-based ratio analysis for detecting synthetic data anomalies
-- **Rationale**: Synthetic data can have subtle quality issues that require specialized detection methods
-- **Implementation**: Cell-based analysis with visual overlay and CSV export
+#### **9. Histogram-Based Anomaly Detection**
+- **Requirement**: Statistical testing for detecting synthetic data anomalies using histogram-based grid sizing
+- **Rationale**: Synthetic data can have subtle quality issues that require rigorous statistical detection methods
+- **Implementation**: 
+  - Histogram-based grid cell determination for X and Y dimensions separately
+  - Two one-sided t-tests for mean comparison (real vs synthetic overpopulation)
+  - False Discovery Rate (FDR) correction applied separately to positive and negative tests
+  - Binary red/blue coloring based on FDR-corrected significance
+  - Visual overlay with concurrent point tooltips and CSV export with test statistics
 
 ### **Performance & Scalability Requirements**
 

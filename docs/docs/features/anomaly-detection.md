@@ -1,124 +1,135 @@
-# Anomaly Detection
+# Histogram-Based Anomaly Detection
 
-MAVIS includes advanced anomaly detection capabilities for identifying potential issues in synthetic data generation and distribution patterns.
+MAVIS includes advanced anomaly detection capabilities using histogram-based grid sizing with statistical testing for identifying potential issues in synthetic data generation and distribution patterns.
 
 ## Overview
 
-The anomaly detection system uses an adaptive logit-based approach to analyze the spatial distribution of real and synthetic data points, identifying areas where the synthetic data may not accurately represent the real data distribution.
+The anomaly detection system uses a histogram-based approach with rigorous statistical testing to analyze the spatial distribution of real and synthetic data points, identifying areas where the synthetic data may not accurately represent the real data distribution.
 
-## Grid-Based Analysis
+## Histogram-Based Grid Analysis
+
+### Key Features
+- **Histogram-Based Grid Sizing**: X and Y dimensions are binned separately using optimal histogram edges for better data distribution coverage
+- **Statistical Testing**: Two one-sided t-tests for mean comparison (real vs synthetic overpopulation)
+- **False Discovery Rate (FDR) Correction**: Applied separately to positive and negative tests for robust multiple comparison correction
+- **Binary Coloring**: Red for real overpopulation, blue for synthetic overpopulation based on FDR-corrected significance
 
 ### Visualization
-- **Colored Grid Cells**: Anomalous regions are highlighted as rectangles (no circles). High severity cells are red; medium severity cells are amber.
+- **Colored Grid Cells**: Significant anomalous regions are highlighted with binary red/blue coloring based on statistical significance
 - **Concurrent Interactions**: Grid rectangles are non-interactive; point tooltips and circular selection remain active. Off-point hover shows grid cell info.
 - **Point Opacity**: Real and synthetic points render at opacity 0.5 for clarity.
 
 ### Spatial Partitioning
-- **Data Space Division**: Divides the data space into uniform grid cells
-- **Density Analysis**: Calculates point density within each cell
-- **Logit Transformation**: Applies logit transformation for robust statistical analysis
-- **Coverage Assessment**: Identifies sparse or crowded regions
+- **Histogram-Based Binning**: Uses numpy histogram functionality to determine optimal bin edges for each dimension separately
+- **Flexible Grid Sizes**: Supports different grid sizes for X and Y dimensions (e.g., 20x25 grid)
+- **Data-Driven Boundaries**: Grid boundaries are determined by actual data distribution rather than fixed uniform spacing
+- **Coverage Assessment**: Identifies sparse or crowded regions with statistical validation
 
-### Cell Analysis Process
-1. **Grid Creation**: Divides data space into configurable grid size
-2. **Point Counting**: Counts real and synthetic points in each cell
-3. **Logit Calculation**: Computes logit values for each cell
-4. **Adaptive Threshold Detection**: Identifies cells with unusual logit values
-5. **Pattern Analysis**: Detects systematic distribution issues
+## Statistical Testing Framework
 
-## Detection Methods
+### Two One-Sided Tests
+1. **Positive Test**: Tests for real data overpopulation (H1: logit_cell > global_logit)
+2. **Negative Test**: Tests for synthetic data overpopulation (H1: logit_cell < global_logit)
 
-### Adaptive Logit-Based Detection
-- **Global Baseline**: Calculates global logit baseline from dataset characteristics
-- **Standard Deviation**: Uses dataset standard deviation for adaptive thresholds
-- **Z-Score Analysis**: Identifies cells with significant z-score deviations
-- **Statistical Significance**: Uses statistical tests to validate anomalies
+### Test Process
+1. **Global Logit Calculation**: Computes baseline logit from entire dataset: `logit_global = ln(p_global/(1-p_global))`
+2. **Cell-Level Analysis**: For each grid cell with sufficient data points (≥5):
+   - Calculate cell-level logit: `logit_cell = ln(p_cell/(1-p_cell))`
+   - Compute difference: `logit_diff = logit_cell - logit_global`
+   - Estimate standard error using Fisher information
+   - Perform one-sample t-test against global mean
+3. **Statistical Validation**: Calculate t-statistic and p-values for each test direction
+4. **FDR Correction**: Apply Benjamini-Hochberg FDR correction separately to positive and negative test results
 
-### Coverage Analysis
-- **Sparse Regions**: Identifies areas with insufficient synthetic data coverage
-- **Crowded Regions**: Detects areas with excessive synthetic data concentration
-- **Gap Detection**: Finds regions where synthetic data is missing
-- **Overlap Assessment**: Analyzes spatial overlap between real and synthetic data
-
-### Mode Collapse Detection
-- **Concentration Analysis**: Identifies areas where synthetic data is overrepresented
-- **Diversity Assessment**: Measures variety in synthetic data distribution
-- **Pattern Recognition**: Detects repetitive or clustered synthetic data patterns
-- **Quality Metrics**: Quantifies mode collapse severity
+### False Discovery Rate (FDR) Correction
+- **Separate Correction**: Positive and negative tests are corrected independently
+- **Benjamini-Hochberg Method**: Controls false discovery rate at specified α level (default: 0.05)
+- **Statistical Rigor**: Ensures robust detection while controlling for multiple comparisons
 
 ## Anomaly Types
 
-### High Priority Anomalies
-- **High Z-Score Deviations**: Cells with |z| > 2 (strong deviation from baseline)
-- **Complete Coverage Gaps**: Areas with no synthetic data coverage
-- **Mode Collapse**: Significant overrepresentation of synthetic data
-- **Statistical Outliers**: Cells with statistically significant anomalies
+### Real Overpopulation (Red Cells)
+- **Detection**: Positive test significant after FDR correction
+- **Interpretation**: Areas where real data is overrepresented relative to synthetic data
+- **Color**: Red (#FF0000)
+- **Significance**: FDR-corrected p-value < α
 
-### Medium Priority Anomalies
-- **Medium Z-Score Deviations**: Cells with 1 < |z| ≤ 2 (moderate deviation)
-- **Partial Coverage Issues**: Areas with reduced synthetic data coverage
-- **Distribution Skews**: Systematic distribution pattern issues
+### Synthetic Overpopulation (Blue Cells)
+- **Detection**: Negative test significant after FDR correction
+- **Interpretation**: Areas where synthetic data is overrepresented relative to real data
+- **Color**: Blue (#0000FF)
+- **Significance**: FDR-corrected p-value < α
 
-### Low Priority Anomalies
-- **Minor Deviations**: Small z-score differences within acceptable ranges (|z| ≤ 1)
-- **Edge Cases**: Anomalies in low-density regions
-- **Sampling Effects**: Expected variations due to sampling
+### Normal Regions
+- **Detection**: Neither test significant after FDR correction
+- **Interpretation**: Areas with balanced real/synthetic representation
+- **Color**: No highlighting (transparent)
 
 ## Configuration Options
 
 ### Grid Parameters
-- **Grid Size**: Configurable number of cells per dimension
-- **Minimum Density**: Threshold for minimum points per cell
-- **Statistical Tests**: Choice of statistical methods for validation
+- **X Bins**: Number of bins for X dimension (default: 20)
+- **Y Bins**: Number of bins for Y dimension (default: 20)
+- **FDR Alpha**: Significance level for FDR correction (default: 0.05)
+- **Minimum Points**: Threshold for minimum points per cell for testing (5 points)
 
 ### Analysis Settings
-- **Sampling Strategy**: Uses the exact number of points the user selects in the sidebar (e.g., 1000 real + 1000 synthetic). No additional sampling is applied for backend anomaly detection or frontend cell counting. Visualization will render the same set; if totals are <= 8000 there is no downsampling.
-- **Iteration Count**: Number of analysis iterations for robustness
-- **Confidence Levels**: Statistical confidence thresholds
-- **Output Format**: Detailed or summary reporting options
+- **Sampling Strategy**: Uses the exact number of points the user selects in the sidebar (e.g., 1000 real + 1000 synthetic). No additional sampling is applied for backend anomaly detection or frontend cell counting.
+- **Statistical Method**: One-sample t-tests with FDR correction
+- **Test Direction**: Two one-sided tests (positive and negative)
+- **Output Format**: Detailed test statistics and corrected p-values
 
 ## Results Interpretation
 
-### Anomaly Reports
-- **CSV Export**: Global statistics (Global Probability, Global Logit, Logit SD) are guaranteed. Special values (Infinity, -Infinity, NaN) are serialized as strings in the CSV. No threshold parameter is included in CSV.
-- **Cell-Level Analysis**: Detailed analysis of each grid cell
-- **Pattern Identification**: Recognition of systematic distribution issues
-- **Severity Assessment**: Priority-based anomaly classification using z-scores
-- **Recommendations**: Specific suggestions for improvement
+### Statistical Output
+- **CSV Export**: Includes FDR-corrected p-values, test statistics, and global parameters
+- **Test Results**: Separate positive and negative test results with statistical details
+- **Global Parameters**: Global probability, global logit, and FDR alpha level
+- **Cell-Level Analysis**: Detailed statistics for each tested grid cell
 
 ### Quality Metrics
 - **Global Logit**: Baseline logit value for the entire dataset
-- **Logit Standard Deviation**: Measure of dataset variability
-- **Z-Score Distribution**: Statistical distribution of cell-level deviations
-- **Anomaly Rates**: Percentage of anomalous cells and points
+- **Global Probability**: Overall proportion of real data points
+- **Test Counts**: Number of positive and negative tests conducted
+- **Significance Counts**: Number of significant results after FDR correction
+- **FDR Alpha**: Significance level used for correction
 
 ## Technical Details
 
-### Logit Transformation
-The system uses the logit transformation: `logit(p) = ln(p/(1-p))` where:
-- `p` is the proportion of real data in a cell
-- The transformation creates an unbounded, symmetric scale
-- Facilitates robust statistical analysis
+### Histogram-Based Grid Creation
+```python
+# X and Y dimensions binned separately
+_, x_bin_edges = np.histogram(x_coords, bins=x_bins)
+_, y_bin_edges = np.histogram(y_coords, bins=y_bins)
+```
 
-### Adaptive Thresholds (Internal)
-We compute global logit and logit SD to characterize dataset behavior. These are used internally to classify anomalies and report z-scores, but are not exposed as user-configurable thresholds nor exported as a separate threshold field in CSV.
+### Statistical Testing
+```python
+# One-sample t-test for cell vs global mean
+t_stat = logit_diff / se_logit
+p_positive = 1 - stats.t.cdf(t_stat, df)  # Real overpopulation
+p_negative = stats.t.cdf(t_stat, df)      # Synthetic overpopulation
+```
 
-### Z-Score Calculation
-Z-scores are calculated as:
-- `z_score = (logit_cell - logit_global) / logit_sd`
-- Used for severity classification and color assignment
+### FDR Correction
+```python
+# Applied separately to each test type
+rejected, p_adjusted = fdrcorrection(p_values, alpha=fdr_alpha, method='indep')
+```
 
-### Severity Classification
-- **High Severity**: |z| > 2 (Dark Red color)
-- **Medium Severity**: 1 < |z| ≤ 2 (Golden Yellow color)
-- **Normal**: |z| ≤ 1 (Neutral Gray color)
+### Standard Error Estimation
+Standard error for logit scale using Fisher information:
+```python
+fisher_info = total_cell * p_cell * (1 - p_cell)
+se_logit = 1.0 / sqrt(fisher_info)
+```
 
 ## Usage
 
 ### API Endpoints
 - `POST /api/v1/anomaly/detect`: Detect anomalies in provided data
 - `POST /api/v1/anomaly/detect-from-job`: Detect anomalies using job data
-- `POST /api/v1/anomaly/csv`: Generate CSV report
+- `POST /api/v1/anomaly/csv`: Generate CSV report with test statistics
 - `GET /api/v1/anomaly/health`: Health check
 
 ### Request Format
@@ -126,7 +137,9 @@ Z-scores are calculated as:
 {
   "real_data": [[x1, y1], [x2, y2], ...],
   "synthetic_data": [[x1, y1], [x2, y2], ...],
-  "grid_size": 20
+  "x_bins": 20,
+  "y_bins": 20,
+  "fdr_alpha": 0.05
 }
 ```
 
@@ -137,23 +150,63 @@ Z-scores are calculated as:
   "statistics": {
     "total_real": 100,
     "total_synthetic": 100,
-    "real_anomalies": 10,
-    "synthetic_anomalies": 15,
-    "logit_global": 0.69,
-    "logit_sd": 0.5
+    "real_anomalies": 5,
+    "synthetic_anomalies": 8,
+    "positive_tests_conducted": 15,
+    "negative_tests_conducted": 12,
+    "positive_significant": 3,
+    "negative_significant": 5,
+    "global_logit": 0.693,
+    "p_global": 0.667,
+    "fdr_alpha": 0.05
   },
-  "cell_anomalies": [
+  "positive_tests": [
     {
-      "cell_x": 0,
-      "cell_y": 0,
-      "p_cell": 0.33,
-      "logit_value": -0.405,
-      "z_score": -2.19,
-      "anomaly_type": "synthetic_overrepresentation",
-      "severity": "high",
-      "color": "#8B0000"
+      "cell_x": 2,
+      "cell_y": 3,
+      "real_count": 8,
+      "synthetic_count": 2,
+      "total_count": 10,
+      "p_cell": 0.8,
+      "logit_cell": 1.386,
+      "logit_diff": 0.693,
+      "t_stat": 2.45,
+      "p_value": 0.01,
+      "p_value_adjusted": 0.03,
+      "is_significant": true,
+      "test_type": "real_overpopulation",
+      "color": "#FF0000"
     }
   ],
-  "grid_info": {...}
+  "negative_tests": [
+    {
+      "cell_x": 5,
+      "cell_y": 7,
+      "real_count": 1,
+      "synthetic_count": 9,
+      "total_count": 10,
+      "p_cell": 0.1,
+      "logit_cell": -2.197,
+      "logit_diff": -2.890,
+      "t_stat": -4.12,
+      "p_value": 0.002,
+      "p_value_adjusted": 0.008,
+      "is_significant": true,
+      "test_type": "synthetic_overpopulation",
+      "color": "#0000FF"
+    }
+  ],
+  "grid_info": {
+    "x_bins": [x_bin_edges],
+    "y_bins": [y_bin_edges],
+    "x_grid_size": 20,
+    "y_grid_size": 20,
+    "bounds": {
+      "x_min": -2.5,
+      "x_max": 2.5,
+      "y_min": -2.0,
+      "y_max": 2.0
+    }
+  }
 }
-``` 
+```

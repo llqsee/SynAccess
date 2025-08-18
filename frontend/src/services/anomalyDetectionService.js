@@ -7,9 +7,9 @@ class AnomalyDetectionService {
     this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
   }
 
-  async detectAnomalies(realData, syntheticData, gridSize = 20) {
+  async detectAnomalies(realData, syntheticData, xBins = 20, yBins = 20, fdrAlpha = 0.05) {
     try {
-      logger.debug('Sending adaptive logit-based anomaly detection request', { gridSize });
+      logger.debug('Sending histogram-based anomaly detection request', { xBins, yBins, fdrAlpha });
       logger.debug('AnomalyRequestSamples', {
         realSample: realData.slice(0, 3),
         synthSample: syntheticData.slice(0, 3)
@@ -25,7 +25,7 @@ class AnomalyDetectionService {
             throw new Error(`${name}[${i}] must be an array`);
           }
           if (data[i].length !== 2) {
-            throw new Error(`${name}[${i}] must have exactly 2 dimensions for grid-based detection`);
+            throw new Error(`${name}[${i}] must have exactly 2 dimensions for histogram-based detection`);
           }
           for (let j = 0; j < data[i].length; j++) {
             if (typeof data[i][j] !== 'number' || isNaN(data[i][j])) {
@@ -41,7 +41,9 @@ class AnomalyDetectionService {
       const requestBody = {
         real_data: realData,
         synthetic_data: syntheticData,
-        grid_size: gridSize
+        x_bins: xBins,
+        y_bins: yBins,
+        fdr_alpha: fdrAlpha
       };
 
       logger.apiRequest('POST', `${this.baseURL}/anomaly/detect`, requestBody);
@@ -66,14 +68,14 @@ class AnomalyDetectionService {
       logger.debug('Anomaly detection response received');
       return data;
     } catch (error) {
-      logger.error('Adaptive logit-based anomaly detection failed', error);
+      logger.error('Histogram-based anomaly detection failed', error);
       throw error;
     }
   }
 
-  async detectAnomaliesFromJob(jobId, gridSize = 20) {
+  async detectAnomaliesFromJob(jobId, xBins = 20, yBins = 20, fdrAlpha = 0.05) {
     try {
-      const requestBody = { job_id: jobId, grid_size: gridSize };
+      const requestBody = { job_id: jobId, x_bins: xBins, y_bins: yBins, fdr_alpha: fdrAlpha };
       logger.apiRequest('POST', `${this.baseURL}/anomaly/detect-from-job`, requestBody);
 
       const response = await fetch(`${this.baseURL}/anomaly/detect-from-job`, {
@@ -94,17 +96,17 @@ class AnomalyDetectionService {
       logger.debug('Anomaly detection from job response received');
       return data;
     } catch (error) {
-      logger.error('Adaptive logit-based anomaly detection from job failed', error);
+      logger.error('Histogram-based anomaly detection from job failed', error);
       throw error;
     }
   }
 
-  async generateAnomalyCSV(realData, syntheticData, gridSize = 20) {
+  async generateAnomalyCSV(realData, syntheticData, xBins = 20, yBins = 20, fdrAlpha = 0.05) {
     try {
       const response = await fetch(`${this.baseURL}/anomaly/csv`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ real_data: realData, synthetic_data: syntheticData, grid_size: gridSize }),
+        body: JSON.stringify({ real_data: realData, synthetic_data: syntheticData, x_bins: xBins, y_bins: yBins, fdr_alpha: fdrAlpha }),
       });
 
       if (!response.ok) {
@@ -119,12 +121,12 @@ class AnomalyDetectionService {
     }
   }
 
-  async generateAnomalyCSVFromJob(jobId, gridSize = 20) {
+  async generateAnomalyCSVFromJob(jobId, xBins = 20, yBins = 20, fdrAlpha = 0.05) {
     try {
       const response = await fetch(`${this.baseURL}/anomaly/csv-from-job`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: jobId, grid_size: gridSize }),
+        body: JSON.stringify({ job_id: jobId, x_bins: xBins, y_bins: yBins, fdr_alpha: fdrAlpha }),
       });
 
       if (!response.ok) {
@@ -193,7 +195,7 @@ class AnomalyDetectionService {
     if (realData.length > 0 && syntheticData.length > 0) {
       const realDim = realData[0].length;
       const syntheticDim = syntheticData[0].length;
-      if (realDim !== 2 || syntheticDim !== 2) errors.push('Adaptive logit-based anomaly detection requires 2D data (embedding coordinates)');
+      if (realDim !== 2 || syntheticDim !== 2) errors.push('Histogram-based anomaly detection requires 2D data (embedding coordinates)');
       if (realDim !== syntheticDim) errors.push(`Data dimension mismatch: Real data has ${realDim} features, Synthetic data has ${syntheticDim} features`);
     }
 

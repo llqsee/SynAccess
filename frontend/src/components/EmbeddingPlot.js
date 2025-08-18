@@ -1689,11 +1689,13 @@ const EmbeddingPlot = ({
         anomalousCells.add(`${anomaly.cell_x},${anomaly.cell_y}`);
       });
       
-      // Get grid info from results
-      const gridSize = anomalyResults.grid_info?.grid_size || 20;
+      // Get grid info from results - now supports different X and Y grid sizes
+      const xGridSize = anomalyResults.grid_info?.x_grid_size || 20;
+      const yGridSize = anomalyResults.grid_info?.y_grid_size || 20;
+      const gridSize = anomalyResults.grid_info?.grid_size || Math.min(xGridSize, yGridSize); // Backward compatibility
       const bounds = anomalyResults.grid_info?.bounds;
       
-      console.log('🔵 Grid size:', gridSize);
+      console.log('🔵 Grid sizes - X:', xGridSize, 'Y:', yGridSize, 'Legacy:', gridSize);
       console.log('🔵 Bounds:', bounds);
       console.log('🔵 Grid info full:', anomalyResults.grid_info);
       console.log('🔵 Anomalous cells:', Array.from(anomalousCells));
@@ -1723,12 +1725,12 @@ const EmbeddingPlot = ({
                          anomalyResults.grid_info.y_bins &&
                          Array.isArray(anomalyResults.grid_info.x_bins) &&
                          Array.isArray(anomalyResults.grid_info.y_bins) &&
-                         anomalyResults.grid_info.x_bins.length === gridSize + 1 &&
-                         anomalyResults.grid_info.y_bins.length === gridSize + 1;
+                         anomalyResults.grid_info.x_bins.length === xGridSize + 1 &&
+                         anomalyResults.grid_info.y_bins.length === yGridSize + 1;
       
       if (!hasExactBins) {
         console.error('❌ CRITICAL: Backend bin edges missing or invalid - cannot render grid');
-        console.error('Expected bin arrays of length', gridSize + 1, 'but got:', {
+        console.error('Expected bin arrays of length X:', xGridSize + 1, 'Y:', yGridSize + 1, 'but got:', {
           x_bins_length: anomalyResults.grid_info?.x_bins?.length,
           y_bins_length: anomalyResults.grid_info?.y_bins?.length,
           grid_info: anomalyResults.grid_info
@@ -1780,8 +1782,8 @@ const EmbeddingPlot = ({
         let cellY = y_digitize_idx - 1;
         
         // Clamp to valid range (same as backend)
-        cellX = Math.max(0, Math.min(cellX, gridSize - 1));
-        cellY = Math.max(0, Math.min(cellY, gridSize - 1));
+        cellX = Math.max(0, Math.min(cellX, xGridSize - 1));
+        cellY = Math.max(0, Math.min(cellY, yGridSize - 1));
         
         console.log(`📍 Point ${idx} (${x.toFixed(3)}, ${y.toFixed(3)}) -> Cell[${cellX}][${cellY}]`);
         
@@ -1802,8 +1804,8 @@ const EmbeddingPlot = ({
 
         
         // First, draw all grid cells (including non-anomalous ones for context)
-        for (let i = 0; i < gridSize; i++) {
-          for (let j = 0; j < gridSize; j++) {
+        for (let i = 0; i < xGridSize; i++) {
+          for (let j = 0; j < yGridSize; j++) {
             const cellId = `${i},${j}`;
             const isAnomalous = anomalousCells.has(cellId);
             
@@ -2164,28 +2166,42 @@ const EmbeddingPlot = ({
         
         // Add grid-based anomaly information if available
         if (showAnomalies && anomalyResults && anomalyResults.cell_anomalies) {
-          // Find which grid cell this point belongs to
-          const bounds = anomalyResults.grid_info?.bounds;
-          const gridSize = anomalyResults.grid_info?.grid_size || 20;
+          // Find which grid cell this point belongs to using histogram bins
+          const xBins = anomalyResults.grid_info?.x_bins;
+          const yBins = anomalyResults.grid_info?.y_bins;
+          const xGridSize = anomalyResults.grid_info?.x_grid_size || 20;
+          const yGridSize = anomalyResults.grid_info?.y_grid_size || 20;
           
-          if (bounds) {
-            const cellWidth = (bounds.x_max - bounds.x_min) / gridSize;
-            const cellHeight = (bounds.y_max - bounds.y_min) / gridSize;
+          if (xBins && yBins) {
+            // Use np.digitize equivalent logic (same as backend)
+            let x_digitize_idx = 0;
+            for (let i = 0; i < xBins.length; i++) {
+              if (d[0] < xBins[i]) {
+                x_digitize_idx = i;
+                break;
+              }
+              x_digitize_idx = i + 1;
+            }
+            let y_digitize_idx = 0;
+            for (let j = 0; j < yBins.length; j++) {
+              if (d[1] < yBins[j]) {
+                y_digitize_idx = j;
+                break;
+              }
+              y_digitize_idx = j + 1;
+            }
             
-            const cellX = Math.floor((d[0] - bounds.x_min) / cellWidth);
-            const cellY = Math.floor((d[1] - bounds.y_min) / cellHeight);
-            
-            // Clamp to valid range
-            const clampedCellX = Math.max(0, Math.min(gridSize - 1, cellX));
-            const clampedCellY = Math.max(0, Math.min(gridSize - 1, cellY));
+            // Apply backend logic: subtract 1 and clamp
+            const cellX = Math.max(0, Math.min(x_digitize_idx - 1, xGridSize - 1));
+            const cellY = Math.max(0, Math.min(y_digitize_idx - 1, yGridSize - 1));
             
             // Find if this cell is anomalous
             const cellData = anomalyResults.cell_anomalies.find(
-              anomaly => anomaly.cell_x === clampedCellX && anomaly.cell_y === clampedCellY
+              anomaly => anomaly.cell_x === cellX && anomaly.cell_y === cellY
             );
             
             if (cellData) {
-              tooltipContent += `<br/><strong>Grid Cell (${clampedCellX}, ${clampedCellY})</strong><br/>`;
+              tooltipContent += `<br/><strong>Grid Cell (${cellX}, ${cellY})</strong><br/>`;
               tooltipContent += `Real Points: ${cellData.real_count}<br/>`;
               tooltipContent += `Synthetic Points: ${cellData.synthetic_count}<br/>`;
               tooltipContent += `Real Ratio: ${(cellData.real_ratio * 100).toFixed(1)}%<br/>`;
@@ -2880,7 +2896,9 @@ const EmbeddingPlot = ({
       const results = await anomalyDetectionService.detectAnomalies(
         realData, 
         syntheticData, 
-        20
+        20, // x_bins
+        20, // y_bins
+        0.05 // fdr_alpha
       );
       console.log('🎉 Grid-based anomaly detection completed:', results);
       
@@ -2931,7 +2949,7 @@ const EmbeddingPlot = ({
       console.log('🎯 Downloading CSV using preprocessed data from job:', jobId);
       
       try {
-        const csvResult = await anomalyDetectionService.generateAnomalyCSVFromJob(jobId, 20, 0.5, 0.2);
+        const csvResult = await anomalyDetectionService.generateAnomalyCSVFromJob(jobId, 20, 20, 0.05);
         if (csvResult.status === 'success') {
           anomalyDetectionService.downloadCSV(csvResult.csv_content, csvResult.filename);
         }
@@ -2988,7 +3006,7 @@ const EmbeddingPlot = ({
     }
     
     try {
-      const csvResult = await anomalyDetectionService.generateAnomalyCSV(realData, syntheticData, 20, 0.5, 0.2);
+      const csvResult = await anomalyDetectionService.generateAnomalyCSV(realData, syntheticData, 20, 20, 0.05);
       if (csvResult.status === 'success') {
         anomalyDetectionService.downloadCSV(csvResult.csv_content, csvResult.filename);
       }
