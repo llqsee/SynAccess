@@ -9,7 +9,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci --omit=dev
 COPY frontend/ ./
-RUN npm run build
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 # Backend stage (CPU or GPU)
 FROM continuumio/miniconda3:latest
