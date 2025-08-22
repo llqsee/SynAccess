@@ -1,6 +1,8 @@
 """
-AI Analysis API Routes
-Provides endpoints for Claude AI-powered analysis of validation results
+AI-powered analysis endpoints.
+
+These routes use Claude to provide expert analysis of your validation
+results, giving you professional insights about your data quality.
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
@@ -12,7 +14,7 @@ import uuid
 from datetime import datetime
 
 from backend.services.ai_analysis_service import get_ai_agent, initialize_ai_agent
-from config import settings
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-// Utility functions for data processing
+// Helper functions for working with data
 
 export const validateDataCompatibility = (realData, syntheticData) => {
   if (!realData || !syntheticData) {

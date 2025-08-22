@@ -66,21 +66,14 @@ def classify_column_type(real_data: List[List[Any]], synthetic_data: List[List[A
 @router.post("/distribution")
 async def generate_distribution_plot(request: DistributionRequest):
     """
-    Generate distribution comparison plots for real and synthetic data.
-    Uses the same data type classification logic as data_preprocessing.py for consistency.
+    Create distribution comparison plots for your data.
+    
+    This analyzes how real and synthetic data are distributed across
+    different columns, using the same logic as our preprocessing
+    to ensure consistency.
     
     Args:
-        request: DistributionRequest containing:
-            - real_data: Real dataset
-            - synthetic_data: Synthetic dataset
-            - column: Column name to analyze
-            - plot_type: Type of plot to generate
-            - real_headers: Optional list of real data headers
-            - synthetic_headers: Optional list of synthetic data headers
-            - data_type_filter: Optional filter for data type ("real-only", "synthetic-only", "mixed")
-            
-    Returns:
-        dict: Contains plot data and statistics
+        request: Contains your datasets, column to analyze, and plot preferences
     """
     try:
         # Use the same classification logic as data_preprocessing.py

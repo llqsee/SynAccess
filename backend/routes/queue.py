@@ -1,5 +1,5 @@
 """
-API routes for asynchronous task queue management.
+API routes for managing background job processing.
 """
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect

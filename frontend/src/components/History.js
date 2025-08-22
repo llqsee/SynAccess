@@ -154,23 +154,36 @@ const History = ({ onLoadEmbedding }) => {
 
   const handleDownloadModel = async (jobId) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/jobs/${jobId}/model/download`);
-      if (!response.ok) {
-        throw new Error('Failed to download model');
+      console.log(`Starting download for job: ${jobId}`);
+      
+      // Get the job details to create a proper filename
+      const job = jobs.find(j => j.job_id === jobId);
+      if (!job) {
+        showNotification('Job not found in current list. Please refresh the page.', 'error');
+        return;
       }
       
-      // Get the filename from Content-Disposition header
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = `model_${jobId}`;
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
-        }
+      // Check if job has a model
+      if (!job.has_model) {
+        showNotification('This job does not have a saved model available for download.', 'warning');
+        return;
       }
+      
+      // Use the API service instead of direct fetch
+      const modelBlob = await downloadModelBinary(jobId);
+      console.log('Download successful, blob size:', modelBlob.size);
+      
+      let filename = `model_${jobId}`;
+      
+      if (job) {
+        // Create a clean filename from the job name
+        const cleanName = job.name.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '_');
+        filename = `${cleanName}_${job.method}_model.joblib`;
+      }
+      
+      console.log('Creating download with filename:', filename);
       
       // Create download link with the binary blob
-      const modelBlob = await response.blob();
       const url = URL.createObjectURL(modelBlob);
       const link = document.createElement('a');
       link.href = url;
@@ -182,7 +195,15 @@ const History = ({ onLoadEmbedding }) => {
       
       showNotification('Model downloaded successfully', 'success');
     } catch (error) {
-      showNotification(error.message, 'error');
+      console.error('Download error:', error);
+      
+      // If it's a 404 error, refresh the job list
+      if (error.message.includes('not found') || error.message.includes('deleted')) {
+        showNotification(error.message + ' Refreshing job list...', 'error');
+        fetchJobs(); // Refresh the job list
+      } else {
+        showNotification(error.message, 'error');
+      }
     }
   };
 

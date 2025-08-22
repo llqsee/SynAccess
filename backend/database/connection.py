@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 import os
 from pathlib import Path
 
-from config import DATABASE_URL, DATABASE_CONFIG
+from backend.config import DATABASE_URL, DATABASE_CONFIG
 
 # Create engine
 engine = create_engine(
@@ -31,7 +31,7 @@ def get_db():
 
 def init_db():
     """Initialize database tables."""
-    from database.models import Base
+    from backend.database.models import Base
     
     # Create tables
     Base.metadata.create_all(bind=engine)

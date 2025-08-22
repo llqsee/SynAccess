@@ -7,6 +7,13 @@ from datetime import datetime
 import math
 import random
 
+# GPU support imports
+try:
+    import cupy as cp
+    GPU_AVAILABLE = True
+except ImportError:
+    GPU_AVAILABLE = False
+
 # Import scientific libraries - these are required for accurate statistical analysis
 import scipy
 from scipy import stats
@@ -47,9 +54,86 @@ class ValidationService:
     
     def __init__(self):
         print("Professional Validation Service Initialized")       
+        print(f"  - GPU Available: {GPU_AVAILABLE}")
         # print(f"  - SciPy: {scipy.__version__}")
         # print(f"  - NumPy: {np.__version__}")
         # print(f"  - Pandas: {pd.__version__}")
+        
+        # Sample size configurations for different validation tasks
+        self.optimal_sample_sizes = {
+            'correlation': 1000,
+            'distribution': 500,
+            'statistical': 1000,
+            'multivariate': 500,
+            'energy_distance': 1000,
+            'mutual_information': 1000
+        }
+        
+        self.min_sample_sizes = {
+            'correlation': 10,
+            'distribution': 5,
+            'statistical': 10,
+            'multivariate': 5,
+            'energy_distance': 10,
+            'mutual_information': 10
+        }
+    
+    def _should_use_gpu(self, data_size: int, threshold: int = 1000) -> bool:
+        """Determine if GPU acceleration should be used based on data size."""
+        return GPU_AVAILABLE and data_size >= threshold
+    
+    def _compute_correlation_matrix_gpu(self, data: np.ndarray) -> np.ndarray:
+        """Compute correlation matrix using GPU acceleration."""
+        try:
+            if self._should_use_gpu(len(data)):
+                data_gpu = cp.asarray(data)
+                # GPU-accelerated correlation computation
+                corr_matrix = cp.corrcoef(data_gpu.T)
+                return cp.asnumpy(corr_matrix)
+            else:
+                # CPU fallback
+                return np.corrcoef(data.T)
+        except Exception as e:
+            print(f"GPU correlation computation failed, falling back to CPU: {e}")
+            return np.corrcoef(data.T)
+    
+    def _compute_distance_matrix_gpu(self, data: np.ndarray) -> np.ndarray:
+        """Compute distance matrix using GPU acceleration."""
+        try:
+            if self._should_use_gpu(len(data)):
+                data_gpu = cp.asarray(data)
+                # GPU-accelerated distance computation using broadcasting
+                diff = data_gpu[:, None, :] - data_gpu[None, :, :]
+                distances = cp.sqrt(cp.sum(diff**2, axis=2))
+                return cp.asnumpy(distances)
+            else:
+                # CPU fallback using scipy
+                return squareform(pdist(data, metric='euclidean'))
+        except Exception as e:
+            print(f"GPU distance computation failed, falling back to CPU: {e}")
+            return squareform(pdist(data, metric='euclidean'))
+    
+    def _compute_mutual_information_gpu(self, real_data: np.ndarray, synth_data: np.ndarray) -> float:
+        """Compute mutual information using GPU acceleration for large datasets."""
+        try:
+            if self._should_use_gpu(len(real_data)):
+                # For mutual information, we still use CPU as it's more complex
+                # But we can use GPU for preprocessing large datasets
+                real_gpu = cp.asarray(real_data)
+                synth_gpu = cp.asarray(synth_data)
+                
+                # GPU-accelerated preprocessing (e.g., normalization)
+                real_norm = cp.asnumpy((real_gpu - cp.mean(real_gpu, axis=0)) / cp.std(real_gpu, axis=0))
+                synth_norm = cp.asnumpy((synth_gpu - cp.mean(synth_gpu, axis=0)) / cp.std(synth_gpu, axis=0))
+                
+                # Use CPU for mutual information computation
+                return mutual_info_score(real_norm.flatten(), synth_norm.flatten())
+            else:
+                # CPU fallback
+                return mutual_info_score(real_data.flatten(), synth_data.flatten())
+        except Exception as e:
+            print(f"GPU mutual information computation failed, falling back to CPU: {e}")
+            return mutual_info_score(real_data.flatten(), synth_data.flatten())
     
     def _log_data_info(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> None:
         """Log information about the data for debugging."""
@@ -390,18 +474,22 @@ class ValidationService:
         real_full = real_df[numeric_cols]
         synth_full = synth_df[numeric_cols]
         
-        # Calculate correlation matrices using full datasets
-        real_corr = real_full.corr()
-        synth_corr = synth_full.corr()
+        # Calculate correlation matrices using full datasets with GPU acceleration
+        real_corr = self._compute_correlation_matrix_gpu(real_full.values)
+        synth_corr = self._compute_correlation_matrix_gpu(synth_full.values)
+        
+        # Convert to DataFrames for compatibility
+        real_corr_df = pd.DataFrame(real_corr, index=numeric_cols, columns=numeric_cols)
+        synth_corr_df = pd.DataFrame(synth_corr, index=numeric_cols, columns=numeric_cols)
         
         # Compare correlation matrices
-        comparison = self._compare_correlation_matrices(real_corr, synth_corr)
+        comparison = self._compare_correlation_matrices(real_corr_df, synth_corr_df)
         
         return {
             'testType': 'Correlation Structure Validation',
             'description': 'Element-wise comparison of correlation matrices using full datasets',
-            'realCorrelations': real_corr.to_dict(),
-            'syntheticCorrelations': synth_corr.to_dict(),
+            'realCorrelations': real_corr_df.to_dict(),
+            'syntheticCorrelations': synth_corr_df.to_dict(),
             'comparison': comparison,
             'tests': [{'type': 'correlation_comparison', 'result': 'SUCCESS'}],
             'summary': {'total': 1}
@@ -759,13 +847,13 @@ class ValidationService:
     def _compute_jennrich_test(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """Compute Jennrich Test using full datasets."""
         try:
-            # Calculate correlation matrices using full datasets
-            real_corr = real_df.corr()
-            synth_corr = synth_df.corr()
+            # Calculate correlation matrices using full datasets with GPU acceleration
+            real_corr = self._compute_correlation_matrix_gpu(real_df.values)
+            synth_corr = self._compute_correlation_matrix_gpu(synth_df.values)
             
-            # Convert to numpy arrays
-            R1 = real_corr.values
-            R2 = synth_corr.values
+            # Use the computed correlation matrices directly
+            R1 = real_corr
+            R2 = synth_corr
             
             # Calculate Jennrich statistic
             jennrich_stat = self._jennrich_statistic(R1, R2)
@@ -790,13 +878,30 @@ class ValidationService:
     
     def _jennrich_statistic(self, R1: np.ndarray, R2: np.ndarray) -> float:
         """Compute Jennrich statistic for correlation matrix comparison."""
-        # Compute difference matrix
-        diff_matrix = R1 - R2
-        
-        # Compute Jennrich statistic (Frobenius norm of difference)
-        jennrich_stat = np.sqrt(np.sum(diff_matrix**2))
-        
-        return jennrich_stat
+        try:
+            if self._should_use_gpu(len(R1)):
+                # GPU-accelerated computation
+                R1_gpu = cp.asarray(R1)
+                R2_gpu = cp.asarray(R2)
+                
+                # Compute difference matrix
+                diff_matrix = R1_gpu - R2_gpu
+                
+                # Compute Jennrich statistic (Frobenius norm of difference)
+                jennrich_stat = cp.sqrt(cp.sum(diff_matrix**2))
+                
+                return float(cp.asnumpy(jennrich_stat))
+            else:
+                # CPU fallback
+                diff_matrix = R1 - R2
+                jennrich_stat = np.sqrt(np.sum(diff_matrix**2))
+                return float(jennrich_stat)
+        except Exception as e:
+            print(f"GPU Jennrich computation failed, falling back to CPU: {e}")
+            # CPU fallback
+            diff_matrix = R1 - R2
+            jennrich_stat = np.sqrt(np.sum(diff_matrix**2))
+            return float(jennrich_stat)
     
     def _calculate_summary_statistics(self, results: Dict) -> None:
         """Calculate summary statistics for all tests and apply FDR correction."""

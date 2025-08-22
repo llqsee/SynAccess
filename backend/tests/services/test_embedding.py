@@ -8,11 +8,11 @@ from backend.services.embedding import EmbeddingService
 
 class TestEmbeddingService:
     def setup_method(self):
-        """Set up test fixtures"""
+        """Get ready for testing"""
         self.embedding_service = EmbeddingService()
 
     def test_compute_embedding_umap_success(self):
-        """Test successful UMAP embedding computation"""
+        """Test that UMAP embeddings work correctly"""
         # Create larger datasets that work with UMAP (minimum 10 samples recommended)
         real_data = [
             [1.0, 2.0, 3.0, 4.0, 5.0],

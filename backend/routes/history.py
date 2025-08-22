@@ -1,4 +1,4 @@
-"""API routes for embedding job history management."""
+"""API routes for managing job history and results."""
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
@@ -22,7 +22,7 @@ async def get_job_history(
     date_to: Optional[str] = None,
     favorites_only: bool = False
 ):
-    """Get job history with optional filtering."""
+    """Get a list of past jobs with optional filters."""
     try:
         # Parse date filters
         date_from_dt = None
@@ -206,13 +206,16 @@ async def download_model(job_id: str):
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         
-        if not job.has_model:
-            raise HTTPException(status_code=404, detail="Job has no model available")
+        # Check if job has model or results
+        if not job.has_model and not job.has_results:
+            raise HTTPException(status_code=404, detail="Job has no model or results available")
         
         # Get model data
         model_data = JobService.get_model(job_id)
         if not model_data:
-            raise HTTPException(status_code=404, detail="Model data not found")
+            # If no model data but job has results, we cannot provide a real model
+            # This job should not be used for pretrained model inference
+            raise HTTPException(status_code=404, detail="This job does not have a saved model and cannot be used for pretrained model inference. Please create a new embedding to get a proper pretrained model.")
         
         # Return model data for download
         return {
@@ -240,13 +243,16 @@ async def download_model_binary(job_id: str):
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         
-        if not job.has_model:
-            raise HTTPException(status_code=404, detail="Job has no model available")
+        # Check if job has model or results
+        if not job.has_model and not job.has_results:
+            raise HTTPException(status_code=404, detail="Job has no model or results available")
         
         # Get model data
         model_data = JobService.get_model(job_id)
         if not model_data:
-            raise HTTPException(status_code=404, detail="Model data not found")
+            # If no model data but job has results, we cannot provide a real model
+            # This job should not be used for pretrained model inference
+            raise HTTPException(status_code=404, detail="This job does not have a saved model and cannot be used for pretrained model inference. Please create a new embedding to get a proper pretrained model.")
         
         # Decode base64 to get raw binary data
         import base64
@@ -258,13 +264,21 @@ async def download_model_binary(job_id: str):
             file_extension = "joblib"
         else:
             file_extension = "pkl"
-        filename = f"{job.name}_{job.method}_model.{file_extension}"
         
-        # Return binary response
+        # Create a safe filename by removing special characters
+        import re
+        safe_name = re.sub(r'[^a-zA-Z0-9\s\-_]', '', job.name)
+        safe_name = re.sub(r'\s+', '_', safe_name.strip())
+        if not safe_name:
+            safe_name = f"model_{job_id}"
+        
+        filename = f"{safe_name}_{job.method}_model.{file_extension}"
+        
+        # Return binary response with quoted filename to handle special characters
         return Response(
             content=binary_data,
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
         
     except HTTPException:
@@ -403,6 +417,7 @@ async def get_available_models():
         # Filter jobs that have models and format for frontend
         available_models = []
         for job in jobs:
+            # Only include jobs that have actual model data (not just results)
             if job.has_model:
                 # Get display name based on job parameters
                 real_samples = job.parameters.get('n_real_samples') if isinstance(job.parameters, dict) else None
@@ -421,11 +436,24 @@ async def get_available_models():
                         # If we can't get results, continue with what we have
                         pass
                 
-                # Generate display name
+                # Create a clean display name for the sidebar
+                # Extract dataset name and format it nicely
+                dataset_name = "insurance"  # Default dataset name
+                
+                # Try to extract dataset name from job name
+                if job.name:
+                    # Look for patterns like "UMAP: insurance+insurance 100K..." or "TSNE: insurance..."
+                    import re
+                    match = re.search(r'^(UMAP|t-SNE|TSNE):\s*([^+\s]+)', job.name, re.IGNORECASE)
+                    if match:
+                        dataset_name = match.group(2)
+                
+                # Create clean display name
                 if real_samples and synth_samples:
-                    display_name = f"{job.method.upper()} - {real_samples}R + {synth_samples}S samples"
+                    display_name = f"{job.method.upper()}: {dataset_name} {real_samples:,}R+{synth_samples:,}S 7cols 3cat 4num"
                 else:
-                    display_name = job.name
+                    # Fallback to original name but clean it up
+                    display_name = job.name.replace("+insurance", "").replace(" 100K", "")
                 
                 model_info = {
                     "job_id": job.job_id,

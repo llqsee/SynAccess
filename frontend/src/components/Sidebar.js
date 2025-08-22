@@ -89,18 +89,25 @@ const Sidebar = ({
   const [loadingModels, setLoadingModels] = useState(false);
   const [useGpu, setUseGpu] = useState(false);
 
-  // Load available models when method changes to pretrained
+  // Load pretrained models when user switches to that option
   useEffect(() => {
-    if (method === 'pretrained' && availableModels.length === 0) {
-      loadAvailableModels();
+    if (method === 'pretrained') {
+      loadAvailableModels(true); // Refresh the list
     }
   }, [method]);
 
-  const loadAvailableModels = async () => {
+  const loadAvailableModels = async (forceRefresh = false) => {
     setLoadingModels(true);
     try {
+      // Clear existing models if forcing refresh
+      if (forceRefresh) {
+        setAvailableModels([]);
+        setSelectedModelJobId('');
+      }
+      
       const response = await getAvailableModels();
       setAvailableModels(response.models || []);
+      console.log(`Loaded ${response.models?.length || 0} available models`);
     } catch (error) {
       console.error('Failed to load available models:', error);
     } finally {
@@ -510,7 +517,7 @@ const Sidebar = ({
                           </Typography>
                           <Button
                             size="small"
-                            onClick={loadAvailableModels}
+                            onClick={() => loadAvailableModels(true)}
                             disabled={loadingModels}
                             startIcon={loadingModels ? <CircularProgress size={16} /> : <Refresh />}
                           >
@@ -597,13 +604,13 @@ const Sidebar = ({
                                       enterDelay={500}
                                     >
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                                        <Typography variant="body2">
-                                          {model.display_name}
-                                        </Typography>
-                                        {model.is_favorite && (
-                                          <Favorite sx={{ fontSize: 16, color: 'error.main' }} />
-                                        )}
-                                      </Box>
+                                      <Typography variant="body2">
+                                        {model.display_name}
+                                      </Typography>
+                                      {model.is_favorite && (
+                                        <Favorite sx={{ fontSize: 16, color: 'error.main' }} />
+                                      )}
+                                    </Box>
                                     </Tooltip>
                                   </MenuItem>
                                 ))}

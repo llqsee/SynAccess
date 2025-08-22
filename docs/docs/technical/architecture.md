@@ -41,7 +41,7 @@ MAVIS is built with a modern, scalable architecture designed for synthetic data 
 - `EmbeddingPlot` sends the exact 2D embedding points for those user-selected samples to `/anomaly/detect`.
 - The backend computes `cell_anomalies` and returns `grid_info` including exact `x_bins`/`y_bins` and bounds which the frontend uses to render rectangles.
 - Frontend: grid rectangles are non-interactive; point tooltips/selection remain active; off-point hover shows grid cell info.
-- CSV export serializes Infinity/NaN as strings and always includes global statistics (Global Probability, Global Logit, Logit SD). No threshold parameter is exported.
+- CSV export serializes Infinity/NaN as strings and always includes global statistics (Global Proportion, FDR Alpha Level). Detailed test results with p-values and significance are exported.
 
 ### Pretrained fast path and model packages
 - Embedding jobs save a model package: embedding model + data transformer + metadata (dataset identification and training metadata).

@@ -1,6 +1,9 @@
 # Multi-stage build for MAVIS web application
 FROM node:18-alpine AS frontend-build
 
+# Install dependencies for node-gyp (if needed)
+RUN apk add --no-cache python3 make g++
+
 # Build frontend
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -14,12 +17,15 @@ FROM continuumio/miniconda3:latest
 # --- Build ARG to select environment file ---
 ARG ENV_FILE=environment.yml
 ARG GPU_ENABLED=false
+ARG CONDA_ENV_NAME=mavis
 
-# Install system dependencies and Node.js
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
+    wget \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install NVIDIA runtime if GPU is enabled
@@ -29,9 +35,6 @@ RUN if [ "$GPU_ENABLED" = "true" ]; then \
     nvidia-container-toolkit \
     && rm -rf /var/lib/apt/lists/*; \
     fi
-
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs
 
 # Copy and install the selected environment file
 COPY ${ENV_FILE} /tmp/environment.yml
@@ -50,12 +53,17 @@ COPY --from=frontend-build /app/frontend/build ./frontend/build
 RUN echo '#!/bin/bash\n\
 set -e\n\
 source /opt/conda/etc/profile.d/conda.sh\n\
-conda activate mavis\n\
+conda activate ${CONDA_ENV_NAME}\n\
 cd /app\n\
 python setup_database.py || true\n\
 cd backend\n\
-exec uvicorn main:app --host 0.0.0.0 --port 8000' > start.sh && \
+exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1' > start.sh && \
     chmod +x start.sh
+
+# Create non-root user for security
+RUN useradd -m -u 1000 mavis && \
+    chown -R mavis:mavis /app
+USER mavis
 
 EXPOSE 8000
 
@@ -70,5 +78,5 @@ CMD ["./start.sh"]
 # docker build --build-arg ENV_FILE=environment.yml -t mavis:cpu .
 #
 # Build for GPU:
-# docker build --build-arg ENV_FILE=environment-gpu.yml --build-arg GPU_ENABLED=true -t mavis:gpu .
+# docker build --build-arg ENV_FILE=environment-gpu.yml --build-arg GPU_ENABLED=true --build-arg CONDA_ENV_NAME=mavis-gpu -t mavis:gpu .
 # --- 

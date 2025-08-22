@@ -23,15 +23,15 @@ class ValidationResponse(BaseModel):
 @router.post("/compute-statistics", response_model=ValidationResponse)
 async def compute_validation_statistics(request: ValidationRequest):
     """
-    Compute comprehensive validation statistics using Python scientific libraries.
+    Run comprehensive statistical analysis on your datasets.
     
-    This endpoint performs professional-grade statistical analysis including:
-    - Range and domain statistics
-    - Distribution tests (KS, Chi-square)
+    This performs professional-grade analysis including:
+    - Range and domain checks
+    - Distribution comparisons (KS, Chi-square tests)
     - Correlation structure validation
-    - Statistical tests (t-tests)
+    - Statistical significance tests
     - Outlier detection
-    - Quality metrics
+    - Overall quality assessment
     """
     try:
         # Validate input data

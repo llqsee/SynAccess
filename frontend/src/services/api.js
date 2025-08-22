@@ -9,7 +9,7 @@ const api = axios.create({
   },
 });
 
-// Submit embedding job for asynchronous processing
+// Send embedding job to the backend
 export const submitEmbeddingJob = async ({
   real_data,
   synthetic_data,
@@ -21,7 +21,7 @@ export const submitEmbeddingJob = async ({
   synthetic_dataset_name = null
 }) => {
   try {
-    // Basic validation
+    // Check the data looks good
     if (!Array.isArray(real_data) || !Array.isArray(synthetic_data)) {
       throw new Error('Input data must be arrays');
     }
@@ -424,13 +424,50 @@ export const downloadModel = async (jobId) => {
 // Download model as binary file
 export const downloadModelBinary = async (jobId) => {
   try {
-    const response = await api.get(`/jobs/${jobId}/model/download`, {
-      responseType: 'blob'
+    // Create a separate axios instance for blob downloads to avoid conflicts
+    const blobApi = axios.create({
+      baseURL: API_BASE_URL,
+      responseType: 'blob',
+      timeout: 30000, // 30 seconds timeout for large files
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
     });
+    
+    const response = await blobApi.get(`/jobs/${jobId}/model/download`);
     return response.data;
   } catch (error) {
     console.error('Failed to download model binary:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to download model');
+    
+    // Handle specific error cases
+    if (error.code === 'ECONNABORTED') {
+      throw new Error('Download timed out. The model file may be too large or the connection is slow.');
+    }
+    
+    if (error.code === 'NETWORK_ERROR' || error.message.includes('Network Error')) {
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+    
+    if (error.response?.status === 404) {
+      throw new Error('Model not found. The job may have been deleted or does not have a saved model.');
+    }
+    
+    if (error.response?.data) {
+      // If the response is a blob but contains error info, try to read it
+      try {
+        const errorText = await error.response.data.text();
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.detail || 'Failed to download model');
+      } catch {
+        // If we can't parse the error, provide a generic message
+        if (error.response.status >= 500) {
+          throw new Error('Server error occurred while downloading the model');
+        }
+        throw new Error('Failed to download model');
+      }
+    }
+    
+    throw new Error(error.message || 'Failed to download model');
   }
 };
 
@@ -448,7 +485,9 @@ export const getJobStats = async () => {
 
 export const getAvailableModels = async () => {
   try {
-    const response = await api.get('/available-models');
+    // Add timestamp to prevent caching
+    const timestamp = Date.now();
+    const response = await api.get(`/available-models?t=${timestamp}`);
     return response.data;
   } catch (error) {
     if (error.response) {

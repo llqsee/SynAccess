@@ -6,6 +6,23 @@
 
 ## 🎯 **Functional Requirements & Rationale**
 
+### **GPU Acceleration Requirements**
+
+#### **1. Optional GPU Support**
+- **Requirement**: Provide 2-10x performance improvement for large datasets
+- **Rationale**: Large datasets require significant computational resources. GPU acceleration enables practical analysis times
+- **Implementation**: CuPy integration with automatic fallback to CPU
+
+#### **2. Smart Performance Optimization**
+- **Requirement**: Automatically use GPU only when beneficial (dataset size thresholds)
+- **Rationale**: GPU overhead for small datasets can be counterproductive
+- **Implementation**: Configurable thresholds (≥1000 points for validation, ≥500 for anomaly detection)
+
+#### **3. Graceful Fallback**
+- **Requirement**: Seamless fallback to CPU when GPU unavailable or fails
+- **Rationale**: System must remain functional regardless of GPU availability
+- **Implementation**: Comprehensive error handling with automatic CPU fallback
+
 ### **Core Data Processing Requirements**
 
 #### **1. Multi-Format Data Upload**
@@ -112,17 +129,55 @@
 
 ## Quick Start
 
-=== "Backend Setup"
+=== "CPU Installation"
     ```bash
+    # Clone repository
+    git clone https://github.com/Netcodez/Scalable-Visualization-and-Explainability-of-Synthetic-Datasets.git
+    cd Scalable-Visualization-and-Explainability-of-Synthetic-Datasets
+    
+    # Setup backend
+    conda env create -f environment.yml
     conda activate mavis
-    cd backend
-    python main.py
+    python setup_database.py
+    
+    # Setup frontend
+    cd frontend && npm install && cd ..
+    
+    # Start services
+    cd backend && python main.py &
+    cd frontend && npm start
     ```
 
-=== "Frontend Setup"
+=== "GPU Installation"
     ```bash
-    cd frontend
-    npm start
+    # Clone repository
+    git clone https://github.com/Netcodez/Scalable-Visualization-and-Explainability-of-Synthetic-Datasets.git
+    cd Scalable-Visualization-and-Explainability-of-Synthetic-Datasets
+    
+    # Setup GPU backend
+    conda env create -f environment-gpu.yml
+    conda activate mavis-gpu
+    export ENABLE_GPU=true
+    python setup_database.py
+    
+    # Setup frontend
+    cd frontend && npm install && cd ..
+    
+    # Start services
+    cd backend && python main.py &
+    cd frontend && npm start
+    ```
+
+=== "Docker Installation"
+    ```bash
+    # Clone repository
+    git clone https://github.com/Netcodez/Scalable-Visualization-and-Explainability-of-Synthetic-Datasets.git
+    cd Scalable-Visualization-and-Explainability-of-Synthetic-Datasets
+    
+    # Start with Docker Compose
+    docker compose up --build
+    
+    # Access at http://localhost:80
     ```
 
 === "Begin Analysis"
@@ -166,7 +221,13 @@
     - Grid-based analysis: Divide data space into cells for density analysis
     - Ratio-based detection: Compare real-to-synthetic ratios in each cell
     - Strict backend bins: Frontend uses exact x_bins/y_bins and bounds from backend
-    - CSV guarantees: Global Probability, Global Logit, Logit Std Dev always included (no threshold parameter in CSV)
+    - CSV guarantees: Global Proportion, FDR Alpha Level, and detailed test results always included
+
+!!! info "AI-Powered Analysis"
+    - Expert AI analysis: Professional data quality assessment using Claude 3 Sonnet
+    - Automatic report generation: Executive summaries and technical insights
+    - Risk assessment: Comprehensive risk evaluation with mitigation strategies
+    - Professional PDF reports: Stakeholder-ready documentation with expert recommendations
 
 !!! info "Performance Monitoring & Job Management"
     - Real-time dashboard: API performance and memory usage
@@ -513,7 +574,7 @@ cp backend/mavis_dev.db backend/mavis_backup.db
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
 
 ---
 

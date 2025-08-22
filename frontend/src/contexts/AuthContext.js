@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import logger from '../utils/logger';
 
-// Security utilities
+// Security helpers
 const sanitizeInput = (input) => {
   if (typeof input !== 'string') return '';
   return input.replace(/[<>'"]/g, '').trim().substring(0, 255);
 };
 
+// Track login attempts to prevent brute force attacks
 const loginAttemptTracker = new Map();
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes

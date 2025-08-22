@@ -1,33 +1,43 @@
+version: '3.8'
+
 services:
   mavis-app:
-    image: ${IMAGE_NAME:-ghcr.io/example/mavis:latest}
+    image: ${IMAGE_NAME:-mavis:latest}
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        ENV_FILE: ${ENV_FILE:-environment.yml}  # Use environment-gpu.yml for GPU build
-        GPU_ENABLED: ${GPU_ENABLED:-false}  # Enable GPU support
+        ENV_FILE: ${ENV_FILE:-environment.yml}
+        GPU_ENABLED: ${GPU_ENABLED:-false}
+        CONDA_ENV_NAME: ${CONDA_ENV_NAME:-mavis}
     ports:
       - "8000:8000"
-      - "3000:3000"
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=sqlite:///mavis_dev.db
       - NODE_ENV=${NODE_ENV:-production}
-      - STARTUP_COMMAND=${STARTUP_COMMAND:-./start.sh}
-      - DOCKERFILE=${DOCKERFILE:-Dockerfile}
       - ENABLE_GPU=${ENABLE_GPU:-false}
       - API_V1_PREFIX=/api/v1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./frontend:/app/frontend:delegated
-      - ./backend:/app/backend:delegated
+      - mavis_data:/app/data
+      - mavis_logs:/app/logs
+      - mavis_models:/app/models
     restart: unless-stopped
-    command: ${STARTUP_COMMAND:-./start.sh}
-    # GPU runtime configuration moved to optional override file (docker-compose.gpu.yml)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-4G}
+        reservations:
+          memory: ${MEMORY_RESERVATION:-1G}
 
-  # Add nginx for production
+  # Nginx reverse proxy for production
   nginx:
     image: nginx:alpine
     ports:
@@ -36,19 +46,46 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
+      - mavis_logs:/var/log/nginx
     depends_on:
-      - mavis-app
+      mavis-app:
+        condition: service_healthy
     restart: unless-stopped
     profiles:
       - production
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mavis_data:
+    driver: local
+  mavis_logs:
+    driver: local
+  mavis_models:
+    driver: local
+
+networks:
+  default:
+    name: mavis_network
 
 # ---
-# To build for CPU (default):
+# Usage Examples:
+#
+# CPU Development:
 #   docker compose up --build
 #
-# To build for GPU:
-#   ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true docker compose up --build
+# GPU Development:
+#   ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true CONDA_ENV_NAME=mavis-gpu docker compose up --build
 #
-# To run with specific GPU runtime:
-#   GPU_RUNTIME=nvidia ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true docker compose up --build
+# Production with Nginx:
+#   docker compose --profile production up --build
+#
+# GPU Production:
+#   ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true CONDA_ENV_NAME=mavis-gpu docker compose --profile production up --build
+#
+# With GPU runtime override:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 # --- 
