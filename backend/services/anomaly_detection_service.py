@@ -4,6 +4,16 @@ from sklearn.preprocessing import StandardScaler
 import logging
 from typing import Dict, List, Tuple, Optional
 import json
+from scipy import stats
+from scipy.stats import binomtest
+from statsmodels.stats.multitest import fdrcorrection
+
+# GPU support imports
+try:
+    import cupy as cp
+    GPU_AVAILABLE = True
+except ImportError:
+    GPU_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -36,73 +46,132 @@ def convert_numpy_types(obj):
                 return "NaN"
         return obj
 
-class AdaptiveLogitAnomalyDetectionService:
-    """Advanced service for detecting anomalies using adaptive logit transformation with data-driven thresholds."""
+class HistogramBasedAnomalyDetectionService:
+    """
+    Advanced service for detecting anomalies using histogram-based grid sizing with binomial proportion tests.
+    
+    This service implements:
+    1. Histogram-based grid cell determination for X and Y dimensions separately
+    2. Two one-sided binomial proportion tests (real vs synthetic overpopulation)
+    3. False Discovery Rate (FDR) correction applied separately to positive and negative tests
+    4. Binary red/blue coloring based on FDR-corrected significance
+    """
     
     def __init__(self):
         self.grid_info = None
-        self.logit_thresholds = None
+        self.global_proportion = None
         self.is_fitted = False
+        logger.info(f"Anomaly Detection Service initialized - GPU Available: {GPU_AVAILABLE}")
+    
+    def _should_use_gpu(self, data_size: int, threshold: int = 500) -> bool:
+        """Determine if GPU acceleration should be used based on data size."""
+        return GPU_AVAILABLE and data_size >= threshold
+    
+    def _compute_histogram_gpu(self, data: np.ndarray, bins: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Compute histogram using GPU acceleration."""
+        try:
+            if self._should_use_gpu(len(data)):
+                data_gpu = cp.asarray(data)
+                # GPU-accelerated histogram computation
+                hist, bin_edges = cp.histogram(data_gpu, bins=bins)
+                return cp.asnumpy(hist), cp.asnumpy(bin_edges)
+            else:
+                # CPU fallback
+                return np.histogram(data, bins=bins)
+        except Exception as e:
+            logger.warning(f"GPU histogram computation failed, falling back to CPU: {e}")
+            return np.histogram(data, bins=bins)
+    
+    def _compute_grid_assignment_gpu(self, data: np.ndarray, x_bin_edges: np.ndarray, y_bin_edges: np.ndarray) -> np.ndarray:
+        """Compute grid cell assignments using GPU acceleration."""
+        try:
+            if self._should_use_gpu(len(data)):
+                data_gpu = cp.asarray(data)
+                x_edges_gpu = cp.asarray(x_bin_edges)
+                y_edges_gpu = cp.asarray(y_bin_edges)
+                
+                # GPU-accelerated digitization
+                x_indices = cp.digitize(data_gpu[:, 0], x_edges_gpu) - 1
+                y_indices = cp.digitize(data_gpu[:, 1], y_edges_gpu) - 1
+                
+                # Clamp to valid range
+                x_indices = cp.clip(x_indices, 0, len(x_edges_gpu) - 2)
+                y_indices = cp.clip(y_indices, 0, len(y_edges_gpu) - 2)
+                
+                return cp.asnumpy(cp.column_stack([x_indices, y_indices]))
+            else:
+                # CPU fallback
+                x_indices = np.digitize(data[:, 0], x_bin_edges) - 1
+                y_indices = np.digitize(data[:, 1], y_bin_edges) - 1
+                
+                # Clamp to valid range
+                x_indices = np.clip(x_indices, 0, len(x_bin_edges) - 2)
+                y_indices = np.clip(y_indices, 0, len(y_bin_edges) - 2)
+                
+                return np.column_stack([x_indices, y_indices])
+        except Exception as e:
+            logger.warning(f"GPU grid assignment failed, falling back to CPU: {e}")
+            # CPU fallback
+            x_indices = np.digitize(data[:, 0], x_bin_edges) - 1
+            y_indices = np.digitize(data[:, 1], y_bin_edges) - 1
+            
+            # Clamp to valid range
+            x_indices = np.clip(x_indices, 0, len(x_bin_edges) - 2)
+            y_indices = np.clip(y_indices, 0, len(y_bin_edges) - 2)
+            
+            return np.column_stack([x_indices, y_indices])
         
-    def _create_grid(self, data: np.ndarray, grid_size: int = 20) -> Dict:
+    def _create_histogram_based_grid(self, real_data: np.ndarray, synthetic_data: np.ndarray, 
+                                   x_bins: int = 20, y_bins: int = 20) -> Dict:
         """
-        Create a grid overlay on the data space.
+        Create a grid overlay using histogram-based binning for each dimension separately.
         
         Args:
-            data: 2D numpy array of data points
-            grid_size: Number of grid cells per dimension
+            real_data: 2D numpy array of real data points
+            synthetic_data: 2D numpy array of synthetic data points
+            x_bins: Number of bins for X dimension
+            y_bins: Number of bins for Y dimension
             
         Returns:
-            Dictionary containing grid information
+            Dictionary containing grid information with histogram-based bins
         """
-        # Get data bounds
-        min_vals = np.min(data, axis=0)
-        max_vals = np.max(data, axis=0)
+        # Combine data for overall bounds
+        combined_data = np.vstack([real_data, synthetic_data])
         
-        # Add small padding to avoid edge cases
-        padding = (max_vals - min_vals) * 0.01
-        min_vals -= padding
-        max_vals += padding
+        # Create histograms for each dimension to determine optimal bin edges
+        x_coords = combined_data[:, 0]
+        y_coords = combined_data[:, 1]
         
-        # Create grid
-        x_bins = np.linspace(min_vals[0], max_vals[0], grid_size + 1)
-        y_bins = np.linspace(min_vals[1], max_vals[1], grid_size + 1)
+        # Use GPU-accelerated histogram function to get optimal bin edges
+        # This automatically handles data distribution for better grid sizing
+        _, x_bin_edges = self._compute_histogram_gpu(x_coords, x_bins)
+        _, y_bin_edges = self._compute_histogram_gpu(y_coords, y_bins)
+        
+        # Ensure we cover the full data range by extending edges slightly if needed
+        x_range = x_coords.max() - x_coords.min()
+        y_range = y_coords.max() - y_coords.min()
+        
+        x_padding = x_range * 0.01
+        y_padding = y_range * 0.01
+        
+        x_bin_edges[0] = min(x_bin_edges[0], x_coords.min() - x_padding)
+        x_bin_edges[-1] = max(x_bin_edges[-1], x_coords.max() + x_padding)
+        y_bin_edges[0] = min(y_bin_edges[0], y_coords.min() - y_padding)
+        y_bin_edges[-1] = max(y_bin_edges[-1], y_coords.max() + y_padding)
         
         return {
-            'x_bins': x_bins,
-            'y_bins': y_bins,
-            'grid_size': grid_size,
+            'x_bins': x_bin_edges,
+            'y_bins': y_bin_edges,
+            'x_grid_size': x_bins,
+            'y_grid_size': y_bins,
+            'grid_size': min(x_bins, y_bins),  # For backward compatibility
             'bounds': {
-                'x_min': float(min_vals[0]),
-                'x_max': float(max_vals[0]),
-                'y_min': float(min_vals[1]),
-                'y_max': float(max_vals[1])
+                'x_min': float(x_bin_edges[0]),
+                'x_max': float(x_bin_edges[-1]),
+                'y_min': float(y_bin_edges[0]),
+                'y_max': float(y_bin_edges[-1])
             }
         }
-    
-    def _calculate_density(self, data: np.ndarray, grid_info: Dict) -> np.ndarray:
-        """
-        Calculate density for each grid cell.
-        
-        Args:
-            data: 2D numpy array of data points
-            grid_info: Grid information dictionary
-            
-        Returns:
-            2D numpy array of density values for each grid cell
-        """
-        # Handle empty data
-        if data.size == 0:
-            return np.zeros((grid_info['grid_size'], grid_info['grid_size']))
-        
-        # Create 2D histogram
-        density, _, _ = np.histogram2d(
-            data[:, 0], 
-            data[:, 1], 
-            bins=[grid_info['x_bins'], grid_info['y_bins']]
-        )
-        
-        return density
     
     def _get_cell_count(self, data: np.ndarray, cell_x: int, cell_y: int, grid_info: Dict) -> int:
         """
@@ -120,7 +189,7 @@ class AdaptiveLogitAnomalyDetectionService:
         if data.size == 0:
             return 0
         
-        # Get cell boundaries
+        # Get cell boundaries using histogram-based bins
         x_min = grid_info['x_bins'][cell_x]
         x_max = grid_info['x_bins'][cell_x + 1]
         y_min = grid_info['y_bins'][cell_y]
@@ -132,236 +201,158 @@ class AdaptiveLogitAnomalyDetectionService:
         
         return int(np.sum(mask))
     
-    def _calculate_adaptive_logit_thresholds(self, real_data: np.ndarray, synthetic_data: np.ndarray, grid_info: Dict) -> Dict:
+    def _calculate_global_proportion(self, real_data: np.ndarray, synthetic_data: np.ndarray) -> float:
         """
-        Calculate adaptive thresholds based on global dataset characteristics and cell logit distribution.
+        Calculate the global proportion of real data points.
         
         Args:
             real_data: 2D numpy array of real data points
             synthetic_data: 2D numpy array of synthetic data points
-            grid_info: Grid information dictionary
             
         Returns:
-            Dictionary containing logit thresholds and statistics
+            Global proportion of real data points
         """
-        # Calculate global baseline
         total_real = len(real_data)
         total_synthetic = len(synthetic_data)
         total_points = total_real + total_synthetic
         
         if total_points == 0:
-            raise ValueError("No data points available for threshold calculation")
+            raise ValueError("No data points available for global proportion calculation")
         
-        # Global probability and logit
-        p_global = total_real / total_points
-        if p_global == 0 or p_global == 1:
-            # Handle edge cases
-            logit_global = 0.0 if p_global == 0.5 else (float('inf') if p_global == 1 else float('-inf'))
-        else:
-            logit_global = np.log(p_global / (1 - p_global))
-        
-        # Calculate logit values for all cells
-        logit_values = []
-        cell_statistics = {}
-        
-        for i in range(grid_info['grid_size']):
-            for j in range(grid_info['grid_size']):
-                real_count = self._get_cell_count(real_data, i, j, grid_info)
-                synthetic_count = self._get_cell_count(synthetic_data, i, j, grid_info)
-                total_cell = real_count + synthetic_count
-                
-                if total_cell > 0:
-                    p_cell = real_count / total_cell
-                    
-                    # Calculate logit (avoid log(0) or log(infinity))
-                    if 0 < p_cell < 1:
-                        logit_cell = np.log(p_cell / (1 - p_cell))
-                        logit_values.append(logit_cell)
-                        
-                        cell_statistics[f"{i},{j}"] = {
-                            'cell_x': i,
-                            'cell_y': j,
-                            'real_count': real_count,
-                            'synthetic_count': synthetic_count,
-                            'total_count': total_cell,
-                            'p_cell': p_cell,
-                            'logit_cell': logit_cell
-                        }
-                    else:
-                        # Handle edge cases (all real or all synthetic)
-                        logit_cell = float('inf') if p_cell == 1 else float('-inf')
-                        cell_statistics[f"{i},{j}"] = {
-                        'cell_x': i,
-                        'cell_y': j,
-                            'real_count': real_count,
-                            'synthetic_count': synthetic_count,
-                            'total_count': total_cell,
-                            'p_cell': p_cell,
-                            'logit_cell': logit_cell
-                        }
-        
-        # Calculate standard deviation of logit values
-        if len(logit_values) > 1:
-            logit_sd = np.std(logit_values)
-        else:
-            # If only one cell or no valid logits, use a default
-            logit_sd = 1.0
-        
-        # Set adaptive thresholds
-        threshold_lower = logit_global - logit_sd
-        threshold_upper = logit_global + logit_sd
-        
-        return {
-            'logit_global': logit_global,
-            'logit_sd': logit_sd,
-            'threshold_lower': threshold_lower,
-            'threshold_upper': threshold_upper,
-            'p_global': p_global,
-            'total_real': total_real,
-            'total_synthetic': total_synthetic,
-            'total_points': total_points,
-            'cell_statistics': cell_statistics,
-            'valid_logit_count': len(logit_values)
-        }
+        return total_real / total_points
     
-    def _calculate_anomaly_color(self, logit_cell: float, thresholds: Dict) -> str:
+    def _perform_binomial_proportion_tests(self, real_data: np.ndarray, synthetic_data: np.ndarray, 
+                                         grid_info: Dict, global_proportion: float) -> Tuple[List[Dict], List[Dict]]:
         """
-        Calculate color based on z-score using existing thresholds.
-        
-        Args:
-            logit_cell: Logit value for the cell
-            thresholds: Dictionary containing logit thresholds
-            
-        Returns:
-            Hex color string for visualization
-        """
-        global_logit = thresholds['logit_global']
-        logit_sd = thresholds['logit_sd']
-        
-        if logit_sd == 0:
-            return '#CCCCCC'  # Gray if no variation
-        
-        # Calculate z-score
-        z_score = (logit_cell - global_logit) / logit_sd
-        
-        # Color logic based on z-score with severity distinction
-        if z_score < -2:
-            return '#8B0000'  # Dark Red (strongly synthetic-heavy, high severity)
-        elif z_score < -1:
-            return '#FFD700'  # Golden Yellow (moderately synthetic-heavy, medium severity)
-        elif z_score > 2:
-            return '#8B0000'  # Dark Red (strongly real-heavy, high severity)
-        elif z_score > 1:
-            return '#FFD700'  # Golden Yellow (moderately real-heavy, medium severity)
-        else:
-            return '#D3D3D3'  # Neutral Gray (balanced/normal)
-    
-    def _detect_logit_anomalies(self, real_data: np.ndarray, synthetic_data: np.ndarray, 
-                               grid_info: Dict, thresholds: Dict) -> List[Dict]:
-        """
-        Detect anomalies using adaptive logit thresholds.
+        Perform two one-sided binomial proportion tests for each grid cell.
         
         Args:
             real_data: 2D numpy array of real data points
             synthetic_data: 2D numpy array of synthetic data points
             grid_info: Grid information dictionary
-            thresholds: Dictionary containing logit thresholds
+            global_proportion: Global proportion of real data points
             
         Returns:
-            List of anomaly dictionaries
+            Tuple of (positive_tests, negative_tests) - lists of test results
         """
-        anomalies = []
+        positive_tests = []  # Real overpopulation tests
+        negative_tests = []  # Synthetic overpopulation tests
         
-        cells_processed = 0
-        cells_skipped_low_count = 0
-        cells_skipped_extreme = 0
+        x_grid_size = grid_info['x_grid_size']
+        y_grid_size = grid_info['y_grid_size']
         
-        for i in range(grid_info['grid_size']):
-            for j in range(grid_info['grid_size']):
+        for i in range(x_grid_size):
+            for j in range(y_grid_size):
                 real_count = self._get_cell_count(real_data, i, j, grid_info)
                 synthetic_count = self._get_cell_count(synthetic_data, i, j, grid_info)
                 total_cell = real_count + synthetic_count
                 
-                # Only process cells with a minimum number of points to avoid noise
-                min_points_threshold = 3  # Require at least 3 points to consider a cell for anomaly detection
+                # Only test cells with sufficient data points
+                min_points_threshold = 5
                 
                 if total_cell >= min_points_threshold:
-                    cells_processed += 1
-                    p_cell = real_count / total_cell
+                    cell_proportion = real_count / total_cell
                     
-                    # Calculate logit value
-                    if 0 < p_cell < 1:
-                        logit_cell = np.log(p_cell / (1 - p_cell))
-                        
-                        # Check if outside adaptive threshold
-                        if (logit_cell < thresholds['threshold_lower'] or 
-                            logit_cell > thresholds['threshold_upper']):
-                            
-                            # Calculate z-score for severity
-                            z_score = (logit_cell - thresholds['logit_global']) / thresholds['logit_sd']
-                            
-                            # Determine severity based on z-score
-                            if abs(z_score) > 2:
-                                severity = 'high'
-                            else:
-                                severity = 'medium'
-                            
-                            # Determine anomaly type
-                            if logit_cell > thresholds['threshold_upper']:
-                                anomaly_type = 'real_overrepresentation'
-                            else:
-                                anomaly_type = 'synthetic_overrepresentation'
-                            
-                            anomalies.append({
-                                'cell_x': i,
-                                'cell_y': j,
-                                'logit_value': logit_cell,
-                                'p_cell': p_cell,
-                                'real_count': real_count,
-                                'synthetic_count': synthetic_count,
-                                'total_count': total_cell,
-                                'severity': severity,
-                                'anomaly_type': anomaly_type,
-                                'z_score': z_score,
-                                'color': self._calculate_anomaly_color(logit_cell, thresholds)
-                            })
-                    else:
-                        # Handle edge cases (all real or all synthetic) - only for significant cell populations
-                        if total_cell >= 5:  # Higher threshold for extreme cases to ensure statistical significance
-                            if p_cell == 1:  # All real
-                                logit_cell = float('inf')
-                                anomaly_type = 'real_overrepresentation'
-                            else:  # All synthetic
-                                logit_cell = float('-inf')
-                                anomaly_type = 'synthetic_overrepresentation'
-                            
-                            # These are definitely anomalies but only if significant
-                            anomalies.append({
-                                'cell_x': i,
-                                'cell_y': j,
-                                'logit_value': logit_cell,
-                                'p_cell': p_cell,
-                                'real_count': real_count,
-                                'synthetic_count': synthetic_count,
-                                'total_count': total_cell,
-                                'severity': 'high',
-                                'anomaly_type': anomaly_type,
-                                'z_score': float('inf') if p_cell == 1 else float('-inf'),
-                                'color': self._calculate_anomaly_color(logit_cell, thresholds)
-                            })
-                        else:
-                            cells_skipped_extreme += 1
-                else:
-                    cells_skipped_low_count += 1
+                    # Perform binomial proportion tests
+                    # Test A: cell_proportion > global_proportion (real overpopulation)
+                    test_a = binomtest(real_count, total_cell, p=global_proportion, alternative='greater')
+                    
+                    # Test B: cell_proportion < global_proportion (synthetic overpopulation)
+                    test_b = binomtest(real_count, total_cell, p=global_proportion, alternative='less')
+                    
+                    # Store positive test (real overpopulation)
+                    if cell_proportion > global_proportion:  # Only consider cells that actually favor real data
+                        positive_tests.append({
+                            'cell_x': i,
+                            'cell_y': j,
+                            'real_count': real_count,
+                            'synthetic_count': synthetic_count,
+                            'total_count': total_cell,
+                            'cell_proportion': cell_proportion,
+                            'global_proportion': global_proportion,
+                            'proportion_diff': cell_proportion - global_proportion,
+                            'p_value': test_a.pvalue,
+                            'test_type': 'real_overpopulation'
+                        })
+                    
+                    # Store negative test (synthetic overpopulation)
+                    if cell_proportion < global_proportion:  # Only consider cells that actually favor synthetic data
+                        negative_tests.append({
+                            'cell_x': i,
+                            'cell_y': j,
+                            'real_count': real_count,
+                            'synthetic_count': synthetic_count,
+                            'total_count': total_cell,
+                            'cell_proportion': cell_proportion,
+                            'global_proportion': global_proportion,
+                            'proportion_diff': cell_proportion - global_proportion,
+                            'p_value': test_b.pvalue,
+                            'test_type': 'synthetic_overpopulation'
+                        })
         
-        logger.info(f"Anomaly detection cell processing: {cells_processed} processed, {cells_skipped_low_count} skipped (low count), {cells_skipped_extreme} skipped (extreme but insufficient)")
-        logger.info(f"Found {len(anomalies)} anomalous cells")
+        return positive_tests, negative_tests
+    
+    def _apply_fdr_correction(self, tests: List[Dict], alpha: float = 0.05) -> List[Dict]:
+        """
+        Apply False Discovery Rate correction to p-values.
         
-        return anomalies
+        Args:
+            tests: List of test results
+            alpha: Significance level for FDR correction
+            
+        Returns:
+            List of test results with FDR correction applied
+        """
+        if not tests:
+            return tests
+        
+        # Extract p-values
+        p_values = [test['p_value'] for test in tests]
+        
+        # Apply FDR correction
+        rejected, p_adjusted = fdrcorrection(p_values, alpha=alpha, method='indep')
+        
+        # Update test results
+        corrected_tests = []
+        for i, test in enumerate(tests):
+            test_copy = test.copy()
+            test_copy['p_value_adjusted'] = p_adjusted[i]
+            test_copy['is_significant'] = rejected[i]
+            test_copy['fdr_alpha'] = alpha
+            corrected_tests.append(test_copy)
+        
+        return corrected_tests
+    
+    def _assign_colors(self, positive_tests: List[Dict], negative_tests: List[Dict]) -> Dict:
+        """
+        Assign colors to significant cells based on test results.
+        
+        Args:
+            positive_tests: FDR-corrected positive test results
+            negative_tests: FDR-corrected negative test results
+            
+        Returns:
+            Dictionary mapping cell coordinates to colors
+        """
+        color_map = {}
+        
+        # Red for significant real overpopulation
+        for test in positive_tests:
+            if test.get('is_significant', False):
+                cell_key = f"{test['cell_x']},{test['cell_y']}"
+                color_map[cell_key] = '#FF0000'  # Red
+        
+        # Blue for significant synthetic overpopulation
+        for test in negative_tests:
+            if test.get('is_significant', False):
+                cell_key = f"{test['cell_x']},{test['cell_y']}"
+                color_map[cell_key] = '#0000FF'  # Blue
+        
+        return color_map
     
     def _get_cell_indices(self, point: np.ndarray, grid_info: Dict) -> Tuple[int, int]:
         """
-        Get grid cell indices for a data point.
+        Get grid cell indices for a data point using histogram-based bins.
         
         Args:
             point: 2D point coordinates
@@ -370,104 +361,54 @@ class AdaptiveLogitAnomalyDetectionService:
         Returns:
             Tuple of (x_index, y_index) for the grid cell
         """
-        x_idx = np.digitize(point[0], grid_info['x_bins']) - 1
-        y_idx = np.digitize(point[1], grid_info['y_bins']) - 1
-        
-        # Clamp to valid range
-        x_idx = max(0, min(x_idx, grid_info['grid_size'] - 1))
-        y_idx = max(0, min(y_idx, grid_info['grid_size'] - 1))
-        
-        return x_idx, y_idx
-    
-    def train_logit_detector(self, real_data: List[List[float]], synthetic_data: List[List[float]],
-                           grid_size: int = 20) -> Dict:
-        """
-        Train adaptive logit-based anomaly detector on real and synthetic data.
-        
-        Args:
-            real_data: List of real data points (2D coordinates)
-            synthetic_data: List of synthetic data points (2D coordinates)
-            grid_size: Number of grid cells per dimension
-            
-        Returns:
-            Dict containing training results and analysis
-        """
         try:
-            # Convert to numpy arrays
-            real_array = np.array(real_data)
-            synthetic_array = np.array(synthetic_data)
+            if self._should_use_gpu(1):  # Even single points can benefit from GPU if available
+                point_gpu = cp.asarray(point.reshape(1, -1))
+                x_edges_gpu = cp.asarray(grid_info['x_bins'])
+                y_edges_gpu = cp.asarray(grid_info['y_bins'])
+                
+                x_idx = int(cp.digitize(point_gpu[0, 0], x_edges_gpu) - 1)
+                y_idx = int(cp.digitize(point_gpu[0, 1], y_edges_gpu) - 1)
+            else:
+                x_idx = np.digitize(point[0], grid_info['x_bins']) - 1
+                y_idx = np.digitize(point[1], grid_info['y_bins']) - 1
             
-            if real_array.shape[0] < 10:
-                raise ValueError("Insufficient real data for training (minimum 10 points)")
+            # Clamp to valid range
+            x_idx = max(0, min(x_idx, grid_info['x_grid_size'] - 1))
+            y_idx = max(0, min(y_idx, grid_info['y_grid_size'] - 1))
             
-            if synthetic_array.shape[0] < 5:
-                raise ValueError("Insufficient synthetic data for training (minimum 5 points)")
-            
-            if real_array.shape[1] != 2 or synthetic_array.shape[1] != 2:
-                raise ValueError("Data must be 2D coordinates")
-            
-            # Create grid using combined data bounds
-            combined_data = np.vstack([real_array, synthetic_array])
-            self.grid_info = self._create_grid(combined_data, grid_size)
-            
-            # Calculate adaptive thresholds
-            self.logit_thresholds = self._calculate_adaptive_logit_thresholds(
-                real_array, synthetic_array, self.grid_info
-            )
-            
-            self.is_fitted = True
-            
-            logger.info(f"Adaptive logit detector trained on {len(real_data)} real and {len(synthetic_data)} synthetic data points")
-            logger.info(f"Grid size: {grid_size}x{grid_size}")
-            logger.info(f"Global logit: {self.logit_thresholds['logit_global']:.3f}")
-            logger.info(f"Logit SD: {self.logit_thresholds['logit_sd']:.3f}")
-            logger.info(f"Thresholds: [{self.logit_thresholds['threshold_lower']:.3f}, {self.logit_thresholds['threshold_upper']:.3f}]")
-            
-            return convert_numpy_types({
-                "status": "success",
-                "grid_info": {
-                    "grid_size": grid_size,
-                    "bounds": self.grid_info['bounds'],
-                    "total_cells": grid_size * grid_size
-                },
-                "logit_thresholds": {
-                    "logit_global": self.logit_thresholds['logit_global'],
-                    "logit_sd": self.logit_thresholds['logit_sd'],
-                    "threshold_lower": self.logit_thresholds['threshold_lower'],
-                    "threshold_upper": self.logit_thresholds['threshold_upper'],
-                    "p_global": self.logit_thresholds['p_global']
-                },
-                "statistics": {
-                    "total_real": self.logit_thresholds['total_real'],
-                    "total_synthetic": self.logit_thresholds['total_synthetic'],
-                    "total_points": self.logit_thresholds['total_points'],
-                    "valid_logit_count": self.logit_thresholds['valid_logit_count']
-                }
-            })
-            
+            return x_idx, y_idx
         except Exception as e:
-            logger.error(f"Error training logit detector: {str(e)}")
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+            logger.warning(f"GPU cell index computation failed, falling back to CPU: {e}")
+            # CPU fallback
+            x_idx = np.digitize(point[0], grid_info['x_bins']) - 1
+            y_idx = np.digitize(point[1], grid_info['y_bins']) - 1
+            
+            # Clamp to valid range
+            x_idx = max(0, min(x_idx, grid_info['x_grid_size'] - 1))
+            y_idx = max(0, min(y_idx, grid_info['y_grid_size'] - 1))
+            
+            return x_idx, y_idx
     
     def detect_anomalies(self, real_data: List[List[float]], 
                         synthetic_data: List[List[float]],
-                        grid_size: int = 20) -> Dict:
+                        x_bins: int = 20, y_bins: int = 20,
+                        fdr_alpha: float = 0.05) -> Dict:
         """
-        Detect anomalies using adaptive logit-based analysis.
+        Detect anomalies using histogram-based grid sizing with binomial proportion tests and FDR correction.
         
         Args:
             real_data: List of real data points (2D coordinates)
             synthetic_data: List of synthetic data points (2D coordinates)
-            grid_size: Number of grid cells per dimension
+            x_bins: Number of bins for X dimension
+            y_bins: Number of bins for Y dimension
+            fdr_alpha: Significance level for FDR correction
             
         Returns:
             Dictionary containing anomaly detection results
         """
         try:
-            logger.info(f"Starting adaptive logit anomaly detection with grid_size={grid_size}")
+            logger.info(f"Starting histogram-based anomaly detection with x_bins={x_bins}, y_bins={y_bins}, fdr_alpha={fdr_alpha}")
             
             # Validate input data
             if not real_data or len(real_data) == 0:
@@ -487,17 +428,39 @@ class AdaptiveLogitAnomalyDetectionService:
             logger.info(f"Real data shape: {real_array.shape}")
             logger.info(f"Synthetic data shape: {synthetic_array.shape}")
             
-            # Check if model is fitted
-            if not self.is_fitted:
-                logger.info("Model not fitted, training on real and synthetic data...")
-                self.train_logit_detector(real_data, synthetic_data, grid_size)
+            # Step 1: Create histogram-based grid
+            self.grid_info = self._create_histogram_based_grid(real_array, synthetic_array, x_bins, y_bins)
             
-            # Detect logit anomalies
-            logit_anomalies = self._detect_logit_anomalies(
-                real_array, synthetic_array, self.grid_info, self.logit_thresholds
+            # Step 2: Calculate global proportion
+            self.global_proportion = self._calculate_global_proportion(real_array, synthetic_array)
+            
+            # Step 3: Perform two one-sided binomial proportion tests
+            positive_tests, negative_tests = self._perform_binomial_proportion_tests(
+                real_array, synthetic_array, self.grid_info, self.global_proportion
             )
             
-            # Process points with anomaly classification
+            # Step 4: Apply FDR correction separately to each test type
+            positive_tests_corrected = self._apply_fdr_correction(positive_tests, fdr_alpha)
+            negative_tests_corrected = self._apply_fdr_correction(negative_tests, fdr_alpha)
+            
+            # Step 5: Assign colors based on significance
+            color_map = self._assign_colors(positive_tests_corrected, negative_tests_corrected)
+            
+            # Combine all significant anomalies
+            all_anomalies = []
+            for test in positive_tests_corrected:
+                if test.get('is_significant', False):
+                    cell_key = f"{test['cell_x']},{test['cell_y']}"
+                    test['color'] = color_map.get(cell_key, '#CCCCCC')
+                    all_anomalies.append(test)
+            
+            for test in negative_tests_corrected:
+                if test.get('is_significant', False):
+                    cell_key = f"{test['cell_x']},{test['cell_y']}"
+                    test['color'] = color_map.get(cell_key, '#CCCCCC')
+                    all_anomalies.append(test)
+            
+            # Process points with anomaly classification using GPU acceleration
             real_anomalies = []
             real_normal = []
             synthetic_anomalies = []
@@ -505,12 +468,14 @@ class AdaptiveLogitAnomalyDetectionService:
             
             # Create anomaly cell lookup
             anomaly_cells = set()
-            for anomaly in logit_anomalies:
+            for anomaly in all_anomalies:
                 anomaly_cells.add(f"{anomaly['cell_x']},{anomaly['cell_y']}")
             
-            # Process real data points
-            for i, point in enumerate(real_array):
-                x_idx, y_idx = self._get_cell_indices(point, self.grid_info)
+            # Process real data points with GPU acceleration
+            real_cell_assignments = self._compute_grid_assignment_gpu(real_array, self.grid_info['x_bins'], self.grid_info['y_bins'])
+            
+            for i, (point, cell_assignment) in enumerate(zip(real_array, real_cell_assignments)):
+                x_idx, y_idx = int(cell_assignment[0]), int(cell_assignment[1])
                 cell_id = f"{x_idx},{y_idx}"
                 is_anomaly = cell_id in anomaly_cells
                 
@@ -527,9 +492,11 @@ class AdaptiveLogitAnomalyDetectionService:
                 else:
                     real_normal.append(point_data)
             
-            # Process synthetic data points
-            for i, point in enumerate(synthetic_array):
-                x_idx, y_idx = self._get_cell_indices(point, self.grid_info)
+            # Process synthetic data points with GPU acceleration
+            synth_cell_assignments = self._compute_grid_assignment_gpu(synthetic_array, self.grid_info['x_bins'], self.grid_info['y_bins'])
+            
+            for i, (point, cell_assignment) in enumerate(zip(synthetic_array, synth_cell_assignments)):
+                x_idx, y_idx = int(cell_assignment[0]), int(cell_assignment[1])
                 cell_id = f"{x_idx},{y_idx}"
                 is_anomaly = cell_id in anomaly_cells
                 
@@ -559,13 +526,15 @@ class AdaptiveLogitAnomalyDetectionService:
                 "synthetic_anomalies": synthetic_anomaly_count,
                 "real_anomaly_rate": float(real_anomaly_count / total_real) if total_real > 0 else 0.0,
                 "synthetic_anomaly_rate": float(synthetic_anomaly_count / total_synthetic) if total_synthetic > 0 else 0.0,
-                "grid_size": self.grid_info['grid_size'],
-                "total_anomaly_cells": len(logit_anomalies),
-                "logit_global": self.logit_thresholds['logit_global'],
-                "logit_sd": self.logit_thresholds['logit_sd'],
-                "threshold_lower": self.logit_thresholds['threshold_lower'],
-                "threshold_upper": self.logit_thresholds['threshold_upper'],
-                "p_global": self.logit_thresholds['p_global']
+                "x_grid_size": self.grid_info['x_grid_size'],
+                "y_grid_size": self.grid_info['y_grid_size'],
+                "total_anomaly_cells": len(all_anomalies),
+                "positive_tests_conducted": len(positive_tests),
+                "negative_tests_conducted": len(negative_tests),
+                "positive_significant": len([t for t in positive_tests_corrected if t.get('is_significant', False)]),
+                "negative_significant": len([t for t in negative_tests_corrected if t.get('is_significant', False)]),
+                "fdr_alpha": fdr_alpha,
+                "global_proportion": self.global_proportion
             }
             
             # Combine all data for return
@@ -582,35 +551,37 @@ class AdaptiveLogitAnomalyDetectionService:
                 "synthetic_anomalies": synthetic_anomalies,
                 "synthetic_normal": synthetic_normal,
                 "grid_info": self.grid_info,
-                # Provide a generic 'anomalies' key for consumers expecting this naming
-                "anomalies": logit_anomalies,
-                "logit_thresholds": {
-                    "logit_global": self.logit_thresholds['logit_global'],
-                    "logit_sd": self.logit_thresholds['logit_sd'],
-                    "threshold_lower": self.logit_thresholds['threshold_lower'],
-                    "threshold_upper": self.logit_thresholds['threshold_upper'],
-                    "p_global": self.logit_thresholds['p_global']
+                "anomalies": all_anomalies,  # For backward compatibility
+                "cell_anomalies": all_anomalies,
+                "positive_tests": positive_tests_corrected,
+                "negative_tests": negative_tests_corrected,
+                "proportion_thresholds": {
+                    "global_proportion": self.global_proportion,
+                    "fdr_alpha": fdr_alpha
                 },
-                "cell_anomalies": logit_anomalies,
-                "message": f"Detected {real_anomaly_count} real anomalies and {synthetic_anomaly_count} synthetic anomalies using adaptive logit approach"
+                "message": f"Detected {real_anomaly_count} real anomalies and {synthetic_anomaly_count} synthetic anomalies using histogram-based binomial proportion tests with FDR correction"
             }
             
             converted_dict = convert_numpy_types(return_dict)
             
-            logger.info(f"Adaptive logit detection complete: {real_anomaly_count} real, {synthetic_anomaly_count} synthetic anomalies")
+            logger.info(f"Histogram-based detection complete: {real_anomaly_count} real, {synthetic_anomaly_count} synthetic anomalies")
+            logger.info(f"Positive tests: {len(positive_tests)} conducted, {statistics['positive_significant']} significant")
+            logger.info(f"Negative tests: {len(negative_tests)} conducted, {statistics['negative_significant']} significant")
+            
+            self.is_fitted = True
             
             return converted_dict
             
         except Exception as e:
-            logger.error(f"Error in adaptive logit detect_anomalies: {str(e)}")
+            logger.error(f"Error in histogram-based detect_anomalies: {str(e)}")
             return {
                 "status": "error",
-                "message": f"Adaptive logit anomaly detection failed: {str(e)}"
+                "message": f"Histogram-based anomaly detection failed: {str(e)}"
             }
     
     def generate_anomaly_csv(self, results: Dict) -> str:
         """
-        Generate CSV content for adaptive logit anomaly results.
+        Generate CSV content for histogram-based anomaly results.
         
         Args:
             results: Anomaly detection results from detect_anomalies
@@ -620,7 +591,7 @@ class AdaptiveLogitAnomalyDetectionService:
         """
         try:
             if results.get("status") != "success":
-                return "# Adaptive logit anomaly detection failed or no results available"
+                return "# Histogram-based anomaly detection failed or no results available"
             
             # Create CSV content
             csv_lines = []
@@ -628,16 +599,10 @@ class AdaptiveLogitAnomalyDetectionService:
             # Add summary statistics as comments
             stats = results.get("statistics", {})
             grid_info = results.get("grid_info", {})
-            logit_thresholds = results.get("logit_thresholds", {})
+            proportion_thresholds = results.get("proportion_thresholds", {})
             
-            csv_lines.append(f"# Adaptive Logit Anomaly Detection Results")
-            csv_lines.append(f"# Grid Size: {grid_info.get('grid_size', 'N/A')}x{grid_info.get('grid_size', 'N/A')}")
-            # Safely format numeric values
-            p_global = logit_thresholds.get('p_global')
-            logit_global = logit_thresholds.get('logit_global')
-            logit_sd = logit_thresholds.get('logit_sd')
-            threshold_lower = logit_thresholds.get('threshold_lower')
-            threshold_upper = logit_thresholds.get('threshold_upper')
+            csv_lines.append(f"# Histogram-Based Anomaly Detection Results (Binomial Proportion Tests)")
+            csv_lines.append(f"# Grid Size: {grid_info.get('x_grid_size', 'N/A')}x{grid_info.get('y_grid_size', 'N/A')}")
             
             # Format values handling infinity and NaN
             def format_value(val, decimals=3):
@@ -650,32 +615,46 @@ class AdaptiveLogitAnomalyDetectionService:
                 else:
                     return str(val)
             
-            # Add global statistics (removed threshold parameter as requested)
-            csv_lines.append(f"# Global Probability: {format_value(p_global)}")
-            csv_lines.append(f"# Global Logit: {format_value(logit_global)}")
-            csv_lines.append(f"# Logit Standard Deviation: {format_value(logit_sd)}")
+            # Add global statistics
+            global_proportion = proportion_thresholds.get('global_proportion')
+            fdr_alpha = proportion_thresholds.get('fdr_alpha')
+            
+            csv_lines.append(f"# Global Proportion: {format_value(global_proportion)}")
+            csv_lines.append(f"# FDR Alpha Level: {format_value(fdr_alpha)}")
             csv_lines.append(f"# Total Real Points: {stats.get('total_real', 0)}")
             csv_lines.append(f"# Total Synthetic Points: {stats.get('total_synthetic', 0)}")
             csv_lines.append(f"# Real Anomalies Detected: {stats.get('real_anomalies', 0)}")
             csv_lines.append(f"# Synthetic Anomalies Detected: {stats.get('synthetic_anomalies', 0)}")
+            csv_lines.append(f"# Positive Tests Conducted: {stats.get('positive_tests_conducted', 0)}")
+            csv_lines.append(f"# Negative Tests Conducted: {stats.get('negative_tests_conducted', 0)}")
+            csv_lines.append(f"# Positive Significant: {stats.get('positive_significant', 0)}")
+            csv_lines.append(f"# Negative Significant: {stats.get('negative_significant', 0)}")
             csv_lines.append("")
             
-            # Add header
-            csv_lines.append("cell_x,cell_y,real_count,synthetic_count,total_count,p_cell,logit_cell,z_score,anomaly_type,severity,color")
+            # Add header for cell-level analysis
+            csv_lines.append("cell_x,cell_y,real_count,synthetic_count,total_count,cell_proportion,global_proportion,proportion_diff,p_value,p_value_adjusted,is_significant,test_type,color")
             
-            # Add cell-level analysis
-            cell_anomalies = results.get("cell_anomalies", [])
-            for anomaly in cell_anomalies:
-                # Safely format numeric values using the format_value function
-                p_cell = anomaly.get('p_cell', 0)
-                logit_value = anomaly.get('logit_value', 0)
-                z_score = anomaly.get('z_score', 0)
+            # Add positive test results
+            positive_tests = results.get("positive_tests", [])
+            for test in positive_tests:
+                cell_proportion = test.get('cell_proportion', 0)
+                global_proportion = test.get('global_proportion', 0)
+                proportion_diff = test.get('proportion_diff', 0)
+                p_value = test.get('p_value', 1)
+                p_value_adj = test.get('p_value_adjusted', 1)
                 
-                p_cell_str = format_value(p_cell)
-                logit_str = format_value(logit_value)
-                z_score_str = format_value(z_score)
+                csv_lines.append(f"{test['cell_x']},{test['cell_y']},{test.get('real_count', 0)},{test.get('synthetic_count', 0)},{test.get('total_count', 0)},{format_value(cell_proportion)},{format_value(global_proportion)},{format_value(proportion_diff)},{format_value(p_value)},{format_value(p_value_adj)},{test.get('is_significant', False)},{test.get('test_type', 'unknown')},{test.get('color', '#CCCCCC')}")
+            
+            # Add negative test results
+            negative_tests = results.get("negative_tests", [])
+            for test in negative_tests:
+                cell_proportion = test.get('cell_proportion', 0)
+                global_proportion = test.get('global_proportion', 0)
+                proportion_diff = test.get('proportion_diff', 0)
+                p_value = test.get('p_value', 1)
+                p_value_adj = test.get('p_value_adjusted', 1)
                 
-                csv_lines.append(f"{anomaly['cell_x']},{anomaly['cell_y']},{anomaly.get('real_count', 0)},{anomaly.get('synthetic_count', 0)},{anomaly.get('total_count', 0)},{p_cell_str},{logit_str},{z_score_str},{anomaly.get('anomaly_type', 'unknown')},{anomaly['severity']},{anomaly.get('color', '#CCCCCC')}")
+                csv_lines.append(f"{test['cell_x']},{test['cell_y']},{test.get('real_count', 0)},{test.get('synthetic_count', 0)},{test.get('total_count', 0)},{format_value(cell_proportion)},{format_value(global_proportion)},{format_value(proportion_diff)},{format_value(p_value)},{format_value(p_value_adj)},{test.get('is_significant', False)},{test.get('test_type', 'unknown')},{test.get('color', '#CCCCCC')}")
             
             csv_lines.append("")
             csv_lines.append("# Point-level data")
@@ -700,4 +679,4 @@ class AdaptiveLogitAnomalyDetectionService:
             return f"# Error generating CSV: {str(e)}"
 
 # Global instance
-anomaly_service = AdaptiveLogitAnomalyDetectionService() 
+anomaly_service = HistogramBasedAnomalyDetectionService()

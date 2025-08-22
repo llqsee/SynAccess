@@ -64,10 +64,10 @@ def run_backend_tests(args):
         cmd = ['python', '-m', 'pytest', 'backend/tests/']
         
         if args.verbose:
-            cmd.append('-v')
+            cmd.append('-v')        
         
         if args.coverage:
-            cmd.extend(['--cov=backend', '--cov-report=term-missing', '--cov-report=html'])
+            cmd.extend(['--cov=backend', '--cov-report=term-missing', '--cov-report=html'])            
         
         if args.pattern:
             cmd.extend(['-k', args.pattern])

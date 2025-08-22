@@ -14,6 +14,63 @@ try:
 except ImportError:
     GPU_AVAILABLE = False
 
+# Wrapper class to make openTSNE models serializable
+class SerializableTSNE:
+    """Wrapper for openTSNE models to handle serialization issues.
+    
+    openTSNE models can't be pickled directly due to file handles and
+    internal state. This wrapper extracts the essential data and provides
+    a clean interface for saving/loading.
+    """
+    
+    def __init__(self, original_model, computed_embedding_real):
+        # Copy the key parameters we need
+        self.n_components = getattr(original_model, 'n_components', 2)
+        self.perplexity = getattr(original_model, 'perplexity', 30.0)
+        self.early_exaggeration = getattr(original_model, 'early_exaggeration', 12.0)
+        self.metric = getattr(original_model, 'metric', 'euclidean')
+        self.random_state = getattr(original_model, 'random_state', None)
+        self.n_jobs = getattr(original_model, 'n_jobs', 1)
+        
+        # Store the actual embedding results
+        self.embedding_ = computed_embedding_real.copy()
+        
+        # Grab any other useful attributes
+        for attr in ['n_iter_', 'kl_divergence_', 'n_features_in_']:
+            if hasattr(original_model, attr):
+                setattr(self, attr, getattr(original_model, attr))
+        
+        # Keep original model around for this session only
+        self._original_model = original_model
+    
+    def transform(self, X):
+        """Transform new data using the original model if available."""
+        if hasattr(self, '_original_model') and self._original_model is not None:
+            try:
+                return self._original_model.transform(X)
+            except Exception as e:
+                # If original model transform fails, we can't transform new data
+                pass
+        
+        # If original model is not available, we can't transform new data
+        raise NotImplementedError(
+            "Transform is not available for this saved TSNE model. "
+            "Please create a new embedding for transformation capabilities."
+        )
+    
+    def __getstate__(self):
+        """Custom serialization - exclude the original model reference."""
+        state = self.__dict__.copy()
+        # Remove the original model reference for serialization
+        state['_original_model'] = None
+        return state
+    
+    def __setstate__(self, state):
+        """Custom deserialization."""
+        self.__dict__.update(state)
+        # Original model will be None after deserialization
+        self._original_model = None
+
 class EmbeddingService:
     def __init__(self):
         """Initialize the embedding service with available methods."""
@@ -280,6 +337,8 @@ class EmbeddingService:
         progress_callback: Optional[Callable[[float], None]] = None,
         **kwargs
     ) -> Tuple[np.ndarray, np.ndarray, object]:
+        from backend.utils.logging_config import get_logger
+        logger = get_logger(__name__)
         """
         Compute t-SNE embedding using openTSNE.
         Fit on real data, then transform both real and synthetic data.
@@ -317,7 +376,27 @@ class EmbeddingService:
         if progress_callback:
             progress_callback(0.95)
 
-        return embedding_real, embedding_synth, tsne_embedding 
+        # The openTSNE model cannot be serialized due to Annoy index file handles
+        # We need to create a custom serializable wrapper that stores only essential data
+        logger.info("Creating serializable TSNE model wrapper...")
+        
+        # Create the serializable model using the module-level class
+        serializable_model = SerializableTSNE(tsne_embedding, embedding_real)
+        logger.info(f"Created SerializableTSNE with embedding shape: {serializable_model.embedding_.shape}")
+        
+        # Test that this version can be serialized
+        try:
+            import joblib
+            import io
+            test_buffer = io.BytesIO()
+            joblib.dump(serializable_model, test_buffer)
+            test_buffer.close()
+            logger.info("Created serializable TSNE model successfully")
+            return embedding_real, embedding_synth, serializable_model
+        except Exception as final_error:
+            logger.error(f"Serializable model creation failed: {final_error}")
+            # Return without model rather than fail completely
+            return embedding_real, embedding_synth, None 
 
     def compute_embedding_with_pretrained_model(
         self,
@@ -363,7 +442,7 @@ class EmbeddingService:
         if "UMAP" in model_type:
             detected_method = "umap"
             logger.info(f"Detected UMAP model: {model_type}")
-        elif "TSNE" in model_type or "TSNE" in str(pretrained_model.__class__):
+        elif "TSNE" in model_type or "TSNEEmbedding" in model_type or "SerializableTSNE" in model_type:
             detected_method = "tsne"
             logger.info(f"Detected t-SNE model: {model_type}")
         else:
@@ -383,10 +462,9 @@ class EmbeddingService:
             if missing_attrs:
                 raise ValueError(f"Model appears to be UMAP but missing attributes: {missing_attrs}")
         elif method == "tsne":
-            expected_attrs = ['n_components', 'perplexity', 'early_exaggeration', 'metric', 'random_state']
-            missing_attrs = [attr for attr in expected_attrs if not hasattr(pretrained_model, attr)]
-            if missing_attrs:
-                raise ValueError(f"Model appears to be t-SNE but missing attributes: {missing_attrs}")
+            # For TSNE, check for openTSNE attributes (embedding_ or embedding)
+            if not hasattr(pretrained_model, 'embedding_') and not hasattr(pretrained_model, 'embedding'):
+                raise ValueError(f"Model appears to be t-SNE but missing embedding data")
         
         logger.info(f"Using {method.upper()} model with type: {model_type}")
         
@@ -454,6 +532,7 @@ class EmbeddingService:
                 embedding_real = pretrained_model.transform(real_processed)
                 embedding_synth = pretrained_model.transform(synth_processed)
             elif method == "tsne":
+                # openTSNE is parametric and supports pretrained transformation
                 embedding_real = pretrained_model.transform(real_processed)
                 embedding_synth = pretrained_model.transform(synth_processed)
             else:
@@ -529,8 +608,8 @@ class EmbeddingService:
         Returns:
             result: Dictionary with embeddings, metadata, and job information
         """
-        from backend.utils.logging_config import get_logger
-        from backend.services.job_service import JobService
+        from utils.logging_config import get_logger
+        from services.job_service import JobService
         import time
         
         logger = get_logger(__name__)
@@ -704,10 +783,11 @@ class EmbeddingService:
         pretrained_model: Any,
         progress_callback: Optional[Callable[[float], None]] = None
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Transform data using pretrained t-SNE model."""
+        """Transform data using pretrained t-SNE model (openTSNE is parametric)."""
         if progress_callback:
             progress_callback(0.4)
         
+        # openTSNE supports parametric transformation
         real_embedding = pretrained_model.transform(real_data)
         
         if progress_callback:

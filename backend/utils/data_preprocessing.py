@@ -9,17 +9,20 @@ def preprocess_data(real_data: Union[List[List[Any]], np.ndarray, pd.DataFrame],
                    transformer: ColumnTransformer = None,
                    return_transformer: bool = False) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, ColumnTransformer]]:
     """
-    Simple preprocessing: convert to DataFrames, one-hot encode categorical columns, and return clean numeric arrays.
+    Clean and prepare your data for analysis.
+    
+    This function converts your data to the right format, handles
+    categorical variables by encoding them, and ensures everything
+    is ready for the embedding algorithms.
     
     Args:
-        real_data: Real dataset (List of lists, numpy array, or pandas DataFrame)
-        synthetic_data: Synthetic dataset (List of lists, numpy array, or pandas DataFrame)
-        transformer: Pre-fitted ColumnTransformer to reuse (for pretrained models)
-        return_transformer: Whether to return the fitted transformer
+        real_data: Your real dataset
+        synthetic_data: Your synthetic dataset  
+        transformer: Pre-trained transformer (for reusing models)
+        return_transformer: Whether to return the transformer for reuse
         
     Returns:
-        Tuple of processed real and synthetic data as numeric numpy arrays
-        If return_transformer=True, also returns the fitted ColumnTransformer
+        Cleaned numeric arrays ready for analysis
     """
     # Convert to pandas DataFrames
     if isinstance(real_data, list):

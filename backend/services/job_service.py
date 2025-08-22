@@ -226,10 +226,29 @@ class JobService:
                     import joblib
                     import base64
                     import io
+                    import time
                     
                     logger.info(f"Attempting to store model for job {job_id}")
                     logger.info(f"Model type: {type(model).__name__}")
                     logger.info(f"Model attributes: {[attr for attr in dir(model) if not attr.startswith('_')]}")
+                    
+                    # Special handling for TSNE models with Annoy indices
+                    if hasattr(model, 'affinities') and hasattr(model.affinities, 'annoy_index'):
+                        logger.info("Detected TSNE model with Annoy index - attempting to close file handles")
+                        try:
+                            # Try to close the Annoy index file handles
+                            if hasattr(model.affinities.annoy_index, 'close'):
+                                model.affinities.annoy_index.close()
+                            # Also try to delete the temporary file if it exists
+                            if hasattr(model.affinities.annoy_index, 'filename'):
+                                import os
+                                try:
+                                    if os.path.exists(model.affinities.annoy_index.filename):
+                                        os.remove(model.affinities.annoy_index.filename)
+                                except:
+                                    pass  # Ignore file deletion errors
+                        except Exception as close_error:
+                            logger.warning(f"Could not close Annoy index: {close_error}")
                     
                     # Use joblib for all models (more reliable than pickle for complex objects)
                     buffer = io.BytesIO()
@@ -247,6 +266,34 @@ class JobService:
                     job.has_model = True
                     
                     logger.info(f"Stored model for job {job_id}")
+                except PermissionError as perm_error:
+                    logger.warning(f"Permission error storing model for job {job_id}: {perm_error}")
+                    logger.warning("This is likely due to file handles being held by the TSNE Annoy index")
+                    logger.warning("Attempting to retry after a short delay...")
+                    
+                    # Retry after a short delay
+                    time.sleep(2)
+                    try:
+                        import joblib
+                        import base64
+                        import io
+                        
+                        buffer = io.BytesIO()
+                        joblib.dump(model, buffer)
+                        model_bytes = buffer.getvalue()
+                        buffer.close()
+                        
+                        job_result.model_format = 'joblib'
+                        model_b64 = base64.b64encode(model_bytes).decode('utf-8')
+                        job_result.model_data = model_b64
+                        job.has_model = True
+                        
+                        logger.info(f"Successfully stored model for job {job_id} on retry")
+                    except Exception as retry_error:
+                        logger.warning(f"Retry failed for job {job_id}: {retry_error}")
+                        job.has_model = False
+                        job_result.model_data = None
+                        job_result.model_format = None
                 except Exception as model_error:
                     logger.warning(f"Failed to store model for job {job_id}: {model_error}")
                     logger.warning(f"Model error type: {type(model_error)}")

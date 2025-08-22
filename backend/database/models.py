@@ -1,5 +1,8 @@
 """
-Database models for the MAVIS application.
+Database models for storing job information and results.
+
+These models define the database tables used to track embedding jobs,
+store results, and manage user preferences.
 """
 
 from sqlalchemy import Column, String, DateTime, Float, Integer, Boolean, Text, JSON
@@ -10,7 +13,7 @@ from datetime import datetime
 Base = declarative_base()
 
 class Job(Base):
-    """Job model for tracking embedding computation jobs."""
+    """Tracks embedding computation jobs and their status."""
     
     __tablename__ = "jobs"
     
@@ -26,17 +29,17 @@ class Job(Base):
     error_message = Column(Text, nullable=True)
     n_samples = Column(Integer, nullable=True)
     
-    # Async processing fields
+    # Background processing info
     task_id = Column(String, nullable=True)
     worker_id = Column(String, nullable=True)
     progress = Column(Float, default=0.0)
     
-    # Results tracking
+    # What data we have stored
     has_results = Column(Boolean, default=False)
     has_compressed_data = Column(Boolean, default=False)
-    has_model = Column(Boolean, default=False)  # New field for model tracking
+    has_model = Column(Boolean, default=False)  # Whether we saved the model
 
-    # User preferences
+    # User settings
     is_favorite = Column(Boolean, default=False)
 
 class JobResult(Base):

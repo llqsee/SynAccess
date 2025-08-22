@@ -1,436 +1,360 @@
-# MAVIS - Scalable Visualization and Explainability of Synthetic Datasets
+# MAVIS: Scalable Visualization and Explainability of Synthetic Datasets
 
-> **MAVIS** is a professional web tool for evaluating and comparing synthetic data quality. It provides interactive tools to compare real and synthetic datasets using advanced visualizations and statistical analysis.
+MAVIS is a comprehensive platform for analyzing, visualizing, and validating synthetic datasets using advanced dimensionality reduction techniques and statistical anomaly detection.
 
----
+## 🚀 Features
 
-## 🎯 **Functional Requirements & Rationale**
+### 1. **Data Upload & Preprocessing**
+- Support for CSV files with automatic data type detection
+- Real-time data validation and preprocessing
+- Handling of categorical and numerical variables
+- Automatic data cleaning and normalization
 
-### **Core Data Processing Requirements**
+### 2. **Dimensionality Reduction**
+- **UMAP** (Uniform Manifold Approximation and Projection)
+- **t-SNE** (t-Distributed Stochastic Neighbor Embedding)
+- Configurable parameters for optimal visualization
+- Model persistence and reuse capabilities
 
-#### **1. Multi-Format Data Upload**
-- **Requirement**: Support CSV, Excel, and JSON file formats
-- **Rationale**: Real-world datasets come in various formats. Users need flexibility to upload their existing data without preprocessing
-- **Implementation**: File validation, type detection, and automatic preprocessing
+### 3. **Interactive Visualizations**
+- Real-time scatter plots with zoom and pan
+- Point selection and filtering
+- Distribution analysis with multiple plot types
+- Export capabilities (PNG, SVG, CSV)
 
-#### **2. Large Dataset Handling**
-- **Requirement**: Process datasets with 1M+ samples efficiently
-- **Rationale**: Synthetic data generation often produces large datasets. The tool must scale to handle production workloads
-- **Implementation**: Intelligent sampling, memory management, and background processing
+### 4. **Performance Monitoring**
+- Real-time GPU utilization tracking
+- Memory usage monitoring
+- Processing time analytics
+- System resource optimization
 
-#### **3. Real-time Data Validation**
-- **Requirement**: Provide instant feedback on data quality and format issues
-- **Rationale**: Users need immediate feedback to correct issues before proceeding with analysis
-- **Implementation**: Client-side validation with detailed error messages
+### 5. **Job Management**
+- Asynchronous processing with progress tracking
+- Job history and result storage
+- Model reuse with pretrained embeddings
+- Dataset fingerprinting for identification
 
-### **Advanced Visualization Requirements**
+### 6. **AI-Powered Analysis**
+- Automated data quality assessment
+- Statistical analysis reports
+- Anomaly detection insights
+- Professional report generation
 
-#### **4. Interactive Dimensionality Reduction**
-- **Requirement**: Support UMAP and t-SNE with configurable parameters
-- **Rationale**: Different algorithms reveal different aspects of data structure. Users need control over the visualization process
-- **Implementation**: Parameter tuning, GPU acceleration, and progress tracking
+### 7. **Data Validation**
+- Comprehensive statistical tests
+- Distribution comparison analysis
+- Quality metrics calculation
+- Validation report generation
 
-#### **5. Real-time Interactive Plots**
-- **Requirement**: 60fps zoom, pan, and selection capabilities
-- **Rationale**: Large datasets require smooth interaction for effective exploration
-- **Implementation**: D3.js with optimized rendering and efficient data structures
+### 8. **Advanced Anomaly Detection**
+- Grid-based statistical analysis
+- Multiple detection algorithms
+- Configurable sensitivity settings
+- Detailed anomaly reports
 
-#### **6. Distribution Comparison Visualizations**
-- **Requirement**: Side-by-side real vs synthetic data analysis
-- **Rationale**: Users need to visually compare distributions to assess synthetic data quality
-- **Implementation**: Histograms, box plots, and statistical overlays
+### 9. **Histogram-Based Anomaly Detection**
+- **Histogram-based grid sizing** for X and Y dimensions separately
+- **Binomial proportion tests** comparing cell proportions to global proportion
+- **Two one-sided tests**:
+  - Test A: `cell_proportion > global_proportion` (real overpopulation)
+  - Test B: `cell_proportion < global_proportion` (synthetic overpopulation)
+- **False Discovery Rate (FDR) correction** applied separately to positive and negative tests
+- **Binary red/blue coloring** based on FDR-corrected significance
+- **Binomial proportion tests** - direct proportion comparison using statistical tests
 
-### **Statistical Analysis Requirements**
+## 📊 Statistical Methodology
 
-#### **7. Comprehensive Statistical Testing**
-- **Requirement**: Implement KS tests, Chi-square, Energy tests, and multivariate analysis
-- **Rationale**: Different tests detect different types of distribution differences. Comprehensive testing ensures robust quality assessment
-- **Implementation**: Scientific libraries with FDR correction and bootstrap validation
+### Anomaly Detection Algorithm
+The histogram-based anomaly detection system works as follows:
 
-#### **8. Validation Output Philosophy**
-- **Requirement**: Return raw validation results without composite scores or pass/fail labels
-- **Rationale**: Different tests are not directly comparable; raw outputs enable expert interpretation and reporting
-- **Implementation**: Full-dataset tests with p-values, effect sizes, and summaries (no mixed p-values, no overall score)
+1. **Grid Creation**: Creates histogram-based grid cells for X and Y dimensions separately using `np.histogram`
+2. **Proportion Calculation**: For each cell, calculates `cell_proportion = real_count / total_count`
+3. **Global Baseline**: Calculates `global_proportion = total_real / (total_real + total_synthetic)`
+4. **Statistical Testing**: Performs binomial proportion tests for each cell:
+   - **Test A**: `binomtest(real_count, total_cell, p=global_proportion, alternative='greater')`
+   - **Test B**: `binomtest(real_count, total_cell, p=global_proportion, alternative='less')`
+5. **FDR Correction**: Applies Benjamini-Hochberg correction separately to positive and negative tests
+6. **Coloring**: Colors significant cells red (real overpopulation) or blue (synthetic overpopulation)
 
-#### **9. Anomaly Detection**
-- **Requirement**: Grid-based ratio analysis for detecting synthetic data anomalies
-- **Rationale**: Synthetic data can have subtle quality issues that require specialized detection methods
-- **Implementation**: Cell-based analysis with visual overlay and CSV export
+### Key Advantages
+- **Statistically rigorous**: Uses proper binomial tests for proportion comparison
+- **Intuitive interpretation**: Direct proportion comparison without complex transformations
+- **Multiple testing correction**: FDR correction controls for false discoveries
+- **Flexible grid sizing**: Histogram-based approach adapts to data distribution
 
-### **Performance & Scalability Requirements**
+## 🛠️ Installation
 
-#### **10. GPU Acceleration**
-- **Requirement**: Optional GPU support for 2-10x performance improvement
-- **Rationale**: Large datasets require significant computational resources. GPU acceleration enables practical analysis times
-- **Implementation**: CuPy integration with automatic fallback to CPU
+### Prerequisites
+- Python 3.8+
+- Node.js 16+
+- CUDA-compatible GPU (optional, for acceleration)
 
-#### **11. Background Processing**
-- **Requirement**: Non-blocking computation with progress tracking
-- **Rationale**: Long-running analyses should not block the user interface
-- **Implementation**: Task queue with real-time progress updates
-
-#### **12. Memory Management**
-- **Requirement**: Efficient handling of large datasets without memory overflow
-- **Rationale**: Production environments have memory constraints that must be respected
-- **Implementation**: Streaming processing and intelligent sampling
-
-### **User Experience Requirements**
-
-#### **13. Intuitive Workflow**
-- **Requirement**: Step-by-step guided process from upload to results
-- **Rationale**: Complex analysis tools must be accessible to users with varying technical expertise
-- **Implementation**: Progressive disclosure with clear status indicators
-
-#### **14. Export Capabilities**
-- **Requirement**: Multiple format support for sharing results
-- **Rationale**: Users need to integrate results into their existing workflows
-- **Implementation**: PDF reports, CSV exports, and model downloads
-
-#### **15. Error Handling**
-- **Requirement**: Graceful error handling with helpful messages
-- **Rationale**: Users need clear guidance when things go wrong
-- **Implementation**: Comprehensive error catching with actionable suggestions
-
-### **Production Requirements**
-
-#### **16. Security**
-- **Requirement**: Secure file handling and API endpoints
-- **Rationale**: Production environments handle sensitive data that must be protected
-- **Implementation**: Input validation, secure file uploads, and API authentication
-
-#### **17. Monitoring & Observability**
-- **Requirement**: Real-time performance monitoring and logging
-- **Rationale**: Production systems need visibility into performance and issues
-- **Implementation**: GPU monitoring, API metrics, and comprehensive logging
-
-#### **18. Containerization**
-- **Requirement**: Docker support for easy deployment
-- **Rationale**: Production deployments require consistent, reproducible environments
-- **Implementation**: Multi-stage Docker builds with GPU support
-
----
-
-## 🚀 Quick Start
-
-### 1. Prerequisites
-- **Python 3.10+**
-- **Node.js 18+**
-- **Conda** (recommended) or pip
-- **NVIDIA GPU** (optional, for GPU acceleration)
-
-### 2. Environment Setup
+### Backend Setup
 ```bash
-# Create a .env file with your configuration
-# Copy the example below and create a .env file:
+# Clone the repository
+git clone <repository-url>
+cd Scalable-Visualization-and-Explainability-of-Synthetic-Datasets
 
-# Environment
-ENVIRONMENT=development
-DEBUG=true
-
-# Database Configuration
-DATABASE_URL=sqlite:///mavis_dev.db
-DATABASE_POOL_SIZE=20
-DATABASE_ECHO=false
-
-# API Configuration
-API_V1_PREFIX=/api/v1
-CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
-MAX_REQUEST_SIZE=52428800
-REQUEST_TIMEOUT=300
-
-# Security
-SECRET_KEY=dev-secret-key-change-in-production
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# Performance & Caching
-ENABLE_CACHING=true
-CACHE_TTL_SECONDS=3600
-MAX_WORKERS=4
-
-# AI/Claude Configuration
-ANTHROPIC_API_KEY=sk-ant-api03-your-actual-api-key-here
-ENABLE_AI_ANALYSIS=true
-CLAUDE_MODEL=claude-3-5-sonnet-20241022
-AI_ANALYSIS_TIMEOUT=60
-
-# Embedding Configuration
-MAX_DATA_POINTS=999999999
-EMBEDDING_TIMEOUT=240
-ENABLE_GPU=false
-
-# Node Environment (for frontend)
-NODE_ENV=development
-```
-
-**⚠️ Security Note**: Never commit your `.env` file to version control. It's already in `.gitignore`.
-
-### 3. Backend Setup
-```bash
-# Create and activate conda environment
+# Create conda environment
 conda env create -f environment.yml
 conda activate mavis
 
-# Install dependencies
-pip install -r requirements.txt
+# Setup database
+python setup_database.py
 
-# Initialize database
-python backend/setup_database.py
-
-# Start backend server
-python backend/main.py
+# Start the backend server
+python main.py
 ```
 
-### 4. Frontend Setup
+### Frontend Setup
 ```bash
 cd frontend
+
+# Install dependencies
 npm install
+
+# Start the development server
 npm start
 ```
 
-### 5. Access the Application
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
+### Docker Setup
 
----
-
-## 🚀 GPU Acceleration
-
-MAVIS supports optional GPU acceleration for UMAP computations, significantly speeding up dimensionality reduction on large datasets.
-
-### GPU Features
-- **Automatic Detection**: GPU availability is automatically detected
-- **Fallback Support**: Gracefully falls back to CPU if GPU is unavailable
-- **Performance Boost**: 2-10x faster UMAP computations on supported hardware
-- **Memory Efficient**: Optimized for large datasets with GPU memory management
-- **Real-time Monitoring**: GPU usage and performance monitoring
-- **Docker Support**: Full GPU support in Docker containers
-
-### GPU Requirements
-- **NVIDIA GPU** with CUDA 11.x or higher
-- **CUDA Toolkit** installed on the system
-- **CuPy** library for GPU array operations
-- **NVIDIA Container Runtime** (for Docker GPU support)
-
-### Using GPU Acceleration
-
-#### Local Installation
-1. **Install GPU environment:**
-   ```bash
-   conda env create -f environment-gpu.yml
-   conda activate mavis-gpu
-   ```
-
-2. **Enable GPU in API calls:**
-   ```json
-   {
-     "method": "umap",
-     "params": {
-       "use_gpu": true,
-       "n_neighbors": 15,
-       "min_dist": 0.1
-     }
-   }
-   ```
-
-3. **Monitor GPU usage:**
-   - GPU utilization is tracked in the API response metadata
-   - Access GPU monitoring endpoints: `/api/v1/gpu/status`, `/api/v1/gpu/usage`
-
-#### Docker GPU Support
-1. **Build GPU-enabled container:**
-   ```bash
-   ENV_FILE=environment-gpu.yml GPU_ENABLED=true docker build --build-arg ENV_FILE=environment-gpu.yml --build-arg GPU_ENABLED=true -t mavis:gpu .
-   ```
-
-2. **Run with GPU support:**
-   ```bash
-   GPU_RUNTIME=nvidia ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true docker compose up --build
-   ```
-
-3. **GPU monitoring in Docker:**
-   - Container includes GPU monitoring capabilities
-   - Access GPU endpoints from within container
-   - Real-time GPU usage tracking
-
-### GPU Monitoring Endpoints
-- `GET /api/v1/gpu/status` - Overall GPU status
-- `GET /api/v1/gpu/info` - Detailed GPU information
-- `GET /api/v1/gpu/usage` - GPU usage summary
-- `GET /api/v1/gpu/availability` - GPU availability check
-
----
-
-## 🐳 Docker Deployment
-
-### CPU-only Deployment
+#### CPU Development
 ```bash
 # Build and run CPU version
 docker compose up --build
+
+# Access the application
+# Frontend: http://localhost:80 (via nginx)
+# Backend API: http://localhost:8000
+# API Docs: http://localhost:8000/docs
 ```
 
-### GPU-enabled Deployment
+#### GPU Development
 ```bash
 # Build and run GPU version
-ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true docker compose up --build
+ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true CONDA_ENV_NAME=mavis-gpu docker compose up --build
+
+# Or use GPU override file
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
 
-### Production Deployment
+#### Production Deployment
 ```bash
-# Run with nginx reverse proxy
+# Production with nginx
 docker compose --profile production up --build
+
+# GPU production
+ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true CONDA_ENV_NAME=mavis-gpu docker compose --profile production up --build
 ```
 
-### Docker Features
-- **Multi-stage builds** for optimized image size
-- **GPU runtime support** with NVIDIA Container Runtime
-- **Health checks** for container monitoring
-- **Volume mounting** for persistent data
-- **Environment variable** configuration
-- **Production-ready** with nginx reverse proxy
+**📖 [Complete Docker Documentation](docs/docs/development/docker.md)**
 
----
+## 📖 Usage
 
-## 📊 Key Features
+### 1. Data Upload
+- Navigate to the upload section
+- Select your CSV file containing both real and synthetic data
+- Ensure your data has a label column indicating "Real" vs "Synthetic"
 
-### Interactive Data Upload
-- Multi-format support: CSV, Excel, and JSON files
-- Real-time validation: Instant feedback on data quality
-- Large dataset handling: Efficient processing of 1M+ samples (hardware dependent)
-- Smart preprocessing: Automatic data type detection and cleaning
+### 2. Embedding Generation
+- Choose between UMAP or t-SNE
+- Configure parameters (n_neighbors, min_dist, perplexity, etc.)
+- Start the embedding process
+- Monitor progress in real-time
 
-### Advanced Visualizations
-- Interactive scatter plots: Zoom, pan, and select data points
-- Distribution comparisons: Side-by-side real vs synthetic analysis
-- Statistical overlays: Mean, median, confidence intervals
-- Color-coded analysis: Distinguish real and synthetic data points
+### 3. Visualization
+- Explore the 2D embedding interactively
+- Use point selection tools to filter data
+- Generate distribution plots for selected points
+- Export visualizations in various formats
 
-### Statistical Analysis
-- Kolmogorov-Smirnov tests: Formal distribution similarity testing
-- Chi-square analysis: Categorical variable comparison
-- Correlation analysis: Preserve multivariate relationships
-- Raw outputs only: No overall scores; intended for expert interpretation
+### 4. Anomaly Detection
+- Click "Detect Anomalies" to run histogram-based detection
+- Configure grid parameters (x_bins, y_bins, fdr_alpha)
+- View significant cells colored red (real overpopulation) or blue (synthetic overpopulation)
+- Export detailed CSV reports with statistical results
 
-### Data Validation & Quality Assessment
-- Comprehensive validation: Professional backend implementation with scientific libraries
-- Statistical tests: KS test, Chi-square, Welch's t-test, Energy test, Total variation distance
-- Output: Raw results only (no EXCELLENT/GOOD/FAIR/POOR scoring)
-- Recommendations: Interpreted via AI analysis or expert review
+### 5. Analysis & Reports
+- Generate AI-powered analysis reports
+- Export validation results
+- Download comprehensive CSV reports
+- View performance metrics
 
-### Anomaly Detection
-- Grid-based analysis: Divide data space into cells for density analysis
-- Ratio-based detection: Compare real-to-synthetic ratios in each cell
-- Strict backend bins: Frontend uses exact x_bins/y_bins and bounds from backend
-- CSV guarantees: Global Probability, Global Logit, Logit Std Dev always included (no threshold parameter in CSV)
+## 🔧 Configuration
 
-### Performance Monitoring & Job Management
-- Real-time dashboard: API performance and memory usage
-- Background processing: Non-blocking computation with progress tracking
-- Job history: Filter, search, and manage completed analyses
-- Export results: Multiple format support for sharing
-- GPU monitoring: Real-time GPU usage and performance tracking
+### Backend Configuration
+```python
+# config.py
+API_V1_PREFIX = "/api/v1"
+DEBUG = True
+DATABASE_URL = "sqlite:///./mavis.db"
+```
 
-### Pretrained Model Support
-- Model history: Access previously trained UMAP/t-SNE models
-- Fast path: Reuse saved ColumnTransformer for preprocessing to speed up runs
-- Dataset-aware naming: Human-readable names (e.g., "Dataset: Insurance") in history and tooltips
-- Job management: Track and manage model training jobs
-
----
-
-## 🏗️ Architecture Overview
-
-### System Architecture
-- **Frontend**: React + Material-UI + D3.js
-- **Backend**: FastAPI + UMAP/t-SNE + Scientific Libraries
-- **Database**: SQLite
-- **Deployment**: Docker + nginx
-- **GPU Support**: CUDA + CuPy + NVIDIA Container Runtime
-
-### Performance Benchmarks
-
-| Speed (Blue)           | Scalability (Blue)      | Accuracy (Blue)           |
-|------------------------|-------------------------|---------------------------|
-| 100k samples: <30s     | Scalable to millions of samples (hardware dependent) | Statistical tests: 95%+   |
-| Real-time updates: <100ms | Memory efficient      | Quality assessment: comprehensive |
-| 60fps visualizations   | Background processing   | High-resolution outputs    |
-| GPU acceleration: 2-10x faster | GPU memory management | GPU monitoring: real-time |
-
----
-
-## 🛠️ Technical Stack
-
-### Backend
-- **FastAPI**: Modern, fast web framework
-- **UMAP/t-SNE**: Dimensionality reduction algorithms
-- **Scientific Libraries**: NumPy, Pandas, SciPy, scikit-learn
-- **GPU Support**: CuPy, NVIDIA CUDA Toolkit
-- **Database**: SQLAlchemy with SQLite
-- **Task Queue**: Background job processing
-- **AI Integration**: Anthropic Claude API
-
-### Frontend
-- **React**: Modern JavaScript framework
-- **Material-UI**: Component library
-- **D3.js**: Data visualization
-- **Axios**: HTTP client
-- **React Router**: Navigation
-
-### DevOps
-- **Docker**: Containerization
-- **Docker Compose**: Multi-container orchestration
-- **Nginx**: Reverse proxy (production)
-- **GitHub Actions**: CI/CD pipeline
-
----
+### Frontend Configuration
+```javascript
+// .env
+REACT_APP_API_URL=http://localhost:8000/api/v1
+REACT_APP_DEBUG=1
+```
 
 ## 📁 Project Structure
 
 ```
 Scalable-Visualization-and-Explainability-of-Synthetic-Datasets/
-├── backend/                    # FastAPI backend
-│   ├── routes/                # API endpoints
-│   ├── services/              # Business logic
-│   ├── models/                # Database models
-│   ├── utils/                 # Utilities
-│   └── tests/                 # Backend tests
-├── frontend/                  # React frontend
+├── backend/                    # FastAPI backend application
+│   ├── routes/                # API endpoints and request handlers
+│   │   ├── embed.py           # Embedding generation endpoints
+│   │   ├── anomaly_detection.py # Anomaly detection API
+│   │   ├── validation.py      # Data validation endpoints
+│   │   ├── history.py         # Job history management
+│   │   ├── ai_analysis.py     # AI-powered analysis
+│   │   ├── gpu.py             # GPU monitoring endpoints
+│   │   ├── distribution.py    # Distribution analysis
+│   │   └── queue.py           # Task queue management
+│   ├── services/              # Business logic and core services
+│   │   ├── embedding.py       # UMAP/t-SNE implementation
+│   │   ├── anomaly_detection_service.py # Anomaly detection logic
+│   │   ├── validation_service.py # Statistical validation
+│   │   ├── job_service.py     # Job management and storage
+│   │   ├── ai_analysis_service.py # AI integration
+│   │   ├── gpu_monitoring.py  # GPU performance monitoring
+│   │   ├── task_queue.py      # Background task processing
+│   │   └── compression_service.py # Data compression utilities
+│   ├── database/              # Database models and connection
+│   ├── utils/                 # Utility functions and helpers
+│   ├── tests/                 # Backend test suite
+│   ├── config.py              # Application configuration
+│   └── main.py                # FastAPI application entry point
+├── frontend/                  # React frontend application
 │   ├── src/                   # Source code
+│   │   ├── components/        # React components
+│   │   ├── services/          # API service functions
+│   │   ├── hooks/             # Custom React hooks
+│   │   ├── contexts/          # React contexts
+│   │   └── utils/             # Frontend utilities
 │   ├── public/                # Static assets
-│   └── tests/                 # Frontend tests
+│   └── package.json           # Node.js dependencies
 ├── docs/                      # Documentation
-├── data/                      # Sample datasets
+│   └── docs/                  # MkDocs documentation site
+├── data/                      # Sample datasets and data files
+├── notebooks/                 # Jupyter notebooks for analysis
+├── figures/                   # Generated figures and plots
+├── reports/                   # Generated reports
+├── logs/                      # Application logs
 ├── environment.yml            # CPU conda environment
 ├── environment-gpu.yml        # GPU-enabled conda environment
 ├── Dockerfile                 # Multi-stage Docker build
 ├── docker-compose.yml         # Container orchestration
-└── README.md                  # This file
+├── docker-compose.gpu.yml     # GPU Docker configuration
+├── nginx.conf                 # Nginx reverse proxy configuration
+├── setup_database.py          # Database initialization script
+├── run_tests.py               # Test runner script
+└── README.md                  # Project documentation
 ```
 
----
+## 📊 API Endpoints
+
+### Embedding Generation
+- `POST /api/v1/embed/generate` - Generate new embeddings
+- `POST /api/v1/embed/generate-with-pretrained` - Use pretrained models
+- `GET /api/v1/embed/available-models` - List available models
+
+### Anomaly Detection
+- `POST /api/v1/anomaly/detect-anomalies` - Detect anomalies with direct data
+- `POST /api/v1/anomaly/detect-anomalies-from-job` - Detect anomalies from job data
+- `POST /api/v1/anomaly/generate-anomaly-csv` - Generate CSV reports
+- `POST /api/v1/anomaly/generate-anomaly-csv-from-job` - Generate CSV from job data
+
+### Job Management
+- `GET /api/v1/history/jobs` - List all jobs
+- `GET /api/v1/history/job/{job_id}` - Get specific job details
+- `DELETE /api/v1/history/job/{job_id}` - Delete job
+
+### Performance Monitoring
+- `GET /api/v1/gpu/status` - Get GPU status
+- `GET /api/v1/gpu/memory` - Get memory usage
+
+## 🧪 Testing
+
+### Backend Tests
+```bash
+cd backend
+conda activate mavis
+python -m pytest tests/ -v
+```
+
+### Frontend Tests
+```bash
+cd frontend
+npm test
+```
+
+### Integration Tests
+```bash
+# Run full test suite
+python run_tests.py
+```
+
+## 📈 Performance
+
+### Optimization Features
+- **Asynchronous processing** with background tasks
+- **GPU acceleration** for UMAP/t-SNE computations
+- **Model persistence** for faster repeated runs
+- **Memory-efficient** data handling
+- **Real-time monitoring** of system resources
+
+### Scalability
+- **Horizontal scaling** support via Docker
+- **Database optimization** for large datasets
+- **Caching mechanisms** for improved performance
+- **Resource management** for concurrent users
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
----
+### Development Guidelines
+- Follow PEP 8 for Python code
+- Use ESLint for JavaScript code
+- Write comprehensive tests
+- Update documentation for new features
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
-
 ## 🙏 Acknowledgments
 
-- **UMAP**: For the dimensionality reduction algorithm
-- **FastAPI**: For the modern web framework
-- **React**: For the frontend framework
-- **Anthropic**: For the AI analysis capabilities
+- **UMAP**: McInnes, L., Healy, J., & Melville, J. (2018). UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction.
+- **t-SNE**: van der Maaten, L., & Hinton, G. (2008). Visualizing Data using t-SNE.
+- **D3.js**: Bostock, M., Ogievetsky, V., & Heer, J. (2011). D³: Data-Driven Documents.
+- **FastAPI**: Ramírez, S. (2018). FastAPI: Modern, Fast Web Framework for Building APIs.
+
+## 📞 Support
+
+For support and questions:
+- Create an issue on GitHub
+- Check the documentation in the `docs/` folder
+- Review the API reference in `docs/docs/technical/api-reference.md`
+
+## 🔄 Changelog
+
+### Version 2.0.0
+- **Major Update**: Implemented histogram-based binomial proportion test anomaly detection
+- **Improved**: Direct proportion comparison without complex transformations
+- **Enhanced**: More intuitive statistical interpretation
+- **Added**: Comprehensive FDR correction for multiple testing
+- **Updated**: All documentation and API endpoints
+
+### Version 1.0.0
+- Initial release with UMAP/t-SNE support
+- Basic anomaly detection capabilities
+- Interactive visualization features
+- Job management system
 

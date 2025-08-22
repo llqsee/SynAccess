@@ -1,6 +1,8 @@
 """
-GPU API routes for MAVIS
-Provides endpoints for GPU status, monitoring, and performance metrics.
+GPU monitoring and status endpoints.
+
+These routes let you check GPU availability, get performance info,
+and monitor system resources for acceleration.
 """
 
 from fastapi import APIRouter, HTTPException

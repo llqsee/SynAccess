@@ -1,5 +1,8 @@
 """
-Dataset fingerprinting utilities for model identification.
+Dataset fingerprinting utilities for identifying models.
+
+These functions create unique identifiers for your datasets
+and generate helpful descriptions for tracking your work.
 """
 
 import hashlib
@@ -17,16 +20,19 @@ def generate_dataset_fingerprint(
     synthetic_headers: List[str] = None
 ) -> str:
     """
-    Generate a unique fingerprint for a dataset based on its characteristics.
+    Create a unique identifier for your dataset.
+    
+    This generates a short code that helps identify your specific
+    dataset combination for model tracking and reuse.
     
     Args:
-        real_data: Real dataset
-        synthetic_data: Synthetic dataset  
-        real_headers: Column headers for real data
-        synthetic_headers: Column headers for synthetic data
+        real_data: Your real dataset
+        synthetic_data: Your synthetic dataset  
+        real_headers: Column names for real data
+        synthetic_headers: Column names for synthetic data
         
     Returns:
-        str: Unique 8-character dataset fingerprint
+        A short unique code for your dataset
     """
     # Convert to DataFrames for analysis
     real_df = _to_dataframe(real_data, real_headers)

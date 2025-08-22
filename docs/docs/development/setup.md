@@ -16,11 +16,8 @@ Guide for setting up the MAVIS development environment.
 conda env create -f environment.yml
 conda activate mavis
 
-# Install dependencies
-cd backend
-pip install -r requirements.txt
-
 # Run development server
+cd backend
 python main.py
 ```
 

@@ -1,5 +1,8 @@
 /**
- * Lightweight logger without external dependencies
+ * Simple logging utility for the frontend
+ * 
+ * This provides consistent logging across the app without
+ * needing external dependencies.
  */
 
 const isDevelopment = process.env.NODE_ENV === 'development';

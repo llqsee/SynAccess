@@ -28,7 +28,7 @@ export const useEmbedding = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Enhanced async processing state
+  // Background job tracking
   const [processingStatus, setProcessingStatus] = useState(null);
   const [currentJobId, setCurrentJobId] = useState(null);
   const [currentTaskId, setCurrentTaskId] = useState(null);
@@ -37,11 +37,11 @@ export const useEmbedding = () => {
   const [estimatedWaitTime, setEstimatedWaitTime] = useState(null);
   const [canCancel, setCanCancel] = useState(false);
   
-  // Store original data for fresh embeddings (for distribution plots)
+  // Keep original data around for distribution plots
   const [originalRealData, setOriginalRealData] = useState(null);
   const [originalSyntheticData, setOriginalSyntheticData] = useState(null);
   
-  // Refs for polling management
+  // Handle polling and cancellation
   const pollingIntervalRef = useRef(null);
   const abortControllerRef = useRef(null);
 

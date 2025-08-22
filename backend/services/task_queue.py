@@ -470,6 +470,11 @@ class TaskQueueManager:
     def _publish_status_update(self, progress: TaskProgress):
         """Publish status update to subscribers."""
         try:
+            # Check if status publisher is available
+            if self.status_pub is None:
+                self.logger.warning("Status publisher not available, skipping status update")
+                return
+                
             update_data = {
                 "type": "status_update",
                 "task_id": progress.task_id,

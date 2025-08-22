@@ -1,20 +1,20 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
-import { Box, Typography, Paper, Chip, IconButton, Tooltip, Divider, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
-import { Clear, SelectAll, BarChart, CropFree, UnfoldLess, Warning, Download, Help, GridOn, BugReport } from '@mui/icons-material';
+import { Box, Typography, Paper, Chip, IconButton, Tooltip, Divider, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
+import { Clear, BarChart, CropFree, UnfoldLess, Warning, Download, Help, SelectAll } from '@mui/icons-material';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
 import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
 import anomalyDetectionService from '../services/anomalyDetectionService';
-import logger from '../utils/logger';
+// import logger from '../utils/logger';
 
 // Debug logging helper gated by env var
-const dbg = (...args) => {
-  if (process.env.REACT_APP_DEBUG === '1') {
-    // eslint-disable-next-line no-console
-    console.log(...args);
-  }
-};
+// const dbg = (...args) => {
+//   if (process.env.REACT_APP_DEBUG === '1') {
+//     // eslint-disable-next-line no-console
+//     console.log(...args);
+//   }
+// };
 
 const EmbeddingPlot = ({ 
   data, 
@@ -38,8 +38,9 @@ const EmbeddingPlot = ({
   const [anomalyLoading, setAnomalyLoading] = useState(false);
   const [anomalyError, setAnomalyError] = useState(null);
   const [showAnomalies, setShowAnomalies] = useState(false);
-  const [showGrid, setShowGrid] = useState(true); // Show grid cells by default
-  const [contamination, setContamination] = useState('auto');
+  // const [showGrid, setShowGrid] = useState(true); // Show grid cells by default
+  // const [contamination, setContamination] = useState('auto');
+  const [showHelpDialog, setShowHelpDialog] = useState(false);
   
   // Interactive filtering state
   // const [showSyntheticNormal, setShowSyntheticNormal] = useState(true);
@@ -48,63 +49,62 @@ const EmbeddingPlot = ({
   // const [showRealAnomalies, setShowRealAnomalies] = useState(true);
   
   // Helper functions for filter controls - Fixed null reference issues
-  const showAllData = useCallback(() => {
-    // setShowRealNormal(true);
-    // setShowRealAnomalies(true);
-    // setShowSyntheticNormal(true);
-    // setShowSyntheticAnomalies(true);
-  }, []);
+  // const showAllData = useCallback(() => {
+  //   // setShowRealNormal(true);
+  //   // setShowRealAnomalies(true);
+  //   // setShowSyntheticNormal(true);
+  //   // setShowSyntheticAnomalies(true);
+  // }, []);
   
-  const hideAllData = useCallback(() => {
-    // setShowRealNormal(false);
-    // setShowRealAnomalies(false);
-    // setShowSyntheticNormal(false);
-    // setShowSyntheticAnomalies(false);
-  }, []);
+  // const hideAllData = useCallback(() => {
+  //   // setShowRealNormal(false);
+  //   // setShowRealAnomalies(false);
+  //   // setShowSyntheticNormal(false);
+  //   // setShowSyntheticAnomalies(false);
+  // }, []);
   
-  const showOnlyAnomalies = useCallback(() => {
-    // setShowRealNormal(false);
-    // setShowRealAnomalies(true);
-    // setShowSyntheticNormal(false);
-    // setShowSyntheticAnomalies(true);
-  }, []);
+  // const showOnlyAnomalies = useCallback(() => {
+  //   // setShowRealNormal(false);
+  //   // setShowRealAnomalies(true);
+  //   // setShowSyntheticNormal(false);
+  //   // setShowSyntheticAnomalies(true);
+  // }, []);
   
-  // Helper function to interpret z-score for tooltips
-  const getZScoreInterpretation = useCallback((zScore) => {
-    if (zScore === null || zScore === undefined) return "N/A";
-    if (typeof zScore === 'string') {
-      if (zScore === 'Infinity' || zScore === '-Infinity') return "Extreme anomaly";
-      if (zScore === 'NaN') return "N/A";
+  // Helper function to interpret p-value for tooltips
+  const getPValueInterpretation = useCallback((pValue) => {
+    if (pValue === null || pValue === undefined) return "N/A";
+    if (typeof pValue === 'string') {
+      if (pValue === 'Infinity' || pValue === '-Infinity') return "Extreme significance";
+      if (pValue === 'NaN') return "N/A";
       return "Unknown";
     }
-    if (isNaN(zScore)) return "N/A";
-    const absZ = Math.abs(zScore);
-    if (absZ < 1) return "Normal";
-    if (absZ < 2) return "Moderate anomaly";
-    if (absZ < 3) return "Strong anomaly";
-    return "Very strong anomaly";
+    if (isNaN(pValue)) return "N/A";
+    if (pValue < 0.001) return "Highly significant";
+    if (pValue < 0.01) return "Very significant";
+    if (pValue < 0.05) return "Significant";
+    return "Not significant";
   }, []);
   
-  // Helper function to get z-score color for tooltips
-  const getZScoreColor = useCallback((zScore) => {
-    if (zScore === null || zScore === undefined) return "#666666"; // Gray
-    if (typeof zScore === 'string') {
-      if (zScore === 'Infinity' || zScore === '-Infinity') return "#8B0000"; // Dark Red for extreme
-      if (zScore === 'NaN') return "#666666"; // Gray
-      return "#666666"; // Gray for unknown strings
-    }
-    if (isNaN(zScore)) return "#666666"; // Gray
-    const absZ = Math.abs(zScore);
-    if (absZ < 1) return "#666666"; // Gray
-    if (absZ < 2) return "#FFD700"; // Golden Yellow
-    return "#8B0000"; // Dark Red
-  }, []);
+  // Helper function to get p-value color for tooltips
+  // const getPValueColor = useCallback((pValue) => {
+  //   if (pValue === null || pValue === undefined) return "#666666"; // Gray
+  //   if (typeof pValue === 'string') {
+  //     if (pValue === 'Infinity' || pValue === '-Infinity') return "#8B0000"; // Dark Red for extreme
+  //     if (pValue === 'NaN') return "#666666"; // Gray
+  //     return "#666666"; // Gray for unknown strings
+  //   }
+  //   if (isNaN(pValue)) return "#666666"; // Gray
+  //   if (pValue < 0.001) return "#8B0000"; // Dark Red
+  //   if (pValue < 0.01) return "#FF4500"; // Orange Red
+  //   if (pValue < 0.05) return "#FFD700"; // Golden Yellow
+  //   return "#666666"; // Gray
+  // }, []);
   
   // Helper function to create detailed tooltip content
   const createAnomalyTooltip = useCallback((cellData, i, j) => {
-    const zScore = cellData?.z_score;
-    const interpretation = getZScoreInterpretation(zScore);
-    const zScoreColor = getZScoreColor(zScore);
+    const pValue = cellData?.p_value_adjusted;
+    const interpretation = getPValueInterpretation(pValue);
+    // const pValueColor = getPValueColor(pValue);
     
     // Safe formatting function for numbers that might be strings like "Infinity"
     const formatNumber = (value, decimals = 3) => {
@@ -121,13 +121,13 @@ const EmbeddingPlot = ({
       return 'N/A';
     };
     
-    const anomalyTypeText = cellData?.anomaly_type === 'real_overrepresentation' 
-      ? '🔵 Real Overrepresentation' 
-      : '🔴 Synthetic Overrepresentation';
+    const testTypeText = cellData?.test_type === 'real_overpopulation' 
+      ? '🔴 Real Overpopulation' 
+      : '🔵 Synthetic Overpopulation';
     
-    const anomalyDescription = cellData?.anomaly_type === 'real_overrepresentation' 
-      ? 'This region has more real data than expected'
-      : 'This region has more synthetic data than expected';
+    const testDescription = cellData?.test_type === 'real_overpopulation' 
+      ? 'This region has significantly more real data than expected'
+      : 'This region has significantly more synthetic data than expected';
     
     return `🔍 Anomalous Region (${i}, ${j})
 
@@ -135,18 +135,22 @@ const EmbeddingPlot = ({
    • Real Points: ${cellData?.real_count || 0}
    • Synthetic Points: ${cellData?.synthetic_count || 0}
    • Total Points: ${cellData?.total_count || 0}
-   • Real Ratio: ${formatNumber(cellData?.p_cell)}
+   • Cell Proportion: ${formatNumber(cellData?.cell_proportion)}
+   • Global Proportion: ${formatNumber(cellData?.global_proportion)}
 
 📈 Statistical Analysis:
-   • Logit Value: ${formatNumber(cellData?.logit_value)}
-   • Z-Score: ${formatNumber(zScore)}
+   • Proportion Difference: ${formatNumber(cellData?.proportion_diff)}
+   • P-Value: ${formatNumber(cellData?.p_value)}
+   • Adjusted P-Value: ${formatNumber(pValue)}
    • Interpretation: ${interpretation}
-   • Severity: ${cellData?.severity || 'unknown'}
+   • Significant: ${cellData?.is_significant ? 'Yes' : 'No'}
 
 🎯 Anomaly Type:
-   • ${anomalyTypeText}
-   • ${anomalyDescription}`;
-  }, [getZScoreInterpretation, getZScoreColor]);
+   • ${testTypeText}
+   • ${testDescription}
+
+💡 Click to view distribution plot of data in this region`;
+  }, [getPValueInterpretation]);
   
   // Get original data for histogram generation
   const getOriginalData = useCallback(() => {
@@ -1354,7 +1358,7 @@ const EmbeddingPlot = ({
     }, 50);
 
     return () => clearTimeout(renderTimeout);
-  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed, showAnomalies, anomalyResults, showGrid, getOriginalData, calculatePlotDimensions]);
+  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed, showAnomalies, anomalyResults, getOriginalData, calculatePlotDimensions]);
 
   // Separate function for the actual D3 plot rendering logic
   const renderD3Plot = useCallback(() => {
@@ -1689,11 +1693,13 @@ const EmbeddingPlot = ({
         anomalousCells.add(`${anomaly.cell_x},${anomaly.cell_y}`);
       });
       
-      // Get grid info from results
-      const gridSize = anomalyResults.grid_info?.grid_size || 20;
+      // Get grid info from results - now supports different X and Y grid sizes
+      const xGridSize = anomalyResults.grid_info?.x_grid_size || 20;
+      const yGridSize = anomalyResults.grid_info?.y_grid_size || 20;
+      const gridSize = anomalyResults.grid_info?.grid_size || Math.min(xGridSize, yGridSize); // Backward compatibility
       const bounds = anomalyResults.grid_info?.bounds;
       
-      console.log('🔵 Grid size:', gridSize);
+      console.log('🔵 Grid sizes - X:', xGridSize, 'Y:', yGridSize, 'Legacy:', gridSize);
       console.log('🔵 Bounds:', bounds);
       console.log('🔵 Grid info full:', anomalyResults.grid_info);
       console.log('🔵 Anomalous cells:', Array.from(anomalousCells));
@@ -1723,12 +1729,12 @@ const EmbeddingPlot = ({
                          anomalyResults.grid_info.y_bins &&
                          Array.isArray(anomalyResults.grid_info.x_bins) &&
                          Array.isArray(anomalyResults.grid_info.y_bins) &&
-                         anomalyResults.grid_info.x_bins.length === gridSize + 1 &&
-                         anomalyResults.grid_info.y_bins.length === gridSize + 1;
+                         anomalyResults.grid_info.x_bins.length === xGridSize + 1 &&
+                         anomalyResults.grid_info.y_bins.length === yGridSize + 1;
       
       if (!hasExactBins) {
         console.error('❌ CRITICAL: Backend bin edges missing or invalid - cannot render grid');
-        console.error('Expected bin arrays of length', gridSize + 1, 'but got:', {
+        console.error('Expected bin arrays of length X:', xGridSize + 1, 'Y:', yGridSize + 1, 'but got:', {
           x_bins_length: anomalyResults.grid_info?.x_bins?.length,
           y_bins_length: anomalyResults.grid_info?.y_bins?.length,
           grid_info: anomalyResults.grid_info
@@ -1780,8 +1786,8 @@ const EmbeddingPlot = ({
         let cellY = y_digitize_idx - 1;
         
         // Clamp to valid range (same as backend)
-        cellX = Math.max(0, Math.min(cellX, gridSize - 1));
-        cellY = Math.max(0, Math.min(cellY, gridSize - 1));
+        cellX = Math.max(0, Math.min(cellX, xGridSize - 1));
+        cellY = Math.max(0, Math.min(cellY, yGridSize - 1));
         
         console.log(`📍 Point ${idx} (${x.toFixed(3)}, ${y.toFixed(3)}) -> Cell[${cellX}][${cellY}]`);
         
@@ -1802,8 +1808,8 @@ const EmbeddingPlot = ({
 
         
         // First, draw all grid cells (including non-anomalous ones for context)
-        for (let i = 0; i < gridSize; i++) {
-          for (let j = 0; j < gridSize; j++) {
+        for (let i = 0; i < xGridSize; i++) {
+          for (let j = 0; j < yGridSize; j++) {
             const cellId = `${i},${j}`;
             const isAnomalous = anomalousCells.has(cellId);
             
@@ -1837,7 +1843,7 @@ const EmbeddingPlot = ({
             const rectHeight = Math.abs(screenY2 - screenY1);
             
             // Draw grid cell background (subtle for all cells) if grid is enabled
-            if (showGrid) {
+            if (true) {
               const cellRect = gridLayer.append("rect")
                 .attr("class", isAnomalous ? "anomaly-grid-cell" : "normal-grid-cell")
                 .attr("x", rectX)
@@ -1845,21 +1851,79 @@ const EmbeddingPlot = ({
                 .attr("width", rectWidth)
                 .attr("height", rectHeight)
                 .attr("fill", isAnomalous ? 
-                  (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.severity === 'high' ?
-                    "rgba(220, 38, 38, 0.2)" : "rgba(245, 158, 11, 0.15)") : // More transparent for anomalous cells so points show through
+                  (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.test_type === 'real_overpopulation' ?
+                    "rgba(220, 38, 38, 0.2)" : "rgba(59, 130, 246, 0.2)") : // Red for real overpopulation, blue for synthetic overpopulation
                   "rgba(100, 100, 100, 0.01)") // Very subtle fill for normal cells
                 .attr("stroke", isAnomalous ? 
-                  (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.severity === 'high' ?
-                    "rgba(220, 38, 38, 0.9)" : "rgba(245, 158, 11, 0.8)") : // Strong borders for anomalous cells
+                  (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.test_type === 'real_overpopulation' ?
+                    "rgba(220, 38, 38, 0.9)" : "rgba(59, 130, 246, 0.9)") : // Red for real overpopulation, blue for synthetic overpopulation
                   "rgba(150, 150, 150, 0.3)") // More visible border for normal cells to see alignment
                 .attr("stroke-width", isAnomalous ? 2.5 : 0.5)
-                // Always disable pointer events on grid cells so point tooltips remain usable
-                .style("pointer-events", "none")
-                .style("cursor", "default");
+                // Enable pointer events only for anomalous cells to show tooltips
+                .style("pointer-events", isAnomalous ? "all" : "none")
+                .style("cursor", isAnomalous ? "pointer" : "default");
               
-              // Add tooltips to anomalous cells
-              // Disable hover interactions on grid cells to prefer point interactions
-              // (Remove anomaly cell tooltip handlers to avoid intercepting pointer events)
+              // Add tooltips and click handlers to anomalous cells
+              if (isAnomalous) {
+                const cellData = anomalyResults.cell_anomalies.find(
+                  anomaly => anomaly.cell_x === i && anomaly.cell_y === j
+                );
+                
+                if (cellData) {
+                  cellRect
+                    .on("mouseover", function(event) {
+                      const tooltipContent = createAnomalyTooltip(cellData, i, j);
+                      
+                      // Create tooltip
+                      const tooltip = d3.select("body")
+                        .append("div")
+                        .attr("class", "anomaly-cell-tooltip")
+                        .style("position", "absolute")
+                        .style("background", "rgba(0, 0, 0, 0.9)")
+                        .style("color", "white")
+                        .style("padding", "10px")
+                        .style("border-radius", "5px")
+                        .style("font-size", "12px")
+                        .style("font-family", "monospace")
+                        .style("white-space", "pre-line")
+                        .style("z-index", "1000")
+                        .style("pointer-events", "none")
+                        .style("max-width", "300px")
+                        .style("box-shadow", "0 2px 10px rgba(0,0,0,0.3)")
+                        .html(tooltipContent);
+                      
+                      // Position tooltip
+                      const tooltipWidth = tooltip.node().getBoundingClientRect().width;
+                      const tooltipHeight = tooltip.node().getBoundingClientRect().height;
+                      const mouseX = event.pageX;
+                      const mouseY = event.pageY;
+                      
+                      let tooltipX = mouseX + 10;
+                      let tooltipY = mouseY + 10;
+                      
+                      // Adjust if tooltip would go off screen
+                      if (tooltipX + tooltipWidth > window.innerWidth) {
+                        tooltipX = mouseX - tooltipWidth - 10;
+                      }
+                      if (tooltipY + tooltipHeight > window.innerHeight) {
+                        tooltipY = mouseY - tooltipHeight - 10;
+                      }
+                      
+                      tooltip
+                        .style("left", tooltipX + "px")
+                        .style("top", tooltipY + "px");
+                    })
+                    .on("mouseout", function() {
+                      d3.select("body").selectAll(".anomaly-cell-tooltip").remove();
+                    })
+                    .on("click", function() {
+                      // Remove tooltip on click
+                      d3.select("body").selectAll(".anomaly-cell-tooltip").remove();
+                      // Handle the click to generate distribution plot
+                      handleAnomalyCellClick(cellData, i, j);
+                    });
+                }
+              }
             }
             
             if (isAnomalous) {
@@ -2053,6 +2117,12 @@ const EmbeddingPlot = ({
             return;
           }
 
+          // Skip showing grid tooltip for anomalous cells since they have their own detailed tooltip
+          if (cellData.is_significant) {
+            tip.style('visibility', 'hidden');
+            return;
+          }
+
           const fmt = (v) => {
             if (v === null || v === undefined) return 'N/A';
             if (typeof v === 'number' && isFinite(v)) return v.toFixed(2);
@@ -2061,7 +2131,7 @@ const EmbeddingPlot = ({
             return String(v);
           };
 
-          const html = `Cell (${cellXIdx},${cellYIdx})<br/>Real: ${cellData.real_count || 0} • Synthetic: ${cellData.synthetic_count || 0}<br/>Z: ${fmt(cellData.z_score)} • ${cellData.anomaly_type === 'real_overrepresentation' ? 'Real heavy' : 'Synthetic heavy'}<br/>Severity: ${cellData.severity || 'unknown'}`;
+          const html = `Cell (${cellXIdx},${cellYIdx})<br/>Real: ${cellData.real_count || 0} • Synthetic: ${cellData.synthetic_count || 0}<br/>P-Value: ${fmt(cellData.p_value_adjusted)} • ${cellData.test_type === 'real_overpopulation' ? 'Real overpopulation' : 'Synthetic overpopulation'}<br/>Significant: ${cellData.is_significant ? 'Yes' : 'No'}`;
           tip.html(html)
             .style('left', (event.pageX + 12) + 'px')
             .style('top', (event.pageY + 12) + 'px')
@@ -2164,28 +2234,42 @@ const EmbeddingPlot = ({
         
         // Add grid-based anomaly information if available
         if (showAnomalies && anomalyResults && anomalyResults.cell_anomalies) {
-          // Find which grid cell this point belongs to
-          const bounds = anomalyResults.grid_info?.bounds;
-          const gridSize = anomalyResults.grid_info?.grid_size || 20;
+          // Find which grid cell this point belongs to using histogram bins
+          const xBins = anomalyResults.grid_info?.x_bins;
+          const yBins = anomalyResults.grid_info?.y_bins;
+          const xGridSize = anomalyResults.grid_info?.x_grid_size || 20;
+          const yGridSize = anomalyResults.grid_info?.y_grid_size || 20;
           
-          if (bounds) {
-            const cellWidth = (bounds.x_max - bounds.x_min) / gridSize;
-            const cellHeight = (bounds.y_max - bounds.y_min) / gridSize;
+          if (xBins && yBins) {
+            // Use np.digitize equivalent logic (same as backend)
+            let x_digitize_idx = 0;
+            for (let i = 0; i < xBins.length; i++) {
+              if (d[0] < xBins[i]) {
+                x_digitize_idx = i;
+                break;
+              }
+              x_digitize_idx = i + 1;
+            }
+            let y_digitize_idx = 0;
+            for (let j = 0; j < yBins.length; j++) {
+              if (d[1] < yBins[j]) {
+                y_digitize_idx = j;
+                break;
+              }
+              y_digitize_idx = j + 1;
+            }
             
-            const cellX = Math.floor((d[0] - bounds.x_min) / cellWidth);
-            const cellY = Math.floor((d[1] - bounds.y_min) / cellHeight);
-            
-            // Clamp to valid range
-            const clampedCellX = Math.max(0, Math.min(gridSize - 1, cellX));
-            const clampedCellY = Math.max(0, Math.min(gridSize - 1, cellY));
+            // Apply backend logic: subtract 1 and clamp
+            const cellX = Math.max(0, Math.min(x_digitize_idx - 1, xGridSize - 1));
+            const cellY = Math.max(0, Math.min(y_digitize_idx - 1, yGridSize - 1));
             
             // Find if this cell is anomalous
             const cellData = anomalyResults.cell_anomalies.find(
-              anomaly => anomaly.cell_x === clampedCellX && anomaly.cell_y === clampedCellY
+              anomaly => anomaly.cell_x === cellX && anomaly.cell_y === cellY
             );
             
             if (cellData) {
-              tooltipContent += `<br/><strong>Grid Cell (${clampedCellX}, ${clampedCellY})</strong><br/>`;
+              tooltipContent += `<br/><strong>Grid Cell (${cellX}, ${cellY})</strong><br/>`;
               tooltipContent += `Real Points: ${cellData.real_count}<br/>`;
               tooltipContent += `Synthetic Points: ${cellData.synthetic_count}<br/>`;
               tooltipContent += `Real Ratio: ${(cellData.real_ratio * 100).toFixed(1)}%<br/>`;
@@ -2675,7 +2759,7 @@ const EmbeddingPlot = ({
     }
 
 
-  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed, showAnomalies, anomalyResults, showGrid, getOriginalData, calculatePlotDimensions, sampleData]);
+  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed, showAnomalies, anomalyResults, getOriginalData, calculatePlotDimensions, sampleData]);
 
   // Add resize observer to handle container size changes when sidebar appears/disappears
   useEffect(() => {
@@ -2880,7 +2964,9 @@ const EmbeddingPlot = ({
       const results = await anomalyDetectionService.detectAnomalies(
         realData, 
         syntheticData, 
-        20
+        20, // x_bins
+        20, // y_bins
+        0.05 // fdr_alpha
       );
       console.log('🎉 Grid-based anomaly detection completed:', results);
       
@@ -2921,7 +3007,14 @@ const EmbeddingPlot = ({
   }, [data, metadata]);
 
   const downloadAnomalyCSV = useCallback(async () => {
+    console.log('🔽 Download button clicked');
+    console.log('Data available:', !!data);
+    console.log('Metadata available:', !!metadata);
+    console.log('Labels available:', !!(metadata && metadata.labels));
+    
     if (!data || !metadata || !metadata.labels) {
+      console.error('❌ Missing required data for CSV download');
+      alert('No anomaly detection data available. Please run anomaly detection first.');
       return;
     }
 
@@ -2931,12 +3024,18 @@ const EmbeddingPlot = ({
       console.log('🎯 Downloading CSV using preprocessed data from job:', jobId);
       
       try {
-        const csvResult = await anomalyDetectionService.generateAnomalyCSVFromJob(jobId, 20, 0.5, 0.2);
+        const csvResult = await anomalyDetectionService.generateAnomalyCSVFromJob(jobId, 20, 20, 0.05);
+        console.log('CSV result from job:', csvResult);
         if (csvResult.status === 'success') {
           anomalyDetectionService.downloadCSV(csvResult.csv_content, csvResult.filename);
+          console.log('✅ CSV downloaded successfully from job');
+        } else {
+          console.error('❌ CSV generation failed:', csvResult);
+          alert('Failed to generate CSV. Please try again.');
         }
       } catch (error) {
         console.error('Failed to download CSV from job:', error);
+        alert('Failed to download CSV. Please check the console for details.');
       }
       return;
     }
@@ -2948,6 +3047,7 @@ const EmbeddingPlot = ({
     const originalData = getOriginalData();
     if (!originalData) {
       console.error('❌ No preprocessed original data available for CSV download');
+      alert('No original data available for CSV download. Please try running anomaly detection again.');
       return;
     }
 
@@ -2981,21 +3081,31 @@ const EmbeddingPlot = ({
       }
     });
     
+    console.log('Real data points:', realData.length);
+    console.log('Synthetic data points:', syntheticData.length);
+    
     // Check if we have enough valid data
     if (realData.length === 0 || syntheticData.length === 0) {
       console.error('❌ No valid numeric data available for CSV download');
+      alert('No valid numeric data available for CSV download. Please check your data.');
       return;
     }
     
     try {
-      const csvResult = await anomalyDetectionService.generateAnomalyCSV(realData, syntheticData, 20, 0.5, 0.2);
+      const csvResult = await anomalyDetectionService.generateAnomalyCSV(realData, syntheticData, 20, 20, 0.05);
+      console.log('CSV result from frontend data:', csvResult);
       if (csvResult.status === 'success') {
         anomalyDetectionService.downloadCSV(csvResult.csv_content, csvResult.filename);
+        console.log('✅ CSV downloaded successfully from frontend data');
+      } else {
+        console.error('❌ CSV generation failed:', csvResult);
+        alert('Failed to generate CSV. Please try again.');
       }
     } catch (error) {
       console.error('Failed to download CSV:', error);
+      alert('Failed to download CSV. Please check the console for details.');
     }
-  }, [data, metadata, contamination, getOriginalData]);
+  }, [data, metadata, getOriginalData]);
 
   // Cleanup effect to cancel pending requests on unmount
   useEffect(() => {
@@ -3185,6 +3295,109 @@ const EmbeddingPlot = ({
       setSidebarWidth(restoredWidth);
     }
   }, [sidebarCollapsed, selectedPoints.length, plotData]);
+
+  // New function to handle clicking on anomalous regions
+  const handleAnomalyCellClick = useCallback(async (cellData, i, j) => {
+    console.log(`🎯 Anomaly cell clicked: (${i}, ${j})`, cellData);
+    
+    // Get the grid information to determine cell boundaries
+    if (!anomalyResults?.grid_info) {
+      console.error('No grid info available for cell click');
+      return;
+    }
+    
+    const gridInfo = anomalyResults.grid_info;
+    const cellX = gridInfo.x_bins[i];
+    const cellXEnd = gridInfo.x_bins[i + 1];
+    const cellY = gridInfo.y_bins[j];
+    const cellYEnd = gridInfo.y_bins[j + 1];
+    
+    console.log(`🔍 Cell boundaries: X[${cellX}, ${cellXEnd}), Y[${cellY}, ${cellYEnd})`);
+    
+    // Find data points that fall within this grid cell
+    const cellPoints = data.filter(point => {
+      const pointX = point[0];
+      const pointY = point[1];
+      return pointX >= cellX && pointX < cellXEnd && 
+             pointY >= cellY && pointY < cellYEnd;
+    });
+    
+    console.log(`📊 Found ${cellPoints.length} points in cell (${i}, ${j})`);
+    
+    if (cellPoints.length === 0) {
+      console.warn('No points found in clicked cell');
+      return;
+    }
+    
+    // Get the indices of these points in the original data
+    const originalData = getOriginalData();
+    if (!originalData) {
+      console.error('No original data available for distribution plot');
+      return;
+    }
+    
+    // Map embedding points back to original data indices
+    const selectedRealData = [];
+    const selectedSyntheticData = [];
+    
+    cellPoints.forEach(embeddingPoint => {
+      // Find the index of this point in the embedding data
+      const embeddingIndex = data.findIndex(point => 
+        point[0] === embeddingPoint[0] && point[1] === embeddingPoint[1]
+      );
+      
+      if (embeddingIndex >= 0 && embeddingIndex < metadata.labels.length) {
+        const pointLabel = metadata.labels[embeddingIndex];
+        
+        // Get corresponding original data point
+        if (embeddingIndex < originalData.data.length && 
+            originalData.labels[embeddingIndex] === pointLabel) {
+          
+          const originalDataPoint = originalData.data[embeddingIndex];
+          if (originalDataPoint && Array.isArray(originalDataPoint)) {
+            if (pointLabel === 'Real') {
+              selectedRealData.push(originalDataPoint);
+            } else if (pointLabel === 'Synthetic') {
+              selectedSyntheticData.push(originalDataPoint);
+            }
+          }
+        }
+      }
+    });
+    
+    console.log(`📈 Selected data for distribution plot: ${selectedRealData.length} real, ${selectedSyntheticData.length} synthetic`);
+    
+    if (selectedRealData.length === 0 && selectedSyntheticData.length === 0) {
+      console.error('No valid data found for distribution plot');
+      return;
+    }
+    
+    // Set the selected points to trigger distribution plot generation
+    // We need to find the indices of these points in the current data array
+    const selectedIndices = [];
+    cellPoints.forEach(embeddingPoint => {
+      const index = data.findIndex(point => 
+        point[0] === embeddingPoint[0] && point[1] === embeddingPoint[1]
+      );
+      if (index >= 0) {
+        selectedIndices.push(index);
+      }
+    });
+    
+    console.log(`🎯 Setting selected points: ${selectedIndices.length} indices`);
+    setSelectedPoints(selectedIndices);
+    
+    // Auto-select the first column for the distribution plot
+    if (originalData.headers.length > 0) {
+      setHistogramColumn(0);
+    }
+    
+    // Set plot type based on data type
+    const columnDataType = classifyColumnType(0, originalData);
+    const defaultPlotType = columnDataType === 'numeric' ? 'histogram' : 'bar';
+    setHistogramPlotType(defaultPlotType);
+    
+  }, [anomalyResults, data, metadata, getOriginalData]);
 
   // Early validation after all hooks are declared
   if (!data || !metadata) {
@@ -3394,29 +3607,7 @@ const EmbeddingPlot = ({
               <IconButton 
                 size="small" 
                 aria-label="Anomaly detection help"
-                onClick={() => {
-                  alert(`🔍 Anomaly Detection Guide:
-
-📊 What are the circles?
-• Red circles = High severity anomalies (|z| > 2)
-• Yellow circles = Medium severity anomalies (1 < |z| ≤ 2)
-
-📈 How are anomalies detected?
-• Uses adaptive logit transformation: ln(p/(1-p))
-• Calculates global baseline from your dataset
-• Sets thresholds using standard deviation
-• Identifies cells that deviate significantly from baseline
-
-⚠️ What does severity mean?
-• High: |z-score| > 2 (strong deviation from expected pattern)
-• Medium: 1 < |z-score| ≤ 2 (moderate deviation)
-• Normal: |z-score| ≤ 1 (matches expected pattern)
-
-💡 Tips:
-• Hover over circles for detailed statistics including z-scores
-• System adapts to your specific dataset characteristics
-• Download CSV for detailed analysis`);
-                }}
+                onClick={() => setShowHelpDialog(true)}
                 sx={{ 
                   bgcolor: 'rgba(59, 130, 246, 0.1)', 
                   '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' } 
@@ -3465,68 +3656,75 @@ const EmbeddingPlot = ({
             />
           )}
           
-          {/* Enhanced Anomaly Legend */}
-          {showAnomalies && anomalyResults && anomalyResults.cell_anomalies && (
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: 0.5,
-              bgcolor: 'rgba(255, 255, 255, 0.95)',
-              p: 1,
-              borderRadius: 1,
-              border: '1px solid rgba(0, 0, 0, 0.1)'
-            }}>
-              <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>
-                Anomaly Legend
+
+        </Box>
+
+        {/* Top-Left Anomaly Legend */}
+        {showAnomalies && anomalyResults && anomalyResults.cell_anomalies && (
+          <Box sx={{ 
+            position: 'absolute', 
+            top: 16, 
+            left: 16, 
+            zIndex: 10,
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: 0.5,
+            bgcolor: 'rgba(255, 255, 255, 0.4)',
+            p: 1.5,
+            borderRadius: 1,
+            border: '1px solid rgba(0, 0, 0, 0.15)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            maxWidth: '280px',
+            backdropFilter: 'blur(2px)'
+          }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 0.5 }}>
+              Anomaly Legend
+            </Typography>
+            
+            {/* Real Overpopulation */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ 
+                width: 12, 
+                height: 12, 
+                borderRadius: '50%', 
+                bgcolor: 'rgba(239, 68, 68, 0.2)',
+                border: '2px solid rgba(239, 68, 68, 1.0)'
+              }} />
+              <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 'bold' }}>
+                Real Overpopulation ({anomalyResults.cell_anomalies.filter(a => a.test_type === 'real_overpopulation' && a.is_significant).length})
               </Typography>
-              
-              {/* High Severity */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{ 
-                  width: 12, 
-                  height: 12, 
-                  borderRadius: '50%', 
-                  bgcolor: 'rgba(239, 68, 68, 0.2)',
-                  border: '2px solid rgba(239, 68, 68, 1.0)'
-                }} />
-                <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 'bold' }}>
-                  High Severity ({anomalyResults.cell_anomalies.filter(a => a.severity === 'high').length})
+            </Box>
+            
+            {/* Synthetic Overpopulation */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ 
+                width: 12, 
+                height: 12, 
+                borderRadius: '50%', 
+                bgcolor: 'rgba(59, 130, 246, 0.2)',
+                border: '2px solid rgba(59, 130, 246, 1.0)'
+              }} />
+              <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
+                Synthetic Overpopulation ({anomalyResults.cell_anomalies.filter(a => a.test_type === 'synthetic_overpopulation' && a.is_significant).length})
+              </Typography>
+            </Box>
+            
+            {/* Summary Statistics */}
+            {anomalyResults.statistics && (
+              <Box sx={{ mt: 0.5, pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                  📊 Real Anomalies: {anomalyResults.statistics.real_anomalies || 0}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                  📊 Synthetic Anomalies: {anomalyResults.statistics.synthetic_anomalies || 0}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                  📈 Total Anomalous Regions: {anomalyResults.cell_anomalies.length}
                 </Typography>
               </Box>
-              
-              {/* Medium Severity */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Box sx={{ 
-                    width: 12, 
-                    height: 12, 
-                    borderRadius: '50%', 
-                    bgcolor: 'rgba(245, 158, 11, 0.2)',
-                    border: '2px solid rgba(245, 158, 11, 1.0)'
-                  }} />
-                  <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 'bold' }}>
-                    Medium Severity ({anomalyResults.cell_anomalies.filter(a => a.severity === 'medium').length})
-                  </Typography>
-                </Box>
-              </Box>
-              
-              {/* Summary Statistics */}
-              {anomalyResults.statistics && (
-                <Box sx={{ mt: 0.5, pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                    📊 Real Anomalies: {anomalyResults.statistics.real_anomalies || 0}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                    📊 Synthetic Anomalies: {anomalyResults.statistics.synthetic_anomalies || 0}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                    📈 Total Anomalous Regions: {anomalyResults.cell_anomalies.length}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          )}
-        </Box>
+            )}
+          </Box>
+        )}
 
         {/* Removed aspect ratio controls - now fully automatic */}
 
@@ -3877,7 +4075,7 @@ const EmbeddingPlot = ({
                     border: '2px solid rgba(239, 68, 68, 1.0)',
                     bgcolor: 'rgba(239, 68, 68, 0.2)'
                   }} />
-                  <Typography variant="caption">High Severity (|z| &gt; 2)</Typography>
+                  <Typography variant="caption">Real Overpopulation (p &lt; 0.05)</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Box sx={{ 
@@ -3887,7 +4085,7 @@ const EmbeddingPlot = ({
                     border: '2px solid rgba(245, 158, 11, 1.0)',
                     bgcolor: 'rgba(245, 158, 11, 0.2)'
                   }} />
-                  <Typography variant="caption">Medium Severity (1 &lt; |z| ≤ 2)</Typography>
+                  <Typography variant="caption">Synthetic Overpopulation (p &lt; 0.05)</Typography>
                 </Box>
               </>
             )}
@@ -3895,6 +4093,82 @@ const EmbeddingPlot = ({
           </Box>
         </Paper>
       )}
+
+      {/* Help Dialog */}
+      <Dialog 
+        open={showHelpDialog} 
+        onClose={() => setShowHelpDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          🔍 Anomaly Detection Guide
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ p: 1 }}>
+            <Typography variant="h6" gutterBottom>
+              📊 What are the colored cells?
+            </Typography>
+            <Typography variant="body2" paragraph>
+              • <strong>Red cells</strong> = Real overpopulation (significantly more real data than expected)<br/>
+              • <strong>Blue cells</strong> = Synthetic overpopulation (significantly more synthetic data than expected)<br/>
+              • <strong>Gray cells</strong> = Normal distribution (no significant difference)
+            </Typography>
+
+            <Typography variant="h6" gutterBottom>
+              📈 How are anomalies detected?
+            </Typography>
+            <Typography variant="body2" paragraph>
+              • Creates histogram-based grid cells for optimal data distribution<br/>
+              • Calculates global proportion of real vs synthetic data in the entire dataset<br/>
+              • Performs binomial proportion tests in each cell:<br/>
+              &nbsp;&nbsp;&nbsp;&nbsp;- Compares cell's real data proportion to the global proportion<br/>
+              &nbsp;&nbsp;&nbsp;&nbsp;- Uses binomial distribution to test if the difference is statistically significant<br/>
+              &nbsp;&nbsp;&nbsp;&nbsp;- Tests if cell has significantly more real data than expected (real overpopulation)<br/>
+              &nbsp;&nbsp;&nbsp;&nbsp;- Tests if cell has significantly more synthetic data than expected (synthetic overpopulation)<br/>
+              • Applies False Discovery Rate (FDR) correction to control for multiple testing<br/>
+              • Colors cells based on statistical significance (p &lt; 0.05 after FDR correction)
+            </Typography>
+
+            <Typography variant="h6" gutterBottom>
+              📊 Binomial Distribution & Global Proportion
+            </Typography>
+            <Typography variant="body2" paragraph>
+              • <strong>Global proportion</strong> = Total real data / Total data across entire dataset<br/>
+              • Each cell is tested against this global baseline<br/>
+              • Binomial test asks: "Is this cell's proportion significantly different from global?"<br/>
+              • If cell has 80% real data but global is 50%, binomial test determines if this is significant<br/>
+              • <strong>Significance</strong> = Unlikely to occur by random chance alone
+            </Typography>
+
+            <Typography variant="h6" gutterBottom>
+              📊 Statistical Significance
+            </Typography>
+            <Typography variant="body2" paragraph>
+              • Significant cells (p &lt; 0.05 after FDR correction) are colored<br/>
+              • Non-significant cells remain transparent/gray<br/>
+              • <strong>Red cells</strong> = Significantly more real data than expected<br/>
+              • <strong>Blue cells</strong> = Significantly more synthetic data than expected
+            </Typography>
+
+            <Typography variant="h6" gutterBottom>
+              💡 Tips
+            </Typography>
+            <Typography variant="body2" paragraph>
+              • Hover over colored cells for detailed statistics<br/>
+              • Red cells indicate areas where real data dominates<br/>
+              • Blue cells indicate areas where synthetic data dominates<br/>
+              • Download CSV for comprehensive analysis<br/>
+              • System automatically adapts to your dataset characteristics
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowHelpDialog(false)} color="primary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

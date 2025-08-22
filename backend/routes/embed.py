@@ -41,16 +41,16 @@ class PreTrainedModelRequest(BaseModel):
 
 @router.post("/embed")
 async def compute_embedding(request: EmbeddingRequest):
-    """Compute embeddings for real and synthetic data."""
+    """Start an embedding computation job."""
     try:
-        # Validate data format
+        # Check the data looks good
         validate_data_format(request.real_data, request.synthetic_data)
         
-        # Generate job and task IDs
+        # Create unique IDs for this job
         job_id = str(uuid.uuid4())
         task_id = str(uuid.uuid4())
         
-        # Generate human-readable dataset description for job naming
+        # Create a nice description for the job
         try:
             dataset_description = generate_human_readable_description(
                 request.real_data, 
@@ -63,10 +63,10 @@ async def compute_embedding(request: EmbeddingRequest):
             )
             logger.info(f"Generated dataset description: {dataset_description}")
         except Exception as e:
-            logger.warning(f"Failed to generate dataset description: {e}")
+            logger.warning(f"Couldn't create dataset description: {e}")
             dataset_description = f"{request.method.upper()} Embedding"
         
-        # Create job record with descriptive name
+        # Set up the job record
         JobService.create_job(
             job_id=job_id,
             method=request.method,
@@ -76,7 +76,7 @@ async def compute_embedding(request: EmbeddingRequest):
             dataset_description=dataset_description
         )
         
-        # Create embedding task
+        # Create the actual computation task
         task = EmbeddingTask(
             task_id=task_id,
             job_id=job_id,
@@ -89,11 +89,11 @@ async def compute_embedding(request: EmbeddingRequest):
             synthetic_headers=request.synthetic_headers
         )
         
-        # Submit to task queue
+        # Send it to the background worker
         task_queue = get_task_queue_manager()
         task_queue.submit_task(task)
         
-        # Get initial queue status
+        # Get the current status
         queue_status = task_queue.get_queue_status()
         task_status = task_queue.get_task_status(task_id)
         

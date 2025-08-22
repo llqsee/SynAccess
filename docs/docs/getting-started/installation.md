@@ -24,24 +24,29 @@ cd Scalable-Visualization-and-Explainability-of-Synthetic-Datasets
 
 #### Option A: Using Conda (Recommended)
 
+For **CPU-only installation**:
 ```bash
 # Create and activate conda environment
 conda env create -f environment.yml
 conda activate mavis
+```
 
-# Install additional dependencies
-pip install -r requirements.txt
+For **GPU-enabled installation**:
+```bash
+# Create and activate GPU environment
+conda env create -f environment-gpu.yml
+conda activate mavis-gpu
+
+# Enable GPU acceleration
+export ENABLE_GPU=true
 ```
 
 #### Option B: Using pip
 
 ```bash
-# Create virtual environment
-python -m venv mavis-env
-source mavis-env/bin/activate  # On Windows: mavis-env\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Create conda environment
+conda env create -f environment.yml
+conda activate mavis
 ```
 
 ### 3. Set Up the Frontend
@@ -162,6 +167,14 @@ API_PORT=8000
 
 # Frontend
 REACT_APP_API_URL=http://localhost:8000
+
+# GPU Acceleration (optional)
+ENABLE_GPU=false
+
+# AI Analysis (optional)
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+ENABLE_AI_ANALYSIS=true
+CLAUDE_MODEL=claude-3-5-sonnet-20241022
 
 # Development
 DEBUG=True

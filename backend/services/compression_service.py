@@ -1,4 +1,8 @@
-"""Compression service for efficient data storage and retrieval."""
+"""Data compression service for efficient storage.
+
+This service handles compressing and decompressing datasets to save
+space and improve performance when storing large amounts of data.
+"""
 import json
 import pickle
 import gzip
@@ -12,7 +16,7 @@ import sys
 from backend.utils.logging_config import get_logger
 
 class CompressionService:
-    """Service for compressing and decompressing datasets for storage."""
+    """Handles data compression and decompression for storage."""
     
     def __init__(self):
         self.logger = get_logger("compression_service")

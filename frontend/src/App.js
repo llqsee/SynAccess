@@ -14,9 +14,7 @@ import {
   Divider,
   Alert,
   CircularProgress,
-  LinearProgress,
-  IconButton,
-  Collapse
+  LinearProgress
 } from '@mui/material';
 import { 
   CloudUpload, 
@@ -24,11 +22,8 @@ import {
   BarChart, 
   Assessment,
   CheckCircle,
-  Error as ErrorIcon,
   AutorenewRounded,
-  Menu,
-  History as HistoryIcon,
-  Warning as WarningIcon
+  History as HistoryIcon
 } from '@mui/icons-material';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
@@ -37,7 +32,7 @@ import Sidebar from './components/Sidebar';
 import EmbeddingPlot from './components/EmbeddingPlot';
 import DistributionPlot from './components/DistributionPlot';
 
-import ResultsPane from './components/ResultsPane';
+// import ResultsPane from './components/ResultsPane';
 import History from './components/History';
 import SummaryTab from './components/SummaryTab';
 import ValidationPopup from './components/ValidationPopup';
@@ -46,18 +41,18 @@ import { useEmbedding } from './hooks/useEmbedding';
 import { useValidation } from './hooks/useValidation';
 import { healthCheck } from './services/api';
 
-// Create theme with better color scheme
+// Set up the app theme
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#2563eb', // Modern blue
+      main: '#2563eb', // Nice blue color
     },
     secondary: {
-      main: '#7c3aed', // Purple accent
+      main: '#7c3aed', // Purple for accents
     },
     success: {
-      main: '#059669', // Green
+      main: '#059669', // Green for success states
     },
     background: {
       default: '#f8fafc',
@@ -131,7 +126,7 @@ function AppContent() {
     handleVisualizeWithPretrainedModel,
     handleCancel,
     loadFromHistory,
-    resetState: resetEmbeddingState
+    // resetState: resetEmbeddingState
   } = useEmbedding();
 
   const {
@@ -142,8 +137,8 @@ function AppContent() {
     showValidationPopup,
     runValidation,
     dismissValidationPopup,
-    clearValidation,
-    getValidationSummary
+    // clearValidation,
+    // getValidationSummary
   } = useValidation();
 
   // Manual validation trigger - removed automatic validation

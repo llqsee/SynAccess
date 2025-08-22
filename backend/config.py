@@ -1,4 +1,9 @@
-"""Enhanced application configuration with performance and security optimizations."""
+"""Application configuration and settings management.
+
+This module handles all configuration settings for the MAVIS application,
+including database connections, API settings, performance tuning, and
+environment-specific configurations.
+"""
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -17,42 +22,46 @@ MODELS_DIR.mkdir(exist_ok=True)
 LOGS_DIR.mkdir(exist_ok=True)
 
 class Settings(BaseSettings):
-    """Application settings with environment variable support."""
+    """Application settings with environment variable support.
     
-    # Environment
+    This class defines all configurable settings for the MAVIS application.
+    Settings can be overridden using environment variables or .env files.
+    """
+    
+    # Basic environment settings
     environment: str = Field(default="development", env="ENVIRONMENT")
     debug: bool = Field(default=True, env="DEBUG")
     
-    # Database Configuration
+    # Database settings
     database_url: str = Field(default=f"sqlite:///{BASE_DIR}/mavis_dev.db", env="DATABASE_URL")
     database_pool_size: int = Field(default=20, env="DATABASE_POOL_SIZE")
     database_echo: bool = Field(default=False, env="DATABASE_ECHO")
     
-    # API Configuration
+    # API and server settings
     api_v1_prefix: str = "/api/v1"
     cors_origins: list = Field(default=["http://localhost:3000", "http://localhost:8000"], env="CORS_ORIGINS")
     max_request_size: int = Field(default=50 * 1024 * 1024, env="MAX_REQUEST_SIZE")  # 50MB
     request_timeout: int = Field(default=300, env="REQUEST_TIMEOUT")  # 5 minutes
     
-    # Security
+    # Security and authentication
     secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
     access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE_DAYS")
     
-    # Performance & Caching
+    # Performance and caching
     enable_caching: bool = Field(default=True, env="ENABLE_CACHING")
     cache_ttl_seconds: int = Field(default=3600, env="CACHE_TTL_SECONDS")  # 1 hour
     max_workers: int = Field(default=4, env="MAX_WORKERS")
     
-    # AI/Claude Configuration
+    # AI analysis settings
     anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     enable_ai_analysis: bool = Field(default=True, env="ENABLE_AI_ANALYSIS")
     claude_model: str = Field(default="claude-3-5-sonnet-20241022", env="CLAUDE_MODEL")
     ai_analysis_timeout: int = Field(default=60, env="AI_ANALYSIS_TIMEOUT")  # 60 seconds
     
-    # Embedding Configuration
+    # Data processing limits
     max_data_points: int = Field(default=999999999, env="MAX_DATA_POINTS")
-    embedding_timeout: int = Field(default=240, env="EMBEDDING_TIMEOUT")  # 4 minutes - reduced from 10 minutes
+    embedding_timeout: int = Field(default=240, env="EMBEDDING_TIMEOUT")  # 4 minutes
     enable_gpu: bool = Field(default=False, env="ENABLE_GPU")
     
     class Config:

@@ -1,5 +1,8 @@
 """
-Data validation utilities for the MAVIS application.
+Data validation utilities for checking input quality.
+
+These functions help ensure your data is in the right format
+before we start processing it.
 """
 
 from typing import List, Any, Dict
@@ -7,14 +10,17 @@ import numpy as np
 
 def validate_data_format(real_data: List[List[Any]], synthetic_data: List[List[Any]]) -> None:
     """
-    Validate that the input data has the correct format.
+    Check that your data is in the right format.
+    
+    This makes sure both datasets have the same structure and
+    contain valid data before we start processing.
     
     Args:
-        real_data: Real dataset as list of lists
-        synthetic_data: Synthetic dataset as list of lists
+        real_data: Your real dataset
+        synthetic_data: Your synthetic dataset
         
     Raises:
-        ValueError: If data format is invalid
+        ValueError: If the data format isn't correct
     """
     if not real_data or not synthetic_data:
         raise ValueError("Both real_data and synthetic_data must be provided")

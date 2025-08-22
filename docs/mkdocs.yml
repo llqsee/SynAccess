@@ -112,6 +112,8 @@ nav:
       - Visualizations: features/visualizations.md
       - Statistical Analysis: features/statistical-analysis.md
       - Data Validation: features/data-validation.md
+      - Anomaly Detection: features/anomaly-detection.md
+      - AI Analysis: features/ai-analysis.md
       - Performance Monitoring: features/performance-monitoring.md
       - Job Management: features/job-management.md
   - User Guide:
@@ -126,12 +128,14 @@ nav:
   - Technical:
       - Architecture: technical/architecture.md
       - API Reference: technical/api-reference.md
+      - GPU Acceleration: technical/gpu-acceleration.md
       - UMAP Configuration: technical/umap-configuration.md
       - Data Validation: technical/data-validation.md
       - Performance Monitoring: technical/performance-monitoring.md
       - Multivariate Statistical Tests: technical/multivariate-statistical-tests.md
   - Development:
       - Setup: development/setup.md
+      - Docker: development/docker.md
       - Testing: development/testing.md
       - Deployment: development/deployment.md
       - Contributing: development/contributing.md

@@ -1,4 +1,9 @@
-"""Logging configuration for the MAVIS backend."""
+"""Logging setup for the MAVIS backend.
+
+This module handles all the logging configuration, including file rotation,
+JSON formatting, and console output. It's used throughout the app to
+keep track of what's happening.
+"""
 import logging
 import logging.handlers
 import sys
@@ -10,7 +15,7 @@ from typing import Any, Dict
 
 
 class JSONFormatter(logging.Formatter):
-    """Custom JSON formatter for structured logging."""
+    """Formats log messages as JSON for easier parsing."""
     
     def format(self, record):
         log_entry = {
@@ -112,6 +117,28 @@ def setup_logging(
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("fastapi").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+    
+    # Add filter to suppress connection reset errors during shutdown
+    class ConnectionResetFilter(logging.Filter):
+        def filter(self, record):
+            # Suppress common connection reset errors that occur during shutdown
+            if hasattr(record, 'exc_info') and record.exc_info:
+                exc_type, exc_value, _ = record.exc_info
+                if exc_type and issubclass(exc_type, ConnectionResetError):
+                    # Suppress if it's the common Windows connection reset error
+                    if "WinError 10054" in str(exc_value) or "forcibly closed by the remote host" in str(exc_value):
+                        return False
+            
+            # Suppress asyncio callback connection lost errors during shutdown
+            if "ProactorBasePipeTransport._call_connection_lost" in record.getMessage():
+                return False
+            
+            return True
+    
+    # Apply the filter to asyncio logger
+    asyncio_logger = logging.getLogger("asyncio")
+    asyncio_logger.addFilter(ConnectionResetFilter())
+    asyncio_logger.setLevel(logging.WARNING)
     
     # Create application-specific loggers
     app_logger = logging.getLogger("mavis")
