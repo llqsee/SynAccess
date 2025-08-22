@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  mavis-app:
+    image: ${IMAGE_NAME:-mavis:latest}
+    build:
+      context: ..
+      dockerfile: ../Dockerfile
+      args:
+        ENV_FILE: ${ENV_FILE:-environment.yml}
+        GPU_ENABLED: ${GPU_ENABLED:-false}
+        CONDA_ENV_NAME: ${CONDA_ENV_NAME:-mavis}
+    ports:
+      - "8000:8000"
+      - "3000:3000"
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=sqlite:///mavis_dev.db
+      - NODE_ENV=${NODE_ENV:-development}
+      - ENABLE_GPU=${ENABLE_GPU:-false}
+      - API_V1_PREFIX=/api/v1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
+    volumes:
+      - mavis_data:/app/data
+      - mavis_logs:/app/logs
+      - mavis_models:/app/models
+    # Don't start the container automatically - let devcontainer handle it
+    command: ["sleep", "infinity"]
+    restart: unless-stopped
+
+volumes:
+  mavis_data:
+    driver: local
+  mavis_logs:
+    driver: local
+  mavis_models:
+    driver: local
+
+networks:
+  default:
+    name: mavis_dev_network

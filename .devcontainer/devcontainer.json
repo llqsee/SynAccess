@@ -1,8 +1,8 @@
 {
   "name": "MAVIS Development Environment",
-  "dockerComposeFile": "../docker-compose.yml",
+  "dockerComposeFile": "docker-compose.dev.yml",
   "service": "mavis-app",
-  "overrideCommand": true,
+  "overrideCommand": false,
   "runServices": ["mavis-app"],
   "workspaceFolder": "/app",
   "forwardPorts": [8000, 3000],
