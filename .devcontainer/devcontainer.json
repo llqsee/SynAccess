@@ -20,6 +20,11 @@
     }
   },
 
+  "remoteEnv": {
+    "REACT_APP_API_BASE_URL": "http://localhost:8000/api/v1",
+    "BACKEND_URL": "http://localhost:8000"
+  },
+
   "customizations": {
     "vscode": {
       "extensions": [
@@ -65,5 +70,7 @@
   "remoteUser": "root",
   "mounts": [
     "source=${localWorkspaceFolder}/data,target=/app/data,type=bind,consistency=cached"
-  ]
+  ],
+  "postCreateCommand": "cd /app && python setup_database.py || true",
+  "postStartCommand": "cd /app/backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload &"
 } 
