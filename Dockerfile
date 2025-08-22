@@ -55,9 +55,9 @@ set -e\n\
 source /opt/conda/etc/profile.d/conda.sh\n\
 conda activate ${CONDA_ENV_NAME}\n\
 cd /app\n\
-python setup_database.py || true\n\
+/opt/conda/envs/${CONDA_ENV_NAME}/bin/python setup_database.py || true\n\
 cd backend\n\
-exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1' > start.sh && \
+exec /opt/conda/envs/${CONDA_ENV_NAME}/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1' > start.sh && \
     chmod +x start.sh
 
 # Create non-root user for security
