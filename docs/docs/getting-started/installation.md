@@ -44,12 +44,9 @@ export ENABLE_GPU=true
 #### Option B: Using pip
 
 ```bash
-# Create virtual environment
-python -m venv mavis-env
-source mavis-env/bin/activate  # On Windows: mavis-env\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Create conda environment
+conda env create -f environment.yml
+conda activate mavis
 ```
 
 ### 3. Set Up the Frontend

@@ -99,9 +99,6 @@ cd Scalable-Visualization-and-Explainability-of-Synthetic-Datasets
 conda env create -f environment.yml
 conda activate mavis
 
-# Install dependencies
-pip install -r requirements.txt
-
 # Setup database
 python setup_database.py
 
@@ -199,6 +196,61 @@ DATABASE_URL = "sqlite:///./mavis.db"
 // .env
 REACT_APP_API_URL=http://localhost:8000/api/v1
 REACT_APP_DEBUG=1
+```
+
+## 📁 Project Structure
+
+```
+Scalable-Visualization-and-Explainability-of-Synthetic-Datasets/
+├── backend/                    # FastAPI backend application
+│   ├── routes/                # API endpoints and request handlers
+│   │   ├── embed.py           # Embedding generation endpoints
+│   │   ├── anomaly_detection.py # Anomaly detection API
+│   │   ├── validation.py      # Data validation endpoints
+│   │   ├── history.py         # Job history management
+│   │   ├── ai_analysis.py     # AI-powered analysis
+│   │   ├── gpu.py             # GPU monitoring endpoints
+│   │   ├── distribution.py    # Distribution analysis
+│   │   └── queue.py           # Task queue management
+│   ├── services/              # Business logic and core services
+│   │   ├── embedding.py       # UMAP/t-SNE implementation
+│   │   ├── anomaly_detection_service.py # Anomaly detection logic
+│   │   ├── validation_service.py # Statistical validation
+│   │   ├── job_service.py     # Job management and storage
+│   │   ├── ai_analysis_service.py # AI integration
+│   │   ├── gpu_monitoring.py  # GPU performance monitoring
+│   │   ├── task_queue.py      # Background task processing
+│   │   └── compression_service.py # Data compression utilities
+│   ├── database/              # Database models and connection
+│   ├── utils/                 # Utility functions and helpers
+│   ├── tests/                 # Backend test suite
+│   ├── config.py              # Application configuration
+│   └── main.py                # FastAPI application entry point
+├── frontend/                  # React frontend application
+│   ├── src/                   # Source code
+│   │   ├── components/        # React components
+│   │   ├── services/          # API service functions
+│   │   ├── hooks/             # Custom React hooks
+│   │   ├── contexts/          # React contexts
+│   │   └── utils/             # Frontend utilities
+│   ├── public/                # Static assets
+│   └── package.json           # Node.js dependencies
+├── docs/                      # Documentation
+│   └── docs/                  # MkDocs documentation site
+├── data/                      # Sample datasets and data files
+├── notebooks/                 # Jupyter notebooks for analysis
+├── figures/                   # Generated figures and plots
+├── reports/                   # Generated reports
+├── logs/                      # Application logs
+├── environment.yml            # CPU conda environment
+├── environment-gpu.yml        # GPU-enabled conda environment
+├── Dockerfile                 # Multi-stage Docker build
+├── docker-compose.yml         # Container orchestration
+├── docker-compose.gpu.yml     # GPU Docker configuration
+├── nginx.conf                 # Nginx reverse proxy configuration
+├── setup_database.py          # Database initialization script
+├── run_tests.py               # Test runner script
+└── README.md                  # Project documentation
 ```
 
 ## 📊 API Endpoints
