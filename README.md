@@ -20,7 +20,6 @@ MAVIS is a comprehensive platform for analyzing, visualizing, and validating syn
 - Real-time scatter plots with zoom and pan
 - Point selection and filtering
 - Distribution analysis with multiple plot types
-- Export capabilities (PNG, SVG, CSV)
 
 ### 4. **Performance Monitoring**
 - Real-time GPU utilization tracking
