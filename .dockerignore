@@ -117,8 +117,8 @@ Dockerfile*
 docker-compose*.yml
 .dockerignore
 
-# Environment files (will be copied explicitly)
-environment*.yml
+# Environment files (needed for Docker build)
+# environment*.yml
 
 # Database files
 *.db
