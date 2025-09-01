@@ -22,13 +22,7 @@ MAVIS uses industry-standard privacy testing libraries:
   - Data Consistency Ratio (DCR)
 - **Implementation**: `sdmetrics.reports.single_table.DiagnosticReport`, `sdmetrics.single_table.privacy.DCR`
 
-### Anonymeter
-- **Purpose**: GDPR compliance and privacy risk assessment
-- **Metrics**:
-  - Singling-out risk
-  - Linkability risk  
-  - Inference risk
-- **Implementation**: `anonymeter.evaluation.evaluate`
+
 
 ### SynthCity
 - **Purpose**: Advanced synthetic data generation and privacy metrics
@@ -51,16 +45,9 @@ MAVIS uses industry-standard privacy testing libraries:
 - **Description**: Data Consistency Ratio measuring privacy preservation
 - **Output**: DCR score, privacy level, statistical significance
 
-### 3. Anonymeter GDPR Compliance
-- **Test Type**: `anonymeter_gdpr_test`
-- **Metrics**:
-  - `anonymeter_singling_out`: Risk of identifying specific individuals
-  - `anonymeter_linkability`: Risk of linking records across datasets
-  - `anonymeter_inference`: Risk of inferring sensitive attributes
-- **Description**: Comprehensive GDPR compliance assessment
-- **Output**: Risk scores for each privacy dimension
 
-### 4. SynthCity Privacy Metrics
+
+### 3. SynthCity Privacy Metrics
 - **Test Type**: `synthcity_privacy_test`
 - **Metrics**:
   - `synthcity_identifiability`: Individual record identification risk
@@ -68,7 +55,7 @@ MAVIS uses industry-standard privacy testing libraries:
 - **Description**: Advanced privacy risk assessment
 - **Output**: Identifiability and reidentification risk scores
 
-### 5. SDV Privacy Evaluator
+### 4. SDV Privacy Evaluator
 - **Test Type**: `sdv_privacy_test`
 - **Metric**: `sdv_privacy_evaluation`
 - **Description**: SDV's comprehensive privacy evaluation

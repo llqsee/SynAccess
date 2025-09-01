@@ -2,7 +2,7 @@
 Privacy testing service for synthetic data validation.
 
 This service implements comprehensive privacy tests using established privacy testing
-libraries: SDV, SDMetrics, Anonymeter, and SynthCity for robust privacy assessment.
+libraries: SDV, SDMetrics, and SynthCity for robust privacy assessment.
 """
 
 import numpy as np
