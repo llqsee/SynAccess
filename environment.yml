@@ -41,12 +41,12 @@ dependencies:
   - flake8>=6.0.0
   - isort>=5.12.0
   - statsmodels>=0.14.0 # Statistical analysis and FDR correction
-    - opencv>=4.8.0 # Computer vision library
-  - pillow>=10.0.0 # Image processing
-  - imageio>=2.31.0 # Image I/O
-  - imageio-ffmpeg>=0.4.8 # Video support
+  - conda-forge::numpy=1.24.4 # Pin to compatible version
+  - conda-forge::pandas=2.0.3 # Pin to compatible version
+  - conda-forge::scipy=1.11.4 # Pin to compatible version
+  - conda-forge::sdv>=1.0.0 # Synthetic Data Vault for privacy evaluation
+  - conda-forge::sdmetrics>=0.10.0 # SDMetrics for privacy metrics
+
   - pip:
-      - sdv>=1.0.0 # Synthetic Data Vault for privacy evaluation
-      - sdmetrics>=0.10.0 # SDMetrics for privacy metrics   
       - synthcity>=0.2.12 # SynthCity for advanced privacy metrics
      

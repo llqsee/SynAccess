@@ -5,7 +5,7 @@ channels:
 dependencies:
   - python=3.12
   - pip
-  - numpy>=1.24.0
+  - numpy=1.24.4
   - pandas>=2.0.0
   - scipy>=1.10.0
   - scikit-learn>=1.3.0
@@ -42,14 +42,11 @@ dependencies:
   - flake8>=6.0.0
   - isort>=5.12.0
   - statsmodels>=0.14.0 # Statistical analysis and FDR correction
-    - opencv>=4.8.0 # Computer vision library
-  - pillow>=10.0.0 # Image processing
-  - imageio>=2.31.0 # Image I/O
-  - imageio-ffmpeg>=0.4.8 # Video support
+  - conda-forge::sdv>=1.0.0 # Synthetic Data Vault for privacy evaluation
+  - conda-forge::sdmetrics>=0.10.0 # SDMetrics for privacy metrics
+
   - pip:
       - cupy-cuda12x>=12.0.0 # GPU acceleration
       - cudnn>=8.9.0 # Deep learning acceleration
-      - sdv>=1.0.0 # Synthetic Data Vault for privacy evaluation
-      - sdmetrics>=0.10.0 # SDMetrics for privacy metrics   
       - synthcity>=0.2.12 # SynthCity for advanced privacy metrics
      
