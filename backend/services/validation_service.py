@@ -25,6 +25,7 @@ from sklearn.metrics import mutual_info_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import MDS
 from statsmodels.stats.multitest import multipletests
+from .privacy_service import privacy_service
 
 warnings.filterwarnings('ignore')
 
@@ -679,9 +680,14 @@ class ValidationService:
         }
         tests.append(consistency_test)
         
+        # Privacy tests (integrated into Quality Metrics)
+        privacy_tests = self._compute_privacy_statistics(real_df, synth_df)
+        if privacy_tests.get('tests'):
+            tests.extend(privacy_tests['tests'])
+        
         return {
             'testType': 'Quality Metrics',
-            'description': 'Data completeness and consistency metrics',
+            'description': 'Data completeness, consistency, and privacy metrics',
             'completeness': {
                 'realCompleteness': float(real_completeness),
                 'syntheticCompleteness': float(synth_completeness),
@@ -693,7 +699,12 @@ class ValidationService:
                 'ratio': float(consistency_ratio)
             },
             'tests': tests,
-            'summary': {'total': len(tests)}
+            'summary': {
+                'total': len(tests),
+                'completenessTests': 1,
+                'consistencyTests': 1,
+                'privacyTests': len(privacy_tests.get('tests', []))
+            }
         }
     
     def _compute_multivariate_statistics(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
@@ -900,6 +911,20 @@ class ValidationService:
                 'type': 'jennrich_test',
                 'result': 'ERROR',
                 'error': str(e)
+            }
+    
+    def _compute_privacy_statistics(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+        """Compute privacy statistics using the privacy testing service."""
+        try:
+            return privacy_service.compute_privacy_tests(real_df, synth_df)
+        except Exception as e:
+            return {
+                'testType': 'Privacy Tests',
+                'description': 'Comprehensive privacy assessment',
+                'result': 'ERROR',
+                'error': str(e),
+                'tests': [],
+                'summary': {'total': 0}
             }
     
     def _jennrich_statistic(self, R1: np.ndarray, R2: np.ndarray) -> float:

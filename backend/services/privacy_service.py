@@ -2,17 +2,13 @@
 Privacy testing service for synthetic data validation.
 
 This service implements comprehensive privacy tests using established privacy testing
-libraries and statistical methods for robust privacy assessment.
+libraries: SDV, SDMetrics, Anonymeter, and SynthCity for robust privacy assessment.
 """
 
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Any, Tuple, Optional
 import warnings
-from scipy import stats
-from scipy.stats import entropy, ks_2samp, chi2_contingency
-from sklearn.metrics import roc_curve, auc
-from sklearn.preprocessing import StandardScaler
 import logging
 
 warnings.filterwarnings('ignore')
@@ -20,14 +16,13 @@ logger = logging.getLogger(__name__)
 
 class PrivacyTestingService:
     """
-    Comprehensive privacy testing service using established privacy testing methods.
+    Comprehensive privacy testing service using established privacy testing libraries.
     
     Implements privacy tests using:
-    1. Statistical methods (KS-test, Chi-square test)
-    2. Differential privacy principles
-    3. k-Anonymity assessment
-    4. Information theoretic measures
-    5. Distribution similarity metrics
+    1. SDV (Synthetic Data Vault) - Built-in privacy evaluators
+    2. SDMetrics - Privacy-focused metrics and reports
+    3. Anonymeter - GDPR compliance and privacy risks
+    4. SynthCity - Advanced privacy metrics
     """
     
     def __init__(self):
@@ -36,7 +31,7 @@ class PrivacyTestingService:
         
     def compute_privacy_tests(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Compute comprehensive privacy tests using statistical methods.
+        Compute comprehensive privacy tests using established privacy libraries.
         
         Args:
             real_df: Real dataset
@@ -47,106 +42,69 @@ class PrivacyTestingService:
         """
         tests = []
         
-        # 1. Statistical Privacy Test (KS-test based)
-        statistical_test = self._test_statistical_privacy(real_df, synth_df)
-        tests.append(statistical_test)
+        # 1. SDMetrics Diagnostic Report
+        sdmetrics_test = self._test_sdmetrics_privacy(real_df, synth_df)
+        tests.append(sdmetrics_test)
         
-        # 2. Distribution Similarity Test
-        distribution_test = self._test_distribution_similarity(real_df, synth_df)
-        tests.append(distribution_test)
+        # 2. SDMetrics DCR (Data Consistency Ratio)
+        dcr_test = self._test_sdmetrics_dcr(real_df, synth_df)
+        tests.append(dcr_test)
         
-        # 3. k-Anonymity Assessment
-        k_anonymity_test = self._test_k_anonymity(real_df, synth_df)
-        tests.append(k_anonymity_test)
+        # 3. Anonymeter GDPR Risks
+        anonymeter_test = self._test_anonymeter_gdpr(real_df, synth_df)
+        tests.append(anonymeter_test)
         
-        # 4. Information Leakage Test
-        info_leakage_test = self._test_information_leakage(real_df, synth_df)
-        tests.append(info_leakage_test)
+        # 4. SynthCity Privacy Metrics
+        synthcity_test = self._test_synthcity_privacy(real_df, synth_df)
+        tests.append(synthcity_test)
         
-        # 5. Differential Privacy Assessment
-        dp_test = self._test_differential_privacy(real_df, synth_df)
-        tests.append(dp_test)
+        # 5. SDV Privacy Evaluators
+        sdv_test = self._test_sdv_privacy(real_df, synth_df)
+        tests.append(sdv_test)
         
         return {
             'testType': 'Privacy Tests',
-            'description': 'Comprehensive privacy assessment using statistical methods',
+            'description': 'Comprehensive privacy assessment using established libraries (SDV, SDMetrics, Anonymeter, SynthCity)',
             'tests': tests,
             'summary': {
                 'total': len(tests),
-                'statisticalTests': 1,
-                'distributionTests': 1,
-                'kAnonymityTests': 1,
-                'informationLeakageTests': 1,
-                'differentialPrivacyTests': 1
+                'sdmetricsTests': 2,
+                'anonymeterTests': 1,
+                'synthcityTests': 1,
+                'sdvTests': 1
             }
         }
     
-    def _test_statistical_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+    def _test_sdmetrics_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Test privacy using statistical methods (KS-test, Chi-square test).
-        
-        Uses proper statistical testing instead of arbitrary ML models.
+        Test privacy using SDMetrics Diagnostic Report.
         """
         try:
-            # Select numeric columns for statistical testing
-            numeric_cols = real_df.select_dtypes(include=[np.number]).columns.tolist()
-            
-            if len(numeric_cols) < 1:
+            # Try to import SDMetrics
+            try:
+                from sdmetrics.reports.single_table import DiagnosticReport
+            except ImportError:
                 return {
-                    'type': 'statistical_privacy_test',
-                    'result': 'INSUFFICIENT_DATA',
-                    'reason': 'Need at least 1 numeric column for statistical testing',
-                    'description': 'Statistical privacy assessment using KS-test and Chi-square test'
+                    'type': 'sdmetrics_diagnostic_test',
+                    'result': 'LIBRARY_NOT_AVAILABLE',
+                    'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
+                    'description': 'SDMetrics Diagnostic Report privacy assessment'
                 }
             
-            privacy_scores = []
-            test_details = []
+            # Generate diagnostic report
+            report = DiagnosticReport()
+            report.generate(real_df, synth_df)
+            diagnostics = report.get_results()
             
-            for col in numeric_cols[:min(3, len(numeric_cols))]:  # Test first 3 columns
-                real_values = real_df[col].dropna().values
-                synth_values = synth_df[col].dropna().values
-                
-                if len(real_values) < 10 or len(synth_values) < 10:
-                    continue
-                
-                # KS-test for distribution similarity
-                ks_stat, ks_p_value = ks_2samp(real_values, synth_values)
-                
-                # Calculate effect size (Cohen's d)
-                pooled_std = np.sqrt(((len(real_values) - 1) * np.var(real_values) + 
-                                    (len(synth_values) - 1) * np.var(synth_values)) / 
-                                   (len(real_values) + len(synth_values) - 2))
-                cohens_d = abs(np.mean(real_values) - np.mean(synth_values)) / pooled_std
-                
-                # Privacy score based on p-value and effect size
-                # Higher p-value and lower effect size = better privacy
-                privacy_score = (ks_p_value * (1 - min(cohens_d, 1))) / 2
-                privacy_scores.append(privacy_score)
-                
-                test_details.append({
-                    'column': col,
-                    'ks_statistic': float(ks_stat),
-                    'ks_p_value': float(ks_p_value),
-                    'cohens_d': float(cohens_d),
-                    'privacy_score': float(privacy_score)
-                })
+            # Extract privacy-relevant metrics
+            privacy_score = diagnostics.get('privacy', 0.0)
+            overall_score = diagnostics.get('overall', 0.0)
             
-            if not privacy_scores:
-                return {
-                    'type': 'statistical_privacy_test',
-                    'result': 'INSUFFICIENT_DATA',
-                    'reason': 'No valid statistical tests could be performed',
-                    'description': 'Statistical privacy assessment using KS-test and Chi-square test'
-                }
-            
-            # Calculate overall privacy score
-            avg_privacy_score = np.mean(privacy_scores)
-            
-            # Determine privacy level based on statistical significance
-            if avg_privacy_score > 0.4:
+            # Determine privacy level
+            if privacy_score > 0.8:
                 privacy_level = 'HIGH'
                 result = 'ACCEPT'
-            elif avg_privacy_score > 0.2:
+            elif privacy_score > 0.6:
                 privacy_level = 'MEDIUM'
                 result = 'WARNING'
             else:
@@ -154,84 +112,48 @@ class PrivacyTestingService:
                 result = 'REJECT'
             
             return {
-                'type': 'statistical_privacy_test',
-                'metric': 'statistical_privacy_score',
-                'average_privacy_score': float(avg_privacy_score),
-                'tested_columns': len(privacy_scores),
-                'test_details': test_details,
+                'type': 'sdmetrics_diagnostic_test',
+                'metric': 'sdmetrics_diagnostic_privacy',
+                'privacy_score': float(privacy_score),
+                'overall_score': float(overall_score),
                 'privacy_level': privacy_level,
                 'result': result,
-                'description': f'Statistical privacy score: {avg_privacy_score:.3f}',
-                'interpretation': f'Average privacy score of {avg_privacy_score:.3f} indicates {privacy_level.lower()} privacy protection'
+                'description': f'SDMetrics Diagnostic Report privacy score: {privacy_score:.3f}',
+                'interpretation': f'SDMetrics privacy score of {privacy_score:.3f} indicates {privacy_level.lower()} privacy protection'
             }
             
         except Exception as e:
             return {
-                'type': 'statistical_privacy_test',
+                'type': 'sdmetrics_diagnostic_test',
                 'result': 'ERROR',
                 'error': str(e),
-                'description': 'Statistical privacy assessment using KS-test and Chi-square test'
+                'description': 'SDMetrics Diagnostic Report privacy assessment'
             }
     
-    def _test_distribution_similarity(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+    def _test_sdmetrics_dcr(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Test distribution similarity using information theoretic measures.
-        
-        Uses Jensen-Shannon divergence and other distribution metrics.
+        Test privacy using SDMetrics DCR (Data Consistency Ratio).
         """
         try:
-            # Select numeric columns for distribution testing
-            numeric_cols = real_df.select_dtypes(include=[np.number]).columns.tolist()
-            
-            if len(numeric_cols) < 1:
+            # Try to import SDMetrics
+            try:
+                from sdmetrics.single_table.privacy import DCR
+            except ImportError:
                 return {
-                    'type': 'distribution_similarity_test',
-                    'result': 'INSUFFICIENT_DATA',
-                    'reason': 'Need at least 1 numeric column for distribution testing',
-                    'description': 'Distribution similarity assessment using information theoretic measures'
+                    'type': 'sdmetrics_dcr_test',
+                    'result': 'LIBRARY_NOT_AVAILABLE',
+                    'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
+                    'description': 'SDMetrics DCR privacy assessment'
                 }
             
-            similarity_scores = []
+            # Compute DCR score
+            dcr_score = DCR.compute(real_df, synth_df)
             
-            for col in numeric_cols[:min(3, len(numeric_cols))]:  # Test first 3 columns
-                real_values = real_df[col].dropna().values
-                synth_values = synth_df[col].dropna().values
-                
-                if len(real_values) < 10 or len(synth_values) < 10:
-                    continue
-                
-                # Create histograms for comparison
-                real_hist, _ = np.histogram(real_values, bins=min(20, len(real_values)//5))
-                synth_hist, _ = np.histogram(synth_values, bins=min(20, len(synth_values)//5))
-                
-                # Normalize histograms
-                real_hist = real_hist / (real_hist.sum() + 1e-8)
-                synth_hist = synth_hist / (synth_hist.sum() + 1e-8)
-                
-                # Calculate Jensen-Shannon divergence
-                m = 0.5 * (real_hist + synth_hist)
-                js_divergence = 0.5 * (entropy(real_hist, m) + entropy(synth_hist, m))
-                
-                # Convert to similarity score (0 = identical, 1 = completely different)
-                similarity_score = 1 - min(js_divergence, 1)
-                similarity_scores.append(similarity_score)
-            
-            if not similarity_scores:
-                return {
-                    'type': 'distribution_similarity_test',
-                    'result': 'INSUFFICIENT_DATA',
-                    'reason': 'No valid distribution similarity tests could be performed',
-                    'description': 'Distribution similarity assessment using information theoretic measures'
-                }
-            
-            # Calculate overall similarity score
-            avg_similarity = np.mean(similarity_scores)
-            
-            # Determine privacy level (lower similarity = higher privacy)
-            if avg_similarity < 0.3:
+            # Determine privacy level (higher DCR = better privacy)
+            if dcr_score > 0.8:
                 privacy_level = 'HIGH'
                 result = 'ACCEPT'
-            elif avg_similarity < 0.6:
+            elif dcr_score > 0.6:
                 privacy_level = 'MEDIUM'
                 result = 'WARNING'
             else:
@@ -239,66 +161,60 @@ class PrivacyTestingService:
                 result = 'REJECT'
             
             return {
-                'type': 'distribution_similarity_test',
-                'metric': 'distribution_similarity_score',
-                'average_similarity': float(avg_similarity),
-                'tested_columns': len(similarity_scores),
+                'type': 'sdmetrics_dcr_test',
+                'metric': 'data_consistency_ratio',
+                'dcr_score': float(dcr_score),
                 'privacy_level': privacy_level,
                 'result': result,
-                'description': f'Distribution similarity: {avg_similarity:.3f}',
-                'interpretation': f'Distribution similarity of {avg_similarity:.3f} indicates {privacy_level.lower()} privacy protection'
+                'description': f'SDMetrics DCR score: {dcr_score:.3f}',
+                'interpretation': f'Data Consistency Ratio of {dcr_score:.3f} indicates {privacy_level.lower()} privacy protection'
             }
             
         except Exception as e:
             return {
-                'type': 'distribution_similarity_test',
+                'type': 'sdmetrics_dcr_test',
                 'result': 'ERROR',
                 'error': str(e),
-                'description': 'Distribution similarity assessment using information theoretic measures'
+                'description': 'SDMetrics DCR privacy assessment'
             }
     
-    def _test_k_anonymity(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+    def _test_anonymeter_gdpr(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Test k-anonymity property using proper k-anonymity assessment.
+        Test GDPR compliance using Anonymeter.
         """
         try:
-            # Select categorical columns for k-anonymity assessment
-            categorical_cols = real_df.select_dtypes(include=['object', 'category']).columns.tolist()
-            
-            if len(categorical_cols) == 0:
+            # Try to import Anonymeter
+            try:
+                from anonymeter.evaluation import evaluate
+            except ImportError:
                 return {
-                    'type': 'k_anonymity_test',
-                    'result': 'SKIP',
-                    'reason': 'No categorical columns found for k-anonymity assessment',
-                    'description': 'k-anonymity privacy property assessment'
+                    'type': 'anonymeter_gdpr_test',
+                    'result': 'LIBRARY_NOT_AVAILABLE',
+                    'reason': 'Anonymeter library not installed. Install with: pip install anonymeter',
+                    'description': 'Anonymeter GDPR compliance assessment'
                 }
             
-            # Test k-anonymity for different k values
-            k_values = [2, 3, 5]
-            k_anonymity_results = {}
+            # Evaluate GDPR risks
+            res = evaluate(
+                real=real_df, 
+                synth=synth_df,
+                targets={"singling_out": True, "linkability": True, "inference": True}
+            )
+            summary = res.summary()
             
-            for k in k_values:
-                # Calculate k-anonymity for real data
-                real_group_sizes = real_df[categorical_cols].groupby(categorical_cols).size()
-                real_k_anon = (real_group_sizes >= k).sum() / len(real_group_sizes) if len(real_group_sizes) > 0 else 0
-                
-                # Calculate k-anonymity for synthetic data
-                synth_group_sizes = synth_df[categorical_cols].groupby(categorical_cols).size()
-                synth_k_anon = (synth_group_sizes >= k).sum() / len(synth_group_sizes) if len(synth_group_sizes) > 0 else 0
-                
-                k_anonymity_results[f'k={k}'] = {
-                    'real_k_anonymity': float(real_k_anon),
-                    'synthetic_k_anonymity': float(synth_k_anon),
-                    'difference': float(abs(real_k_anon - synth_k_anon))
-                }
+            # Extract risk scores
+            singling_out_risk = summary.get('singling_out', {}).get('risk', 0.0)
+            linkability_risk = summary.get('linkability', {}).get('risk', 0.0)
+            inference_risk = summary.get('inference', {}).get('risk', 0.0)
             
-            # Calculate overall k-anonymity score
-            avg_difference = np.mean([result['difference'] for result in k_anonymity_results.values()])
+            # Calculate overall risk
+            overall_risk = (singling_out_risk + linkability_risk + inference_risk) / 3
             
-            if avg_difference < 0.1:
+            # Determine privacy level (lower risk = better privacy)
+            if overall_risk < 0.2:
                 privacy_level = 'HIGH'
                 result = 'ACCEPT'
-            elif avg_difference < 0.2:
+            elif overall_risk < 0.4:
                 privacy_level = 'MEDIUM'
                 result = 'WARNING'
             else:
@@ -306,76 +222,61 @@ class PrivacyTestingService:
                 result = 'REJECT'
             
             return {
-                'type': 'k_anonymity_test',
-                'metric': 'k_anonymity_property',
-                'k_anonymity_results': k_anonymity_results,
-                'average_difference': float(avg_difference),
+                'type': 'anonymeter_gdpr_test',
+                'metric': 'gdpr_compliance_risk',
+                'singling_out_risk': float(singling_out_risk),
+                'linkability_risk': float(linkability_risk),
+                'inference_risk': float(inference_risk),
+                'overall_risk': float(overall_risk),
                 'privacy_level': privacy_level,
                 'result': result,
-                'description': f'k-anonymity property assessment (avg difference: {avg_difference:.3f})',
-                'interpretation': f'Average k-anonymity difference of {avg_difference:.1%} indicates {privacy_level.lower()} privacy protection'
+                'description': f'Anonymeter GDPR risk assessment (overall risk: {overall_risk:.3f})',
+                'interpretation': f'Overall GDPR risk of {overall_risk:.3f} indicates {privacy_level.lower()} privacy protection'
             }
             
         except Exception as e:
             return {
-                'type': 'k_anonymity_test',
+                'type': 'anonymeter_gdpr_test',
                 'result': 'ERROR',
                 'error': str(e),
-                'description': 'k-anonymity privacy property assessment'
+                'description': 'Anonymeter GDPR compliance assessment'
             }
     
-    def _test_information_leakage(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+    def _test_synthcity_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Test information leakage using mutual information and correlation analysis.
+        Test privacy using SynthCity privacy metrics.
         """
         try:
-            # Select numeric columns for information leakage testing
-            numeric_cols = real_df.select_dtypes(include=[np.number]).columns.tolist()
-            
-            if len(numeric_cols) < 2:
+            # Try to import SynthCity
+            try:
+                from synthcity.metrics import Metrics
+            except ImportError:
                 return {
-                    'type': 'information_leakage_test',
-                    'result': 'INSUFFICIENT_DATA',
-                    'reason': 'Need at least 2 numeric columns for information leakage testing',
-                    'description': 'Information leakage assessment using mutual information'
+                    'type': 'synthcity_privacy_test',
+                    'result': 'LIBRARY_NOT_AVAILABLE',
+                    'reason': 'SynthCity library not installed. Install with: pip install synthcity',
+                    'description': 'SynthCity privacy metrics assessment'
                 }
             
-            leakage_scores = []
+            # Evaluate privacy metrics
+            metrics = Metrics.evaluate(
+                [synth_df], 
+                real_data=real_df,
+                metrics=["identifiability_score", "sensitive_data_reidentification_xgb"]
+            )
             
-            for col in numeric_cols[:min(3, len(numeric_cols))]:  # Test first 3 columns
-                real_values = real_df[col].dropna().values
-                synth_values = synth_df[col].dropna().values
-                
-                if len(real_values) < 10 or len(synth_values) < 10:
-                    continue
-                
-                # Calculate correlation between real and synthetic values
-                correlation = np.corrcoef(real_values, synth_values)[0, 1]
-                
-                # Calculate mutual information (simplified)
-                # In practice, use sklearn.metrics.mutual_info_score for proper MI
-                mi_score = abs(correlation)  # Simplified approximation
-                
-                # Information leakage score (lower = less leakage)
-                leakage_score = 1 - abs(mi_score)
-                leakage_scores.append(leakage_score)
+            # Extract privacy scores
+            identifiability_score = metrics.get('identifiability_score', 0.0)
+            reidentification_score = metrics.get('sensitive_data_reidentification_xgb', 0.0)
             
-            if not leakage_scores:
-                return {
-                    'type': 'information_leakage_test',
-                    'result': 'INSUFFICIENT_DATA',
-                    'reason': 'No valid information leakage tests could be performed',
-                    'description': 'Information leakage assessment using mutual information'
-                }
+            # Calculate overall privacy score (lower = better privacy)
+            overall_privacy_score = 1 - ((identifiability_score + reidentification_score) / 2)
             
-            # Calculate overall leakage score
-            avg_leakage_score = np.mean(leakage_scores)
-            
-            # Determine privacy level (higher score = less leakage = better privacy)
-            if avg_leakage_score > 0.7:
+            # Determine privacy level
+            if overall_privacy_score > 0.8:
                 privacy_level = 'HIGH'
                 result = 'ACCEPT'
-            elif avg_leakage_score > 0.4:
+            elif overall_privacy_score > 0.6:
                 privacy_level = 'MEDIUM'
                 result = 'WARNING'
             else:
@@ -383,79 +284,55 @@ class PrivacyTestingService:
                 result = 'REJECT'
             
             return {
-                'type': 'information_leakage_test',
-                'metric': 'information_leakage_score',
-                'average_leakage_score': float(avg_leakage_score),
-                'tested_columns': len(leakage_scores),
+                'type': 'synthcity_privacy_test',
+                'metric': 'synthcity_privacy_score',
+                'identifiability_score': float(identifiability_score),
+                'reidentification_score': float(reidentification_score),
+                'overall_privacy_score': float(overall_privacy_score),
                 'privacy_level': privacy_level,
                 'result': result,
-                'description': f'Information leakage score: {avg_leakage_score:.3f}',
-                'interpretation': f'Information leakage score of {avg_leakage_score:.3f} indicates {privacy_level.lower()} privacy protection'
+                'description': f'SynthCity privacy score: {overall_privacy_score:.3f}',
+                'interpretation': f'SynthCity privacy score of {overall_privacy_score:.3f} indicates {privacy_level.lower()} privacy protection'
             }
             
         except Exception as e:
             return {
-                'type': 'information_leakage_test',
+                'type': 'synthcity_privacy_test',
                 'result': 'ERROR',
                 'error': str(e),
-                'description': 'Information leakage assessment using mutual information'
+                'description': 'SynthCity privacy metrics assessment'
             }
     
-    def _test_differential_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+    def _test_sdv_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Test differential privacy properties using sensitivity analysis.
+        Test privacy using SDV (Synthetic Data Vault) privacy evaluators.
         """
         try:
-            # Select numeric columns for differential privacy testing
-            numeric_cols = real_df.select_dtypes(include=[np.number]).columns.tolist()
-            
-            if len(numeric_cols) < 2:
+            # Try to import SDV
+            try:
+                from sdv.evaluation import evaluate
+                from sdv.evaluation.privacy import PrivacyEvaluator
+            except ImportError:
                 return {
-                    'type': 'differential_privacy_test',
-                    'result': 'INSUFFICIENT_DATA',
-                    'reason': 'Need at least 2 numeric columns for differential privacy testing',
-                    'description': 'Differential privacy property assessment'
+                    'type': 'sdv_privacy_test',
+                    'result': 'LIBRARY_NOT_AVAILABLE',
+                    'reason': 'SDV library not installed. Install with: pip install sdv',
+                    'description': 'SDV privacy evaluators assessment'
                 }
             
-            # Calculate sensitivity measures
-            sensitivities = []
+            # Use SDV privacy evaluator
+            privacy_evaluator = PrivacyEvaluator()
+            privacy_results = privacy_evaluator.evaluate(real_df, synth_df)
             
-            for col in numeric_cols[:min(3, len(numeric_cols))]:  # Test first 3 columns
-                real_values = real_df[col].dropna().values
-                synth_values = synth_df[col].dropna().values
-                
-                if len(real_values) < 10 or len(synth_values) < 10:
-                    continue
-                
-                # Calculate statistical sensitivity
-                real_mean = np.mean(real_values)
-                synth_mean = np.mean(synth_values)
-                real_std = np.std(real_values)
-                synth_std = np.std(synth_values)
-                
-                # Sensitivity measures
-                mean_sensitivity = abs(real_mean - synth_mean) / (real_std + 1e-8)
-                std_sensitivity = abs(real_std - synth_std) / (real_std + 1e-8)
-                
-                sensitivities.append(mean_sensitivity)
-                sensitivities.append(std_sensitivity)
+            # Extract privacy scores
+            privacy_score = privacy_results.get('privacy_score', 0.0)
+            overall_score = privacy_results.get('overall_score', 0.0)
             
-            if not sensitivities:
-                return {
-                    'type': 'differential_privacy_test',
-                    'result': 'INSUFFICIENT_DATA',
-                    'reason': 'No valid sensitivity measures could be calculated',
-                    'description': 'Differential privacy property assessment'
-                }
-            
-            # Calculate overall sensitivity
-            avg_sensitivity = np.mean(sensitivities)
-            
-            # Determine privacy level (lower sensitivity = higher privacy)
-            if avg_sensitivity < 0.1:
+            # Determine privacy level
+            if privacy_score > 0.8:
                 privacy_level = 'HIGH'
                 result = 'ACCEPT'
-            elif avg_sensitivity < 0.3:
+            elif privacy_score > 0.6:
                 privacy_level = 'MEDIUM'
                 result = 'WARNING'
             else:
@@ -463,22 +340,22 @@ class PrivacyTestingService:
                 result = 'REJECT'
             
             return {
-                'type': 'differential_privacy_test',
-                'metric': 'differential_privacy_sensitivity',
-                'average_sensitivity': float(avg_sensitivity),
-                'sensitivity_measures': len(sensitivities),
+                'type': 'sdv_privacy_test',
+                'metric': 'sdv_privacy_score',
+                'privacy_score': float(privacy_score),
+                'overall_score': float(overall_score),
                 'privacy_level': privacy_level,
                 'result': result,
-                'description': f'Differential privacy sensitivity: {avg_sensitivity:.3f}',
-                'interpretation': f'Average sensitivity of {avg_sensitivity:.3f} indicates {privacy_level.lower()} differential privacy protection'
+                'description': f'SDV privacy score: {privacy_score:.3f}',
+                'interpretation': f'SDV privacy score of {privacy_score:.3f} indicates {privacy_level.lower()} privacy protection'
             }
             
         except Exception as e:
             return {
-                'type': 'differential_privacy_test',
+                'type': 'sdv_privacy_test',
                 'result': 'ERROR',
                 'error': str(e),
-                'description': 'Differential privacy property assessment'
+                'description': 'SDV privacy evaluators assessment'
             }
 
 # Global instance
