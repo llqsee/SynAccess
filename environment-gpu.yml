@@ -35,15 +35,21 @@ dependencies:
   - lz4>=4.0.0 # Compression library
   - psutil>=5.9.0 # System monitoring
   - nvidia-ml-py>=11.0.0 # GPU monitoring
+  - zstandard>=0.21.0 # Advanced compression library
   - pytest>=7.4.0
   - pytest-asyncio>=0.21.0
   - black>=23.0.0
   - flake8>=6.0.0
   - isort>=5.12.0
+  - statsmodels>=0.14.0 # Statistical analysis and FDR correction
   - pip:
     - opencv-python>=4.8.0
     - pillow>=10.0.0
     - imageio>=2.31.0
     - imageio-ffmpeg>=0.4.8
     - cupy-cuda12x>=12.0.0 # GPU acceleration
-    - cudnn>=8.9.0 # Deep learning acceleration 
+    - cudnn>=8.9.0 # Deep learning acceleration
+    - sdv>=1.0.0 # Synthetic Data Vault for privacy evaluation
+    - sdmetrics>=0.10.0 # SDMetrics for privacy metrics
+    - anonymeter>=0.1.0 # Anonymeter for GDPR compliance
+    - synthcity>=0.3.0 # SynthCity for advanced privacy metrics 
