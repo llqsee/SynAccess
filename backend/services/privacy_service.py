@@ -21,11 +21,6 @@ except ImportError:
     sdmetrics = None
 
 try:
-    import anonymeter
-except ImportError:
-    anonymeter = None
-
-try:
     import synthcity
 except ImportError:
     synthcity = None
@@ -42,8 +37,7 @@ class PrivacyTestingService:
     Implements privacy tests using:
     1. SDV (Synthetic Data Vault) - Built-in privacy evaluators
     2. SDMetrics - Privacy-focused metrics and reports
-    3. Anonymeter - GDPR compliance and privacy risks
-    4. SynthCity - Advanced privacy metrics
+    3. SynthCity - Advanced privacy metrics
     """
     
     def __init__(self):
@@ -65,7 +59,7 @@ class PrivacyTestingService:
         if real_df.empty or synth_df.empty:
             return {
                 'testType': 'Privacy Tests',
-                'description': 'Comprehensive privacy assessment using established libraries (SDV, SDMetrics, Anonymeter, SynthCity)',
+                'description': 'Comprehensive privacy assessment using established libraries (SDV, SDMetrics, SynthCity)',
                 'tests': [],
                 'summary': {
                     'total': 0,
@@ -85,21 +79,17 @@ class PrivacyTestingService:
         dcr_test = self._test_sdmetrics_dcr(real_df, synth_df)
         tests.append(dcr_test)
         
-        # 3. Anonymeter GDPR Risks
-        anonymeter_test = self._test_anonymeter_gdpr(real_df, synth_df)
-        tests.append(anonymeter_test)
-        
-        # 4. SynthCity Privacy Metrics
+        # 3. SynthCity Privacy Metrics
         synthcity_test = self._test_synthcity_privacy(real_df, synth_df)
         tests.append(synthcity_test)
         
-        # 5. SDV Privacy Evaluators
+        # 4. SDV Privacy Evaluators
         sdv_test = self._test_sdv_privacy(real_df, synth_df)
         tests.append(sdv_test)
         
         return {
             'testType': 'Privacy Tests',
-            'description': 'Comprehensive privacy assessment using established libraries (SDV, SDMetrics, Anonymeter, SynthCity)',
+            'description': 'Comprehensive privacy assessment using established libraries (SDV, SDMetrics, SynthCity)',
             'tests': tests,
             'summary': {
                 'total': len(tests),
@@ -228,68 +218,7 @@ class PrivacyTestingService:
                 'description': 'SDMetrics DCR privacy assessment'
             }
     
-    def _test_anonymeter_gdpr(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
-        """
-        Test GDPR compliance using Anonymeter.
-        """
-        if anonymeter is None:
-            return {
-                'type': 'anonymeter_gdpr_test',
-                'result': 'LIBRARY_NOT_AVAILABLE',
-                'reason': 'Anonymeter library not installed. Install with: pip install anonymeter',
-                'description': 'Anonymeter GDPR compliance assessment'
-            }
-        
-        try:
-            from anonymeter.evaluation import evaluate
-            
-            # Evaluate GDPR risks
-            res = evaluate(
-                real=real_df, 
-                synth=synth_df,
-                targets={"singling_out": True, "linkability": True, "inference": True}
-            )
-            summary = res.summary()
-            
-            # Extract risk scores
-            singling_out_risk = summary.get('singling_out', {}).get('risk', 0.0)
-            linkability_risk = summary.get('linkability', {}).get('risk', 0.0)
-            inference_risk = summary.get('inference', {}).get('risk', 0.0)
-            
-            # Calculate overall risk
-            overall_risk = (singling_out_risk + linkability_risk + inference_risk) / 3
-            
-            # Determine privacy level (lower risk = better privacy)
-            if overall_risk < 0.2:
-                privacy_level = 'HIGH'
-                result = 'ACCEPT'
-            elif overall_risk < 0.4:
-                privacy_level = 'MEDIUM'
-                result = 'WARNING'
-            else:
-                privacy_level = 'LOW'
-                result = 'REJECT'
-            
-            return {
-                'type': 'anonymeter_gdpr_test',
-                'metric': 'gdpr_compliance_risk',
-                'singling_out_risk': float(singling_out_risk),
-                'linkability_risk': float(linkability_risk),
-                'inference_risk': float(inference_risk),
-                'overall_risk': float(overall_risk),
-                'privacy_level': privacy_level,
-                'result': result,
-                'description': f'Anonymeter GDPR risk assessment (overall risk: {overall_risk:.3f})',
-                'interpretation': f'Overall GDPR risk of {overall_risk:.3f} indicates {privacy_level.lower()} privacy protection'
-            }
-            
-        except Exception as e:
-            return {
-                'type': 'anonymeter_gdpr_test',
-                'result': 'ERROR',
-                'error': str(e),
-                'description': 'Anonymeter GDPR compliance assessment'
-            }
+
     
     def _test_synthcity_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """

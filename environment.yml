@@ -47,6 +47,6 @@ dependencies:
     - imageio>=2.31.0
     - imageio-ffmpeg>=0.4.8
     - sdv>=1.0.0 # Synthetic Data Vault for privacy evaluation
-    - sdmetrics>=0.10.0 # SDMetrics for privacy metrics
-    - anonymeter>=0.1.0 # Anonymeter for GDPR compliance
-    - synthcity>=0.3.0 # SynthCity for advanced privacy metrics 
+    - sdmetrics>=0.10.0 # SDMetrics for privacy metrics   
+    - synthcity>=0.2.12 # SynthCity for advanced privacy metrics
+     
