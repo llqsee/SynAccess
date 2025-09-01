@@ -14,6 +14,27 @@ import logging
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
+# Import privacy libraries with fallback
+try:
+    import sdmetrics
+except ImportError:
+    sdmetrics = None
+
+try:
+    import anonymeter
+except ImportError:
+    anonymeter = None
+
+try:
+    import synthcity
+except ImportError:
+    synthcity = None
+
+try:
+    import sdv
+except ImportError:
+    sdv = None
+
 class PrivacyTestingService:
     """
     Comprehensive privacy testing service using established privacy testing libraries.
@@ -40,6 +61,20 @@ class PrivacyTestingService:
         Returns:
             Dictionary containing privacy test results
         """
+        # Handle empty data
+        if real_df.empty or synth_df.empty:
+            return {
+                'testType': 'Privacy Tests',
+                'description': 'Comprehensive privacy assessment using established libraries (SDV, SDMetrics, Anonymeter, SynthCity)',
+                'tests': [],
+                'summary': {
+                    'total': 0,
+                    'passed': 0,
+                    'failed': 0,
+                    'errors': 0
+                }
+            }
+        
         tests = []
         
         # 1. SDMetrics Diagnostic Report
@@ -68,28 +103,44 @@ class PrivacyTestingService:
             'tests': tests,
             'summary': {
                 'total': len(tests),
-                'sdmetricsTests': 2,
-                'anonymeterTests': 1,
-                'synthcityTests': 1,
-                'sdvTests': 1
+                'passed': sum(1 for test in tests if test.get('result') == 'PASS'),
+                'failed': sum(1 for test in tests if test.get('result') == 'FAIL'),
+                'errors': sum(1 for test in tests if test.get('result') in ['ERROR', 'LIBRARY_NOT_AVAILABLE'])
             }
         }
+    
+    def _assess_privacy_level(self, score: float) -> str:
+        """Assess privacy level based on score."""
+        if score >= 0.8:
+            return 'EXCELLENT'
+        elif score >= 0.6:
+            return 'GOOD'
+        elif score >= 0.4:
+            return 'FAIR'
+        else:
+            return 'POOR'
+    
+    def _assess_result(self, privacy_level: str) -> str:
+        """Assess test result based on privacy level."""
+        if privacy_level in ['EXCELLENT', 'GOOD']:
+            return 'PASS'
+        else:
+            return 'FAIL'
     
     def _test_sdmetrics_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
         Test privacy using SDMetrics Diagnostic Report.
         """
+        if sdmetrics is None:
+            return {
+                'type': 'sdmetrics_diagnostic_test',
+                'result': 'LIBRARY_NOT_AVAILABLE',
+                'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
+                'description': 'SDMetrics Diagnostic Report privacy assessment'
+            }
+        
         try:
-            # Try to import SDMetrics
-            try:
-                from sdmetrics.reports.single_table import DiagnosticReport
-            except ImportError:
-                return {
-                    'type': 'sdmetrics_diagnostic_test',
-                    'result': 'LIBRARY_NOT_AVAILABLE',
-                    'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
-                    'description': 'SDMetrics Diagnostic Report privacy assessment'
-                }
+            from sdmetrics.reports.single_table import DiagnosticReport
             
             # Generate diagnostic report
             report = DiagnosticReport()
@@ -134,17 +185,16 @@ class PrivacyTestingService:
         """
         Test privacy using SDMetrics DCR (Data Consistency Ratio).
         """
+        if sdmetrics is None:
+            return {
+                'type': 'sdmetrics_dcr_test',
+                'result': 'LIBRARY_NOT_AVAILABLE',
+                'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
+                'description': 'SDMetrics DCR privacy assessment'
+            }
+        
         try:
-            # Try to import SDMetrics
-            try:
-                from sdmetrics.single_table.privacy import DCR
-            except ImportError:
-                return {
-                    'type': 'sdmetrics_dcr_test',
-                    'result': 'LIBRARY_NOT_AVAILABLE',
-                    'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
-                    'description': 'SDMetrics DCR privacy assessment'
-                }
+            from sdmetrics.single_table.privacy import DCR
             
             # Compute DCR score
             dcr_score = DCR.compute(real_df, synth_df)
@@ -182,17 +232,16 @@ class PrivacyTestingService:
         """
         Test GDPR compliance using Anonymeter.
         """
+        if anonymeter is None:
+            return {
+                'type': 'anonymeter_gdpr_test',
+                'result': 'LIBRARY_NOT_AVAILABLE',
+                'reason': 'Anonymeter library not installed. Install with: pip install anonymeter',
+                'description': 'Anonymeter GDPR compliance assessment'
+            }
+        
         try:
-            # Try to import Anonymeter
-            try:
-                from anonymeter.evaluation import evaluate
-            except ImportError:
-                return {
-                    'type': 'anonymeter_gdpr_test',
-                    'result': 'LIBRARY_NOT_AVAILABLE',
-                    'reason': 'Anonymeter library not installed. Install with: pip install anonymeter',
-                    'description': 'Anonymeter GDPR compliance assessment'
-                }
+            from anonymeter.evaluation import evaluate
             
             # Evaluate GDPR risks
             res = evaluate(
@@ -246,17 +295,16 @@ class PrivacyTestingService:
         """
         Test privacy using SynthCity privacy metrics.
         """
+        if synthcity is None:
+            return {
+                'type': 'synthcity_privacy_test',
+                'result': 'LIBRARY_NOT_AVAILABLE',
+                'reason': 'SynthCity library not installed. Install with: pip install synthcity',
+                'description': 'SynthCity privacy metrics assessment'
+            }
+        
         try:
-            # Try to import SynthCity
-            try:
-                from synthcity.metrics import Metrics
-            except ImportError:
-                return {
-                    'type': 'synthcity_privacy_test',
-                    'result': 'LIBRARY_NOT_AVAILABLE',
-                    'reason': 'SynthCity library not installed. Install with: pip install synthcity',
-                    'description': 'SynthCity privacy metrics assessment'
-                }
+            from synthcity.metrics import Metrics
             
             # Evaluate privacy metrics
             metrics = Metrics.evaluate(
@@ -307,18 +355,17 @@ class PrivacyTestingService:
         """
         Test privacy using SDV (Synthetic Data Vault) privacy evaluators.
         """
+        if sdv is None:
+            return {
+                'type': 'sdv_privacy_test',
+                'result': 'LIBRARY_NOT_AVAILABLE',
+                'reason': 'SDV library not installed. Install with: pip install sdv',
+                'description': 'SDV privacy evaluators assessment'
+            }
+        
         try:
-            # Try to import SDV
-            try:
-                from sdv.evaluation import evaluate
-                from sdv.evaluation.privacy import PrivacyEvaluator
-            except ImportError:
-                return {
-                    'type': 'sdv_privacy_test',
-                    'result': 'LIBRARY_NOT_AVAILABLE',
-                    'reason': 'SDV library not installed. Install with: pip install sdv',
-                    'description': 'SDV privacy evaluators assessment'
-                }
+            from sdv.evaluation import evaluate
+            from sdv.evaluation.privacy import PrivacyEvaluator
             
             # Use SDV privacy evaluator
             privacy_evaluator = PrivacyEvaluator()
