@@ -112,6 +112,7 @@ nav:
       - Visualizations: features/visualizations.md
       - Statistical Analysis: features/statistical-analysis.md
       - Data Validation: features/data-validation.md
+      - Privacy Testing: features/privacy-testing.md
       - Anomaly Detection: features/anomaly-detection.md
       - AI Analysis: features/ai-analysis.md
       - Performance Monitoring: features/performance-monitoring.md
