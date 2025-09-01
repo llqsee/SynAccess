@@ -641,11 +641,25 @@ class ValidationService:
     
     def _compute_quality_metrics(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """Compute data quality metrics."""
-        # Completeness
+        tests = []
+        
+        # Completeness test
         real_completeness = 1 - (real_df.isnull().sum().sum() / (real_df.shape[0] * real_df.shape[1]))
         synth_completeness = 1 - (synth_df.isnull().sum().sum() / (synth_df.shape[0] * synth_df.shape[1]))
+        completeness_ratio = synth_completeness / real_completeness if real_completeness > 0 else 0
         
-        # Consistency (data type matching)
+        completeness_test = {
+            'type': 'completeness_test',
+            'metric': 'data_completeness',
+            'realCompleteness': float(real_completeness),
+            'syntheticCompleteness': float(synth_completeness),
+            'ratio': float(completeness_ratio),
+            'result': 'ACCEPT' if completeness_ratio >= 0.95 else 'REJECT',
+            'description': f'Completeness ratio: {completeness_ratio:.3f} (synthetic/real)'
+        }
+        tests.append(completeness_test)
+        
+        # Consistency test (data type matching)
         consistent_columns = 0
         for col in real_df.columns:
             if col in synth_df.columns:
@@ -654,20 +668,32 @@ class ValidationService:
         
         consistency_ratio = consistent_columns / len(real_df.columns) if len(real_df.columns) > 0 else 0
         
+        consistency_test = {
+            'type': 'consistency_test',
+            'metric': 'data_type_consistency',
+            'consistentColumns': consistent_columns,
+            'totalColumns': len(real_df.columns),
+            'ratio': float(consistency_ratio),
+            'result': 'ACCEPT' if consistency_ratio >= 0.95 else 'REJECT',
+            'description': f'Data type consistency: {consistency_ratio:.3f} ({consistent_columns}/{len(real_df.columns)} columns)'
+        }
+        tests.append(consistency_test)
+        
         return {
             'testType': 'Quality Metrics',
             'description': 'Data completeness and consistency metrics',
             'completeness': {
                 'realCompleteness': float(real_completeness),
                 'syntheticCompleteness': float(synth_completeness),
-                'ratio': float(synth_completeness / real_completeness) if real_completeness > 0 else 0
+                'ratio': float(completeness_ratio)
             },
             'consistency': {
                 'consistentColumns': consistent_columns,
                 'totalColumns': len(real_df.columns),
                 'ratio': float(consistency_ratio)
             },
-            'summary': {'total': 2}
+            'tests': tests,
+            'summary': {'total': len(tests)}
         }
     
     def _compute_multivariate_statistics(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
