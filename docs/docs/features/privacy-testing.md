@@ -22,15 +22,6 @@ MAVIS uses industry-standard privacy testing libraries:
   - Data Consistency Ratio (DCR)
 - **Implementation**: `sdmetrics.reports.single_table.DiagnosticReport`, `sdmetrics.single_table.privacy.DCR`
 
-
-
-### SynthCity
-- **Purpose**: Advanced synthetic data generation and privacy metrics
-- **Metrics**:
-  - Identifiability score
-  - Sensitive data reidentification risk
-- **Implementation**: `synthcity.metrics.Metrics`
-
 ## Privacy Test Categories
 
 ### 1. SDMetrics Diagnostic Privacy
@@ -45,17 +36,7 @@ MAVIS uses industry-standard privacy testing libraries:
 - **Description**: Data Consistency Ratio measuring privacy preservation
 - **Output**: DCR score, privacy level, statistical significance
 
-
-
-### 3. SynthCity Privacy Metrics
-- **Test Type**: `synthcity_privacy_test`
-- **Metrics**:
-  - `synthcity_identifiability`: Individual record identification risk
-  - `synthcity_reidentification`: Sensitive data reidentification risk
-- **Description**: Advanced privacy risk assessment
-- **Output**: Identifiability and reidentification risk scores
-
-### 4. SDV Privacy Evaluator
+### 3. SDV Privacy Evaluator
 - **Test Type**: `sdv_privacy_test`
 - **Metric**: `sdv_privacy_evaluation`
 - **Description**: SDV's comprehensive privacy evaluation

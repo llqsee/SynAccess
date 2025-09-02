@@ -75,7 +75,7 @@
 - **Implementation**: Cell-based analysis with visual overlay and CSV export
 
 #### **10. Privacy Testing**
-- **Requirement**: Comprehensive privacy assessment using established libraries (SDV, SDMetrics, SynthCity)
+- **Requirement**: Comprehensive privacy assessment using established libraries (SDV, SDMetrics)
 - **Rationale**: Synthetic data must preserve privacy while maintaining utility. Multiple privacy frameworks ensure robust assessment
 - **Implementation**: Industry-standard privacy metrics integrated into quality validation workflow
 

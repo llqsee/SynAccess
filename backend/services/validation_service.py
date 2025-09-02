@@ -685,6 +685,10 @@ class ValidationService:
         if privacy_tests.get('tests'):
             tests.extend(privacy_tests['tests'])
         
+        # SDMetrics Diagnostic Report for overall data quality assessment
+        sdmetrics_quality_test = privacy_service.get_sdmetrics_diagnostic_score(real_df, synth_df)
+        tests.append(sdmetrics_quality_test)
+        
         return {
             'testType': 'Quality Metrics',
             'description': 'Data completeness, consistency, and privacy metrics',

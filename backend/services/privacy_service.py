@@ -1,8 +1,7 @@
 """
 Privacy testing service for synthetic data validation.
 
-This service implements comprehensive privacy tests using established privacy testing
-libraries: SDV, SDMetrics, and SynthCity for robust privacy assessment.
+This service implements comprehensive privacy tests using SDMetrics for robust privacy assessment.
 """
 
 import numpy as np
@@ -20,24 +19,13 @@ try:
 except ImportError:
     sdmetrics = None
 
-try:
-    import synthcity
-except ImportError:
-    synthcity = None
-
-try:
-    import sdv
-except ImportError:
-    sdv = None
-
 class PrivacyTestingService:
     """
-    Comprehensive privacy testing service using established privacy testing libraries.
+    Comprehensive privacy testing service using SDMetrics for privacy assessment.
     
     Implements privacy tests using:
-    1. SDV (Synthetic Data Vault) - Built-in privacy evaluators
-    2. SDMetrics - Privacy-focused metrics and reports
-    3. SynthCity - Advanced privacy metrics
+    1. DCRBaselineProtection - Distance between real and synthetic records vs random baseline
+    2. DisclosureProtection - Attribute-inference/disclosure risk estimation
     """
     
     def __init__(self):
@@ -46,7 +34,7 @@ class PrivacyTestingService:
         
     def compute_privacy_tests(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Compute comprehensive privacy tests using established privacy libraries.
+        Compute comprehensive privacy tests using SDMetrics.
         
         Args:
             real_df: Real dataset
@@ -59,7 +47,7 @@ class PrivacyTestingService:
         if real_df.empty or synth_df.empty:
             return {
                 'testType': 'Privacy Tests',
-                'description': 'Comprehensive privacy assessment using established libraries (SDV, SDMetrics, SynthCity)',
+                'description': 'Comprehensive privacy assessment using SDMetrics',
                 'tests': [],
                 'summary': {
                     'total': 0,
@@ -71,25 +59,17 @@ class PrivacyTestingService:
         
         tests = []
         
-        # 1. SDMetrics Diagnostic Report
-        sdmetrics_test = self._test_sdmetrics_privacy(real_df, synth_df)
-        tests.append(sdmetrics_test)
+        # DCRBaselineProtection - Distance between real and synthetic records vs random baseline
+        dcr_baseline_test = self._test_dcr_baseline_protection(real_df, synth_df)
+        tests.append(dcr_baseline_test)
         
-        # 2. SDMetrics DCR (Data Consistency Ratio)
-        dcr_test = self._test_sdmetrics_dcr(real_df, synth_df)
-        tests.append(dcr_test)
-        
-        # 3. SynthCity Privacy Metrics
-        synthcity_test = self._test_synthcity_privacy(real_df, synth_df)
-        tests.append(synthcity_test)
-        
-        # 4. SDV Privacy Evaluators
-        sdv_test = self._test_sdv_privacy(real_df, synth_df)
-        tests.append(sdv_test)
+        # DisclosureProtection - Attribute-inference/disclosure risk estimation
+        disclosure_test = self._test_disclosure_protection(real_df, synth_df)
+        tests.append(disclosure_test)
         
         return {
             'testType': 'Privacy Tests',
-            'description': 'Comprehensive privacy assessment using established libraries (SDV, SDMetrics, SynthCity)',
+            'description': 'Comprehensive privacy assessment using SDMetrics',
             'tests': tests,
             'summary': {
                 'total': len(tests),
@@ -117,79 +97,35 @@ class PrivacyTestingService:
         else:
             return 'FAIL'
     
-    def _test_sdmetrics_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+    def _test_dcr_baseline_protection(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Test privacy using SDMetrics Diagnostic Report.
-        """
-        if sdmetrics is None:
-            return {
-                'type': 'sdmetrics_diagnostic_test',
-                'result': 'LIBRARY_NOT_AVAILABLE',
-                'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
-                'description': 'SDMetrics Diagnostic Report privacy assessment'
-            }
-        
-        try:
-            from sdmetrics.reports.single_table import DiagnosticReport
-            
-            # Generate diagnostic report
-            report = DiagnosticReport()
-            report.generate(real_df, synth_df)
-            diagnostics = report.get_results()
-            
-            # Extract privacy-relevant metrics
-            privacy_score = diagnostics.get('privacy', 0.0)
-            overall_score = diagnostics.get('overall', 0.0)
-            
-            # Determine privacy level
-            if privacy_score > 0.8:
-                privacy_level = 'HIGH'
-                result = 'ACCEPT'
-            elif privacy_score > 0.6:
-                privacy_level = 'MEDIUM'
-                result = 'WARNING'
-            else:
-                privacy_level = 'LOW'
-                result = 'REJECT'
-            
-            return {
-                'type': 'sdmetrics_diagnostic_test',
-                'metric': 'sdmetrics_diagnostic_privacy',
-                'privacy_score': float(privacy_score),
-                'overall_score': float(overall_score),
-                'privacy_level': privacy_level,
-                'result': result,
-                'description': f'SDMetrics Diagnostic Report privacy score: {privacy_score:.3f}',
-                'interpretation': f'SDMetrics privacy score of {privacy_score:.3f} indicates {privacy_level.lower()} privacy protection'
-            }
-            
-        except Exception as e:
-            return {
-                'type': 'sdmetrics_diagnostic_test',
-                'result': 'ERROR',
-                'error': str(e),
-                'description': 'SDMetrics Diagnostic Report privacy assessment'
-            }
-    
-    def _test_sdmetrics_dcr(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
-        """
-        Test privacy using SDMetrics DCR (Data Consistency Ratio).
+        Test privacy using SDMetrics DCRBaselineProtection.
+        Distance between real and synthetic records compared against a random baseline.
+        Higher score = better privacy.
         """
         if sdmetrics is None:
             return {
-                'type': 'sdmetrics_dcr_test',
+                'type': 'DCRBaselineProtection',
                 'result': 'LIBRARY_NOT_AVAILABLE',
                 'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
-                'description': 'SDMetrics DCR privacy assessment'
+                'description': 'Distance between real and synthetic records vs random baseline'
             }
         
         try:
-            from sdmetrics.single_table.privacy import DCR
+            from sdmetrics.single_table.privacy import DCRBaselineProtection
             
-            # Compute DCR score
-            dcr_score = DCR.compute(real_df, synth_df)
+            # Create metadata for DCR baseline protection
+            metadata = {
+                'columns': {
+                    col: {'sdtype': 'categorical' if real_df[col].dtype == 'object' else 'numerical'}
+                    for col in real_df.columns
+                }
+            }
             
-            # Determine privacy level (higher DCR = better privacy)
+            # Compute DCR baseline protection with metadata
+            dcr_score = DCRBaselineProtection.compute(real_df, synth_df, metadata)
+            
+            # Determine privacy level (higher score = better privacy)
             if dcr_score > 0.8:
                 privacy_level = 'HIGH'
                 result = 'ACCEPT'
@@ -201,110 +137,83 @@ class PrivacyTestingService:
                 result = 'REJECT'
             
             return {
-                'type': 'sdmetrics_dcr_test',
-                'metric': 'data_consistency_ratio',
-                'dcr_score': float(dcr_score),
+                'type': 'DCRBaselineProtection',
+                'metric': 'dcr_baseline_protection',
+                'privacy_score': float(dcr_score),
                 'privacy_level': privacy_level,
                 'result': result,
-                'description': f'SDMetrics DCR score: {dcr_score:.3f}',
-                'interpretation': f'Data Consistency Ratio of {dcr_score:.3f} indicates {privacy_level.lower()} privacy protection'
+                'description': f'DCR Baseline Protection: {dcr_score:.3f}',
+                'interpretation': f'Distance between real and synthetic records vs random baseline: {dcr_score:.3f} indicates {privacy_level.lower()} privacy protection'
             }
             
         except Exception as e:
             return {
-                'type': 'sdmetrics_dcr_test',
+                'type': 'DCRBaselineProtection',
                 'result': 'ERROR',
                 'error': str(e),
-                'description': 'SDMetrics DCR privacy assessment'
+                'description': 'Distance between real and synthetic records vs random baseline'
             }
     
-
-    
-    def _test_synthcity_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+    def _test_disclosure_protection(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Test privacy using SynthCity privacy metrics.
+        Test privacy using SDMetrics DisclosureProtection.
+        Estimates attribute-inference/disclosure risk for sensitive columns.
+        Lower score = better privacy (lower disclosure risk).
         """
-        if synthcity is None:
+        if sdmetrics is None:
             return {
-                'type': 'synthcity_privacy_test',
+                'type': 'DisclosureProtection',
                 'result': 'LIBRARY_NOT_AVAILABLE',
-                'reason': 'SynthCity library not installed. Install with: pip install synthcity',
-                'description': 'SynthCity privacy metrics assessment'
+                'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
+                'description': 'Attribute-inference/disclosure risk estimation'
             }
         
         try:
-            from synthcity.metrics import Metrics
+            from sdmetrics.single_table.privacy import DisclosureProtection
             
-            # Evaluate privacy metrics
-            metrics = Metrics.evaluate(
-                [synth_df], 
-                real_data=real_df,
-                metrics=["identifiability_score", "sensitive_data_reidentification_xgb"]
-            )
-            
-            # Extract privacy scores
-            identifiability_score = metrics.get('identifiability_score', 0.0)
-            reidentification_score = metrics.get('sensitive_data_reidentification_xgb', 0.0)
-            
-            # Calculate overall privacy score (lower = better privacy)
-            overall_privacy_score = 1 - ((identifiability_score + reidentification_score) / 2)
-            
-            # Determine privacy level
-            if overall_privacy_score > 0.8:
-                privacy_level = 'HIGH'
-                result = 'ACCEPT'
-            elif overall_privacy_score > 0.6:
-                privacy_level = 'MEDIUM'
-                result = 'WARNING'
-            else:
-                privacy_level = 'LOW'
-                result = 'REJECT'
-            
-            return {
-                'type': 'synthcity_privacy_test',
-                'metric': 'synthcity_privacy_score',
-                'identifiability_score': float(identifiability_score),
-                'reidentification_score': float(reidentification_score),
-                'overall_privacy_score': float(overall_privacy_score),
-                'privacy_level': privacy_level,
-                'result': result,
-                'description': f'SynthCity privacy score: {overall_privacy_score:.3f}',
-                'interpretation': f'SynthCity privacy score of {overall_privacy_score:.3f} indicates {privacy_level.lower()} privacy protection'
+            # Create metadata for disclosure protection
+            metadata = {
+                'columns': {
+                    col: {'sdtype': 'categorical' if real_df[col].dtype == 'object' else 'numerical'}
+                    for col in real_df.columns
+                }
             }
             
-        except Exception as e:
-            return {
-                'type': 'synthcity_privacy_test',
-                'result': 'ERROR',
-                'error': str(e),
-                'description': 'SynthCity privacy metrics assessment'
-            }
-    
-    def _test_sdv_privacy(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
-        """
-        Test privacy using SDV (Synthetic Data Vault) privacy evaluators.
-        """
-        if sdv is None:
-            return {
-                'type': 'sdv_privacy_test',
-                'result': 'LIBRARY_NOT_AVAILABLE',
-                'reason': 'SDV library not installed. Install with: pip install sdv',
-                'description': 'SDV privacy evaluators assessment'
-            }
-        
-        try:
-            from sdv.evaluation import evaluate
-            from sdv.evaluation.privacy import PrivacyEvaluator
+            # Compute disclosure protection for each column
+            disclosure_scores = {}
+            total_score = 0
+            valid_columns = 0
             
-            # Use SDV privacy evaluator
-            privacy_evaluator = PrivacyEvaluator()
-            privacy_results = privacy_evaluator.evaluate(real_df, synth_df)
+            for column in real_df.columns:
+                try:
+                    # Skip columns with insufficient data
+                    if len(real_df[column].dropna()) < 10 or len(synth_df[column].dropna()) < 10:
+                        continue
+                    
+                    # Try to compute disclosure protection with metadata
+                    score = DisclosureProtection.compute(real_df, synth_df, column, metadata)
+                    disclosure_scores[column] = float(score)
+                    total_score += score
+                    valid_columns += 1
+                except Exception as col_error:
+                    # Skip columns that can't be processed
+                    continue
             
-            # Extract privacy scores
-            privacy_score = privacy_results.get('privacy_score', 0.0)
-            overall_score = privacy_results.get('overall_score', 0.0)
+            if valid_columns == 0:
+                return {
+                    'type': 'DisclosureProtection',
+                    'result': 'ERROR',
+                    'error': 'No columns could be processed for disclosure protection',
+                    'description': 'Attribute-inference/disclosure risk estimation'
+                }
             
-            # Determine privacy level
+            # Calculate average disclosure score (lower is better for privacy)
+            avg_disclosure_score = total_score / valid_columns
+            
+            # Convert to privacy score (invert: lower disclosure = higher privacy)
+            privacy_score = 1.0 - avg_disclosure_score
+            
+            # Determine privacy level (higher privacy score = better privacy)
             if privacy_score > 0.8:
                 privacy_level = 'HIGH'
                 result = 'ACCEPT'
@@ -316,22 +225,83 @@ class PrivacyTestingService:
                 result = 'REJECT'
             
             return {
-                'type': 'sdv_privacy_test',
-                'metric': 'sdv_privacy_score',
+                'type': 'DisclosureProtection',
+                'metric': 'disclosure_protection',
                 'privacy_score': float(privacy_score),
-                'overall_score': float(overall_score),
+                'disclosure_score': float(avg_disclosure_score),
                 'privacy_level': privacy_level,
                 'result': result,
-                'description': f'SDV privacy score: {privacy_score:.3f}',
-                'interpretation': f'SDV privacy score of {privacy_score:.3f} indicates {privacy_level.lower()} privacy protection'
+                'description': f'Disclosure Protection: {privacy_score:.3f} (avg disclosure: {avg_disclosure_score:.3f})',
+                'interpretation': f'Attribute-inference/disclosure risk: {avg_disclosure_score:.3f} indicates {privacy_level.lower()} privacy protection',
+                'column_scores': disclosure_scores
             }
             
         except Exception as e:
             return {
-                'type': 'sdv_privacy_test',
+                'type': 'DisclosureProtection',
                 'result': 'ERROR',
                 'error': str(e),
-                'description': 'SDV privacy evaluators assessment'
+                'description': 'Attribute-inference/disclosure risk estimation'
+            }
+    
+    def get_sdmetrics_diagnostic_score(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
+        """
+        Get SDMetrics Diagnostic Report score for quality metrics.
+        This is now separate from privacy tests and used for overall data quality assessment.
+        """
+        if sdmetrics is None:
+            return {
+                'type': 'Data Quality Assessment',
+                'result': 'LIBRARY_NOT_AVAILABLE',
+                'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
+                'description': 'SDMetrics Diagnostic Report for overall data quality'
+            }
+        
+        try:
+            from sdmetrics.reports.single_table.diagnostic_report import DiagnosticReport
+            
+            # Create metadata for the diagnostic report
+            metadata = {
+                'columns': {
+                    col: {'sdtype': 'categorical' if real_df[col].dtype == 'object' else 'numerical'}
+                    for col in real_df.columns
+                }
+            }
+            
+            # Generate diagnostic report with metadata
+            report = DiagnosticReport()
+            report.generate(real_df, synth_df, metadata)
+            
+            # Get the overall score
+            quality_score = report.get_score()
+            
+            # Determine quality level
+            if quality_score > 0.8:
+                quality_level = 'EXCELLENT'
+                result = 'ACCEPT'
+            elif quality_score > 0.6:
+                quality_level = 'GOOD'
+                result = 'WARNING'
+            else:
+                quality_level = 'POOR'
+                result = 'REJECT'
+            
+            return {
+                'type': 'Data Quality Assessment',
+                'metric': 'sdmetrics_diagnostic_quality',
+                'quality_score': float(quality_score),
+                'quality_level': quality_level,
+                'result': result,
+                'description': f'SDMetrics Diagnostic Report quality score: {quality_score:.3f}',
+                'interpretation': f'Overall data quality score of {quality_score:.3f} indicates {quality_level.lower()} quality'
+            }
+            
+        except Exception as e:
+            return {
+                'type': 'Data Quality Assessment',
+                'result': 'ERROR',
+                'error': str(e),
+                'description': 'SDMetrics Diagnostic Report for overall data quality'
             }
 
 # Global instance
