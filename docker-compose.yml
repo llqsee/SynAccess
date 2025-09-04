@@ -43,6 +43,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/build:/usr/share/nginx/html:ro
       - ./ssl:/etc/nginx/ssl:ro
       - mavis_logs:/var/log/nginx
     depends_on:

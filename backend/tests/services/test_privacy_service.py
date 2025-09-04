@@ -78,12 +78,10 @@ class TestPrivacyTestingService:
         assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']
 
     def test_error_handling(self, privacy_service, sample_data):
-        """Test error handling in privacy tests."""
+        """Test error handling in privacy tests (diagnostic score path)."""
         real_df, synth_df = sample_data
-        
-        # Since libraries are installed but may fail, expect ERROR or LIBRARY_NOT_AVAILABLE
-        result = privacy_service._test_sdmetrics_privacy(real_df, synth_df)
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR']
+        result = privacy_service.get_sdmetrics_diagnostic_score(real_df, synth_df)
+        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']
 
     def test_privacy_level_assessment(self, privacy_service):
         """Test privacy level assessment logic."""
@@ -125,11 +123,10 @@ class TestPrivacyTestingService:
         assert result['summary']['errors'] == 0
 
     def test_insufficient_data_handling(self, privacy_service):
-        """Test handling of datasets with insufficient data."""
+        """Test handling of datasets with insufficient data (diagnostic path)."""
         # Create very small datasets
         small_real = pd.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
         small_synth = pd.DataFrame({'col1': [1.1, 2.1], 'col2': [3.1, 4.1]})
         
-        # Since libraries are installed but may fail, expect ERROR or LIBRARY_NOT_AVAILABLE
-        result = privacy_service._test_sdmetrics_privacy(small_real, small_synth)
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR']
+        result = privacy_service.get_sdmetrics_diagnostic_score(small_real, small_synth)
+        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']

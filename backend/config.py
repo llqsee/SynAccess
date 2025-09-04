@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     max_data_points: int = Field(default=999999999, env="MAX_DATA_POINTS")
     embedding_timeout: int = Field(default=240, env="EMBEDDING_TIMEOUT")  # 4 minutes
     enable_gpu: bool = Field(default=False, env="ENABLE_GPU")
+    # Validation logging verbosity
+    validation_debug_log: bool = Field(default=False, env="VALIDATION_DEBUG_LOG")
     
     class Config:
         env_file = ".env"

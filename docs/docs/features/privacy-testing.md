@@ -4,7 +4,7 @@ MAVIS includes comprehensive privacy testing capabilities for synthetic data eva
 
 ## Overview
 
-Privacy testing evaluates how well synthetic data preserves privacy compared to the original dataset. MAVIS implements multiple privacy assessment frameworks to provide a comprehensive evaluation of synthetic data privacy characteristics.
+Privacy testing evaluates how well synthetic data preserves privacy compared to the original dataset. MAVIS integrates privacy assessment into the main validation workflow for a comprehensive view of privacy and quality.
 
 ## Privacy Testing Libraries
 
@@ -33,27 +33,11 @@ MAVIS uses industry-standard privacy testing libraries:
 
 ## Privacy Level Assessment
 
-MAVIS categorizes privacy test results into levels:
+MAVIS maps privacy scores to levels and result labels:
 
-### Excellent Privacy (0.8-1.0)
-- Very high privacy preservation
-- Minimal risk of reidentification
-- Suitable for sensitive data applications
-
-### Good Privacy (0.6-0.8)
-- Good privacy preservation
-- Low risk of reidentification
-- Suitable for most applications
-
-### Fair Privacy (0.4-0.6)
-- Moderate privacy preservation
-- Some risk of reidentification
-- Requires careful consideration
-
-### Poor Privacy (0.0-0.4)
-- Low privacy preservation
-- High risk of reidentification
-- Not suitable for sensitive data
+- **HIGH** (score > 0.8) → `result`: `ACCEPT`
+- **MEDIUM** (score > 0.6) → `result`: `WARNING`
+- **LOW** (score ≤ 0.6) → `result`: `REJECT`
 
 ## Integration with Quality Metrics
 
@@ -71,46 +55,25 @@ This integration provides a holistic view of synthetic data quality including pr
 Privacy tests run automatically as part of the validation process when:
 - Both real and synthetic datasets are provided
 - Required privacy libraries are installed
-- Sufficient data is available for testing
 
 ### Manual Execution
-Privacy tests can be executed independently through:
-- API endpoints for privacy-specific testing
-- Integration with the main validation workflow
-- Standalone privacy assessment tools
+- Not exposed via standalone endpoints. Privacy results are produced within the main validation workflow.
 
 ## Error Handling
 
 ### Library Availability
 If privacy testing libraries are not installed:
 - Tests return `LIBRARY_NOT_AVAILABLE` status
-- Clear installation instructions are provided
 - Other validation tests continue normally
 
 ### Data Requirements
 If insufficient data is available:
-- Tests return `INSUFFICIENT_DATA` status
-- Minimum data requirements are documented
-- Graceful degradation to available tests
+- Tests return `INSUFFICIENT_DATA` status where applicable
 
 ### Processing Errors
 If privacy tests encounter errors:
 - Tests return `ERROR` status with error details
-- Logging provides debugging information
 - Validation process continues with other tests
-
-## Configuration
-
-### Privacy Test Parameters
-- **Sample Size**: Adaptive based on dataset size
-- **Confidence Level**: 0.95 (95% confidence intervals)
-- **Risk Thresholds**: Configurable privacy level boundaries
-- **Library Selection**: Automatic detection of available libraries
-
-### Performance Optimization
-- **Parallel Processing**: Independent privacy tests run concurrently
-- **Memory Management**: Efficient data handling for large datasets
-- **Caching**: Reuse of intermediate calculations where possible
 
 ## Output Format
 
@@ -118,46 +81,28 @@ If privacy tests encounter errors:
 Each privacy test returns:
 ```json
 {
-  "type": "test_type",
-  "metric": "metric_name", 
+  "type": "DCRBaselineProtection",
+  "metric": "dcr_baseline_protection",
   "privacy_score": 0.85,
-  "privacy_level": "GOOD",
-  "result": "PASS",
-  "description": "Test description",
-  "interpretation": "Result interpretation"
+  "privacy_level": "HIGH|MEDIUM|LOW",
+  "result": "ACCEPT|WARNING|REJECT",
+  "description": "...",
+  "interpretation": "..."
 }
 ```
 
 ### Summary Statistics
 Privacy test summary includes:
 - **Total Tests**: Number of privacy tests executed
-- **Pass Rate**: Percentage of tests passing privacy thresholds
-- **Average Score**: Mean privacy score across all tests
-- **Risk Assessment**: Overall privacy risk level
+- **Status Counts**: ACCEPT/WARNING/REJECT/ERROR totals
 
 ## Best Practices
 
-### Privacy Testing Guidelines
-1. **Comprehensive Assessment**: Use multiple privacy testing frameworks
-2. **Context-Aware Evaluation**: Consider data sensitivity and use case
-3. **Regular Monitoring**: Periodic privacy assessment for evolving datasets
-4. **Documentation**: Maintain privacy testing records and results
-
-### Interpretation Guidelines
-1. **Score Context**: Consider privacy scores relative to data sensitivity
-2. **Risk Assessment**: Evaluate privacy risks in context of intended use
-3. **Mitigation Strategies**: Implement privacy-enhancing techniques if needed
-4. **Compliance**: Ensure adherence to relevant privacy regulations
+- Use privacy scores alongside statistical quality metrics to balance utility and privacy
+- Consider domain-specific risk tolerance when interpreting privacy levels
 
 ## Future Enhancements
 
-### Planned Features
 - **Differential Privacy**: Formal differential privacy guarantees
 - **k-Anonymity**: k-anonymity assessment capabilities
 - **Custom Metrics**: User-defined privacy assessment criteria
-- **Privacy Budget**: Privacy budget tracking and management
-
-### Research Integration
-- **Novel Metrics**: Integration of cutting-edge privacy research
-- **Benchmarking**: Comparison with privacy testing benchmarks
-- **Validation Studies**: Empirical validation of privacy metrics

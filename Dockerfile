@@ -12,7 +12,7 @@ COPY frontend/ ./
 RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 # Backend stage (CPU or GPU)
-FROM continuumio/miniconda3:latest
+FROM continuumio/miniconda3:24.7.1-0
 
 # --- Build ARG to select environment file ---
 ARG ENV_FILE=environment.yml
@@ -28,13 +28,7 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install NVIDIA runtime if GPU is enabled
-RUN if [ "$GPU_ENABLED" = "true" ]; then \
-    apt-get update && apt-get install -y \
-    nvidia-container-runtime \
-    nvidia-container-toolkit \
-    && rm -rf /var/lib/apt/lists/*; \
-    fi
+# GPU runtime is configured on the host/Compose side; no NVIDIA runtime install needed in the image
 
 # Copy and install the selected environment file
 COPY ${ENV_FILE} /tmp/environment.yml

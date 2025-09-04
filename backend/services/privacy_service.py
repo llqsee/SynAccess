@@ -9,6 +9,9 @@ import pandas as pd
 from typing import Dict, List, Any, Tuple, Optional
 import warnings
 import logging
+import os
+from contextlib import redirect_stdout, redirect_stderr
+from io import StringIO
 
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
@@ -173,12 +176,21 @@ class PrivacyTestingService:
                 }
             }
             
-            # Generate diagnostic report with metadata
+            # Generate diagnostic report with metadata while suppressing library stdout/stderr
             report = DiagnosticReport()
-            report.generate(real_df, synth_df, metadata)
-            
-            # Get the overall score
-            quality_score = report.get_score()
+            # Disable tqdm-style progress bars
+            original_tqdm_disable = os.environ.get('TQDM_DISABLE')
+            os.environ['TQDM_DISABLE'] = '1'
+            try:
+                with open(os.devnull, 'w') as devnull, redirect_stdout(devnull), redirect_stderr(devnull):
+                    report.generate(real_df, synth_df, metadata)
+                    # Get the overall score (also suppress potential prints)
+                    quality_score = report.get_score()
+            finally:
+                if original_tqdm_disable is None:
+                    os.environ.pop('TQDM_DISABLE', None)
+                else:
+                    os.environ['TQDM_DISABLE'] = original_tqdm_disable
             
             # Determine quality level
             if quality_score > 0.8:

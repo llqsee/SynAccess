@@ -26,6 +26,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import MDS
 from statsmodels.stats.multitest import multipletests
 from .privacy_service import privacy_service
+from backend.utils.logging_config import get_logger
+from backend.config import settings
 
 warnings.filterwarnings('ignore')
 
@@ -54,8 +56,9 @@ class ValidationService:
     """
     
     def __init__(self):
-        print("Professional Validation Service Initialized")       
-        print(f"  - GPU Available: {GPU_AVAILABLE}")
+        self.logger = get_logger("validation_service")
+        self.enable_validation_debug = bool(getattr(settings, "validation_debug_log", False))
+        self.logger.info("Professional Validation Service Initialized", extra={"gpu_available": GPU_AVAILABLE})
         # print(f"  - SciPy: {scipy.__version__}")
         # print(f"  - NumPy: {np.__version__}")
         # print(f"  - Pandas: {pd.__version__}")
@@ -95,7 +98,7 @@ class ValidationService:
                 # CPU fallback
                 return np.corrcoef(data.T)
         except Exception as e:
-            print(f"GPU correlation computation failed, falling back to CPU: {e}")
+            self.logger.warning("GPU correlation computation failed, falling back to CPU", extra={"error": str(e)})
             return np.corrcoef(data.T)
     
     def _compute_distance_matrix_gpu(self, data: np.ndarray) -> np.ndarray:
@@ -111,7 +114,7 @@ class ValidationService:
                 # CPU fallback using scipy
                 return squareform(pdist(data, metric='euclidean'))
         except Exception as e:
-            print(f"GPU distance computation failed, falling back to CPU: {e}")
+            self.logger.warning("GPU distance computation failed, falling back to CPU", extra={"error": str(e)})
             return squareform(pdist(data, metric='euclidean'))
     
     def _compute_mutual_information_gpu(self, real_data: np.ndarray, synth_data: np.ndarray) -> float:
@@ -133,43 +136,44 @@ class ValidationService:
                 # CPU fallback
                 return mutual_info_score(real_data.flatten(), synth_data.flatten())
         except Exception as e:
-            print(f"GPU mutual information computation failed, falling back to CPU: {e}")
+            self.logger.warning("GPU mutual information computation failed, falling back to CPU", extra={"error": str(e)})
             return mutual_info_score(real_data.flatten(), synth_data.flatten())
     
     def _log_data_info(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> None:
         """Log information about the data for debugging."""
-        print(f"Data Info:")
-        print(f"  Real data shape: {real_df.shape}")
-        print(f"  Synthetic data shape: {synth_df.shape}")
-        print(f"  Real data columns: {list(real_df.columns)}")
-        print(f"  Real data dtypes: {real_df.dtypes.to_dict()}")
+        self.logger.debug("Data Info", extra={
+            "real_shape": tuple(real_df.shape),
+            "synthetic_shape": tuple(synth_df.shape),
+            "real_columns": list(real_df.columns),
+            "real_dtypes": {k: str(v) for k, v in real_df.dtypes.to_dict().items()}
+        })
         
         numeric_cols = real_df.select_dtypes(include=[np.number]).columns.tolist()
-        print(f"  Numeric columns: {numeric_cols}")
-        print(f"  Number of numeric columns: {len(numeric_cols)}")
+        self.logger.debug("Numeric columns summary", extra={
+            "numeric_columns": numeric_cols,
+            "numeric_count": len(numeric_cols)
+        })
         
         # Check for potential numeric columns that might be strings
         for col in real_df.columns:
             if col not in numeric_cols:
                 sample_values = real_df[col].dropna().head(5).tolist()
-                print(f"  Column '{col}' (type: {real_df[col].dtype}): sample values = {sample_values}")
+                self.logger.debug("Column sample", extra={
+                    "column": col,
+                    "dtype": str(real_df[col].dtype),
+                    "samples": sample_values
+                })
                 
                 # Try to convert to numeric to see if it's actually numeric data
                 try:
                     pd.to_numeric(real_df[col], errors='raise')
-                    print(f"    -> Column '{col}' CAN be converted to numeric!")
+                    self.logger.debug("Column can be converted to numeric", extra={"column": col})
                 except (ValueError, TypeError):
-                    print(f"    -> Column '{col}' cannot be converted to numeric")
-        
-        # Show sample data for first few rows
-        print(f"  Sample real data (first 3 rows):")
-        for i in range(min(3, len(real_df))):
-            print(f"    Row {i}: {real_df.iloc[i].tolist()}")
+                    self.logger.debug("Column cannot be converted to numeric", extra={"column": col})
         
         # Check if we need to convert string columns to numeric
         if len(numeric_cols) < 2:
-            print(f"  WARNING: Only {len(numeric_cols)} numeric columns found. Need at least 2 for correlation and multivariate tests.")
-            print(f"  Attempting to convert string columns to numeric...")
+            self.logger.warning("Insufficient numeric columns; attempting conversion", extra={"numeric_count": len(numeric_cols)})
             
             for col in real_df.columns:
                 if col not in numeric_cols:
@@ -177,16 +181,19 @@ class ValidationService:
                         # Try to convert to numeric
                         converted = pd.to_numeric(real_df[col], errors='coerce')
                         if not converted.isna().all():  # If conversion was successful
-                            print(f"    Successfully converted column '{col}' to numeric")
+                            self.logger.debug("Converted column to numeric", extra={"column": col})
                             real_df[col] = converted
                             synth_df[col] = pd.to_numeric(synth_df[col], errors='coerce')
                     except Exception as e:
-                        print(f"    Failed to convert column '{col}': {e}")
+                        self.logger.warning("Failed to convert column", extra={"column": col, "error": str(e)})
             
             # Re-check numeric columns after conversion
             numeric_cols_after = real_df.select_dtypes(include=[np.number]).columns.tolist()
-            print(f"  Numeric columns after conversion: {numeric_cols_after}")
-            print(f"  Number of numeric columns after conversion: {len(numeric_cols_after)}")
+            # After conversion, log a concise info that conversion succeeded
+            self.logger.info("Numeric column conversion completed", extra={
+                "numeric_columns": numeric_cols_after,
+                "numeric_count": len(numeric_cols_after)
+            })
     
     def compute_validation_statistics(self, real_data: Dict, synthetic_data: Dict, options: Dict = None) -> Dict:
         """
@@ -202,13 +209,17 @@ class ValidationService:
             real_df = pd.DataFrame(real_data['data'], columns=real_data['headers'])
             synth_df = pd.DataFrame(synthetic_data['data'], columns=synthetic_data['headers'])
             
-            # Log data information for debugging
-            self._log_data_info(real_df, synth_df)
+            # Log data information only when enabled via env flag
+            if self.enable_validation_debug:
+                self._log_data_info(real_df, synth_df)
             
             # Re-get numeric columns after potential conversion
             numeric_cols = real_df.select_dtypes(include=[np.number]).columns.tolist()
-            print(f"  Final numeric columns for testing: {numeric_cols}")
-            print(f"  Final number of numeric columns: {len(numeric_cols)}")
+            if self.enable_validation_debug:
+                self.logger.debug("Final numeric columns for testing", extra={
+                    "numeric_columns": numeric_cols,
+                    "numeric_count": len(numeric_cols)
+                })
             
             results = {
                 'timestamp': start_time.isoformat(),
@@ -952,7 +963,7 @@ class ValidationService:
                 jennrich_stat = np.sqrt(np.sum(diff_matrix**2))
                 return float(jennrich_stat)
         except Exception as e:
-            print(f"GPU Jennrich computation failed, falling back to CPU: {e}")
+            self.logger.warning("GPU Jennrich computation failed, falling back to CPU", extra={"error": str(e)})
             # CPU fallback
             diff_matrix = R1 - R2
             jennrich_stat = np.sqrt(np.sum(diff_matrix**2))
