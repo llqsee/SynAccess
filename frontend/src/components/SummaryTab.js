@@ -270,7 +270,6 @@ const SummaryTab = ({
                         test.type === 'completeness_test' ? `Test Type: completeness test` :
                         test.type === 'consistency_test' ? `Test Type: consistency test` :
                         test.type === 'DCRBaselineProtection' ? `Test Type: privacy test` :
-                        test.type === 'DisclosureProtection' ? `Test Type: privacy test` :
                         test.type === 'Data Quality Assessment' ? `Test Type: data quality assessment` :
                         `Test Type: ${test.type}`
                       }
@@ -324,7 +323,7 @@ const SummaryTab = ({
         <Box sx={{ mt: 2, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
           <Typography variant="caption" color="text.secondary">
                             <strong>Analysis completed:</strong> {validationResults.timestamp || 'N/A'}<br />
-            <strong>Processing time:</strong> {validationResults.processingTime}ms<br />
+            <strong>Processing time:</strong> {validationResults.processingTime}s<br />
             <strong>Tests performed:</strong> Range validation, distribution testing, correlation analysis, outlier detection
           </Typography>
         </Box>

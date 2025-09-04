@@ -25,7 +25,6 @@ class PrivacyTestingService:
     
     Implements privacy tests using:
     1. DCRBaselineProtection - Distance between real and synthetic records vs random baseline
-    2. DisclosureProtection - Attribute-inference/disclosure risk estimation
     """
     
     def __init__(self):
@@ -62,10 +61,6 @@ class PrivacyTestingService:
         # DCRBaselineProtection - Distance between real and synthetic records vs random baseline
         dcr_baseline_test = self._test_dcr_baseline_protection(real_df, synth_df)
         tests.append(dcr_baseline_test)
-        
-        # DisclosureProtection - Attribute-inference/disclosure risk estimation
-        disclosure_test = self._test_disclosure_protection(real_df, synth_df)
-        tests.append(disclosure_test)
         
         return {
             'testType': 'Privacy Tests',
@@ -152,96 +147,6 @@ class PrivacyTestingService:
                 'result': 'ERROR',
                 'error': str(e),
                 'description': 'Distance between real and synthetic records vs random baseline'
-            }
-    
-    def _test_disclosure_protection(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
-        """
-        Test privacy using SDMetrics DisclosureProtection.
-        Estimates attribute-inference/disclosure risk for sensitive columns.
-        Lower score = better privacy (lower disclosure risk).
-        """
-        if sdmetrics is None:
-            return {
-                'type': 'DisclosureProtection',
-                'result': 'LIBRARY_NOT_AVAILABLE',
-                'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
-                'description': 'Attribute-inference/disclosure risk estimation'
-            }
-        
-        try:
-            from sdmetrics.single_table.privacy import DisclosureProtection
-            
-            # Create metadata for disclosure protection
-            metadata = {
-                'columns': {
-                    col: {'sdtype': 'categorical' if real_df[col].dtype == 'object' else 'numerical'}
-                    for col in real_df.columns
-                }
-            }
-            
-            # Compute disclosure protection for each column
-            disclosure_scores = {}
-            total_score = 0
-            valid_columns = 0
-            
-            for column in real_df.columns:
-                try:
-                    # Skip columns with insufficient data
-                    if len(real_df[column].dropna()) < 10 or len(synth_df[column].dropna()) < 10:
-                        continue
-                    
-                    # Try to compute disclosure protection with metadata
-                    score = DisclosureProtection.compute(real_df, synth_df, column, metadata)
-                    disclosure_scores[column] = float(score)
-                    total_score += score
-                    valid_columns += 1
-                except Exception as col_error:
-                    # Skip columns that can't be processed
-                    continue
-            
-            if valid_columns == 0:
-                return {
-                    'type': 'DisclosureProtection',
-                    'result': 'ERROR',
-                    'error': 'No columns could be processed for disclosure protection',
-                    'description': 'Attribute-inference/disclosure risk estimation'
-                }
-            
-            # Calculate average disclosure score (lower is better for privacy)
-            avg_disclosure_score = total_score / valid_columns
-            
-            # Convert to privacy score (invert: lower disclosure = higher privacy)
-            privacy_score = 1.0 - avg_disclosure_score
-            
-            # Determine privacy level (higher privacy score = better privacy)
-            if privacy_score > 0.8:
-                privacy_level = 'HIGH'
-                result = 'ACCEPT'
-            elif privacy_score > 0.6:
-                privacy_level = 'MEDIUM'
-                result = 'WARNING'
-            else:
-                privacy_level = 'LOW'
-                result = 'REJECT'
-            
-            return {
-                'type': 'DisclosureProtection',
-                'metric': 'disclosure_protection',
-                'privacy_score': float(privacy_score),
-                'disclosure_score': float(avg_disclosure_score),
-                'privacy_level': privacy_level,
-                'result': result,
-                'description': f'Disclosure Protection: {privacy_score:.3f} (avg disclosure: {avg_disclosure_score:.3f})',
-                'interpretation': f'Attribute-inference/disclosure risk: {avg_disclosure_score:.3f} indicates {privacy_level.lower()} privacy protection',
-                'column_scores': disclosure_scores
-            }
-            
-        except Exception as e:
-            return {
-                'type': 'DisclosureProtection',
-                'result': 'ERROR',
-                'error': str(e),
-                'description': 'Attribute-inference/disclosure risk estimation'
             }
     
     def get_sdmetrics_diagnostic_score(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:

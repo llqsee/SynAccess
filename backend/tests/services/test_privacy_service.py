@@ -40,99 +40,42 @@ class TestPrivacyTestingService:
         assert hasattr(privacy_service, 'compute_privacy_tests')
 
     def test_compute_privacy_tests_basic(self, privacy_service, sample_data):
-        """Test basic privacy tests computation."""
+        """Test basic privacy tests computation (structure only)."""
         real_df, synth_df = sample_data
-        
-        # Mock all privacy libraries to avoid import issues in testing
-        with patch('backend.services.privacy_service.sdmetrics') as mock_sdmetrics, \
-             patch('backend.services.privacy_service.sdv') as mock_sdv:
-            
-            # Mock SDMetrics DiagnosticReport
-            mock_report = MagicMock()
-            mock_report.get_results.return_value = {'privacy': 0.85, 'overall': 0.78}
-            mock_sdmetrics.reports.single_table.DiagnosticReport.return_value = mock_report
-            
-            # Mock SDMetrics DCR
-            mock_sdmetrics.single_table.privacy.DCR.compute.return_value = 0.82
-            
-            # Mock SDV
-            mock_sdv.evaluation.privacy.PrivacyEvaluator.return_value = MagicMock()
-            
-            result = privacy_service.compute_privacy_tests(real_df, synth_df)
-            
-            # Verify structure
-            assert 'tests' in result
-            assert 'summary' in result
-            assert isinstance(result['tests'], list)
-            assert isinstance(result['summary'], dict)
-            
-            # Verify summary structure
-            assert 'total' in result['summary']
-            assert 'passed' in result['summary']
-            assert 'failed' in result['summary']
-            assert 'errors' in result['summary']
+        result = privacy_service.compute_privacy_tests(real_df, synth_df)
+        assert 'tests' in result
+        assert 'summary' in result
+        assert isinstance(result['tests'], list)
+        assert isinstance(result['summary'], dict)
+        assert 'total' in result['summary']
+        assert 'passed' in result['summary']
+        assert 'failed' in result['summary']
+        assert 'errors' in result['summary']
 
-    def test_sdmetrics_privacy_test(self, privacy_service, sample_data):
-        """Test SDMetrics privacy test specifically."""
+    def test_dcr_baseline_protection_test(self, privacy_service, sample_data):
+        """Test SDMetrics DCRBaselineProtection test."""
         real_df, synth_df = sample_data
-        
-        # Since sdmetrics is installed but may fail during execution, expect ERROR or LIBRARY_NOT_AVAILABLE
-        result = privacy_service._test_sdmetrics_privacy(real_df, synth_df)
-        
-        assert result['type'] == 'sdmetrics_diagnostic_test'
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR']
-        if result['result'] == 'LIBRARY_NOT_AVAILABLE':
-            assert 'SDMetrics library not installed' in result['reason']
-        elif result['result'] == 'ERROR':
-            assert 'error' in result
+        result = privacy_service._test_dcr_baseline_protection(real_df, synth_df)
+        assert result['type'] == 'DCRBaselineProtection'
+        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'REJECT', 'ACCEPT', 'WARNING']
 
-    def test_sdmetrics_dcr_test(self, privacy_service, sample_data):
-        """Test SDMetrics DCR test specifically."""
+    def test_sdmetrics_diagnostic_score_test(self, privacy_service, sample_data):
+        """Test SDMetrics Diagnostic Report quality score."""
         real_df, synth_df = sample_data
-        
-        # Since sdmetrics is installed but may fail during execution, expect ERROR or LIBRARY_NOT_AVAILABLE
-        result = privacy_service._test_sdmetrics_dcr(real_df, synth_df)
-        
-        assert result['type'] == 'sdmetrics_dcr_test'
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR']
-        if result['result'] == 'LIBRARY_NOT_AVAILABLE':
-            assert 'SDMetrics library not installed' in result['reason']
-        elif result['result'] == 'ERROR':
-            assert 'error' in result
+        result = privacy_service.get_sdmetrics_diagnostic_score(real_df, synth_df)
+        assert result['type'] == 'Data Quality Assessment'
+        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']
 
-    def test_sdv_privacy_test(self, privacy_service, sample_data):
-        """Test SDV privacy evaluator."""
-        real_df, synth_df = sample_data
-        
-        # Since sdv is installed but may fail during execution, expect ERROR or LIBRARY_NOT_AVAILABLE
-        result = privacy_service._test_sdv_privacy(real_df, synth_df)
-        
-        assert result['type'] == 'sdv_privacy_test'
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR']
-        if result['result'] == 'LIBRARY_NOT_AVAILABLE':
-            assert 'SDV library not installed' in result['reason']
-        elif result['result'] == 'ERROR':
-            assert 'error' in result
+    # SDV privacy evaluator is no longer used; no tests required
 
     def test_library_not_available_handling(self, privacy_service, sample_data):
         """Test handling when privacy libraries are not available or fail."""
         real_df, synth_df = sample_data
         
-        # Test when SDMetrics is not available or fails
-        result = privacy_service._test_sdmetrics_privacy(real_df, synth_df)
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR']
-        if result['result'] == 'LIBRARY_NOT_AVAILABLE':
-            assert 'SDMetrics library not installed' in result['reason']
-        elif result['result'] == 'ERROR':
-            assert 'error' in result
-
-        # Test when SDV is not available or fails
-        result = privacy_service._test_sdv_privacy(real_df, synth_df)
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR']
-        if result['result'] == 'LIBRARY_NOT_AVAILABLE':
-            assert 'SDV library not installed' in result['reason']
-        elif result['result'] == 'ERROR':
-            assert 'error' in result
+        # Test when SDMetrics Diagnostic Report is not available or fails
+        real_df, synth_df = sample_data
+        result = privacy_service.get_sdmetrics_diagnostic_score(real_df, synth_df)
+        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']
 
     def test_error_handling(self, privacy_service, sample_data):
         """Test error handling in privacy tests."""

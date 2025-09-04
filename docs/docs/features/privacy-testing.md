@@ -10,37 +10,26 @@ Privacy testing evaluates how well synthetic data preserves privacy compared to 
 
 MAVIS uses industry-standard privacy testing libraries:
 
-### SDV (Synthetic Data Vault)
-- **Purpose**: Comprehensive synthetic data evaluation framework
-- **Metrics**: Privacy evaluators and quality assessment
-- **Implementation**: `sdv.evaluation.privacy.PrivacyEvaluator`
-
 ### SDMetrics
 - **Purpose**: Synthetic data quality and privacy metrics
 - **Metrics**: 
-  - Diagnostic Report privacy scores
-  - Data Consistency Ratio (DCR)
-- **Implementation**: `sdmetrics.reports.single_table.DiagnosticReport`, `sdmetrics.single_table.privacy.DCR`
+  - Diagnostic Report quality score
+  - DCRBaselineProtection (privacy)
+- **Implementation**: `sdmetrics.reports.single_table.DiagnosticReport`, `sdmetrics.single_table.privacy.DCRBaselineProtection`
 
 ## Privacy Test Categories
 
-### 1. SDMetrics Diagnostic Privacy
-- **Test Type**: `sdmetrics_diagnostic_test`
-- **Metric**: `sdmetrics_diagnostic_privacy`
-- **Description**: Overall privacy score from SDMetrics Diagnostic Report
-- **Output**: Privacy score (0-1), overall quality score, privacy level assessment
+### 1. Data Quality Assessment (SDMetrics Diagnostic Report)
+- **Test Type**: `Data Quality Assessment`
+- **Metric**: `sdmetrics_diagnostic_quality`
+- **Description**: Overall data quality score from SDMetrics Diagnostic Report
+- **Output**: Quality score (0-1) and qualitative level
 
-### 2. SDMetrics Data Consistency Ratio (DCR)
-- **Test Type**: `sdmetrics_dcr_test`
-- **Metric**: `sdmetrics_dcr_privacy`
-- **Description**: Data Consistency Ratio measuring privacy preservation
-- **Output**: DCR score, privacy level, statistical significance
-
-### 3. SDV Privacy Evaluator
-- **Test Type**: `sdv_privacy_test`
-- **Metric**: `sdv_privacy_evaluation`
-- **Description**: SDV's comprehensive privacy evaluation
-- **Output**: Privacy preservation scores and recommendations
+### 2. DCRBaselineProtection (SDMetrics)
+- **Test Type**: `DCRBaselineProtection`
+- **Metric**: `dcr_baseline_protection`
+- **Description**: Distance between real and synthetic records vs random baseline (higher → better privacy)
+- **Output**: Privacy score (0-1), privacy level assessment
 
 ## Privacy Level Assessment
 
@@ -71,7 +60,8 @@ MAVIS categorizes privacy test results into levels:
 Privacy tests are integrated into the "Quality Metrics" category alongside:
 - **Data Completeness**: Missing value analysis
 - **Data Consistency**: Data type and format consistency
-- **Privacy Tests**: Comprehensive privacy assessment
+- **Data Quality Assessment**: Overall quality score (SDMetrics)
+- **Privacy Test**: DCRBaselineProtection (SDMetrics)
 
 This integration provides a holistic view of synthetic data quality including privacy characteristics.
 
