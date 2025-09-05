@@ -32,8 +32,8 @@ async def lifespan(app: FastAPI):
     # Startup phase
     print("Starting MAVIS backend services...")
     try:
-        # Setup logging
-        setup_logging(log_file="logs/mavis.log", log_level="DEBUG")
+        # Setup logging (structured JSON for consistent logs)
+        setup_logging(log_file="logs/mavis.log", log_level="INFO", enable_json=True)
         print("✓ Logging system initialized")
         
         # Start background task queue

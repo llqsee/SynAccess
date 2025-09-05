@@ -260,15 +260,19 @@ const SummaryTab = ({
                                 <Assessment fontSize="small" color="primary" />
                     </ListItemIcon>
                     <ListItemText 
-                                primary={test.column || `Test ${index + 1}`}
-                                secondary={
-                                  test.type === 'ks_test' ? `KS Statistic: ${test.statistic?.toFixed(4) || 'N/A'}` :
-                                  test.type === 'welch_t_test' ? `T-Statistic: ${test.statistic?.toFixed(4) || 'N/A'}` :
-                                  test.type === 'chi_square_test' ? `Chi-Square: ${test.statistic?.toFixed(4) || 'N/A'}` :
-                                  test.type === 'range_test' ? `Range Analysis` :
-                                  test.type === 'outlier_test' ? `Outlier Detection` :
-                                  `Test Type: ${test.type}`
-                                }
+                      primary={test.column || `Test ${index + 1}`}
+                      secondary={
+                        test.type === 'ks_test' ? `KS Statistic: ${test.statistic?.toFixed(4) || 'N/A'}` :
+                        test.type === 'welch_t_test' ? `T-Statistic: ${test.statistic?.toFixed(4) || 'N/A'}` :
+                        test.type === 'chi_square_test' ? `Chi-Square: ${test.statistic?.toFixed(4) || 'N/A'}` :
+                        test.type === 'range_test' ? `Range Analysis` :
+                        test.type === 'outlier_test' ? `Outlier Detection` :
+                        test.type === 'completeness_test' ? `Test Type: completeness test` :
+                        test.type === 'consistency_test' ? `Test Type: consistency test` :
+                        test.type === 'DCRBaselineProtection' ? `Test Type: privacy test` :
+                        test.type === 'Data Quality Assessment' ? `Test Type: data quality assessment` :
+                        `Test Type: ${test.type}`
+                      }
                     />
                   </ListItem>
                 ))}
@@ -319,7 +323,7 @@ const SummaryTab = ({
         <Box sx={{ mt: 2, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
           <Typography variant="caption" color="text.secondary">
                             <strong>Analysis completed:</strong> {validationResults.timestamp || 'N/A'}<br />
-            <strong>Processing time:</strong> {validationResults.processingTime}ms<br />
+            <strong>Processing time:</strong> {validationResults.processingTime}s<br />
             <strong>Tests performed:</strong> Range validation, distribution testing, correlation analysis, outlier detection
           </Typography>
         </Box>

@@ -96,6 +96,7 @@ export class ValidationService {
       Object.entries(backendResults.results).forEach(([category, testData]) => {
         if (testData) {
           transformed.tests[category] = {
+            ...testData,  // Preserve ALL original data including correlation analysis
             testType: testData.testType || category,
             description: testData.description || '',
             tests: testData.tests || [],
