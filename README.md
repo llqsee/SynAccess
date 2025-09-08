@@ -43,7 +43,7 @@ MAVIS is a comprehensive platform for analyzing, visualizing, and validating syn
 - Comprehensive statistical tests
 - Distribution comparison analysis
 - Quality metrics calculation
-- Privacy testing with established libraries (SDMetrics)
+- Privacy testing with fast NN-based checks (NNDR, nearest distance, exact match)
 - Validation report generation
 
 ### 8. **Advanced Anomaly Detection**
@@ -346,11 +346,10 @@ For support and questions:
 ## 🔄 Changelog
 
 ### Version 2.1.0
-- **Major Update**: Implemented comprehensive privacy testing with SDMetrics
+- **Major Update**: Implemented fast privacy checks (NNDR, nearest distance, exact match rate)
 - **Added**: Privacy tests integrated into Quality Metrics category
-- **Enhanced**: Robust privacy assessment using DCRBaselineProtection and quality diagnostics
-- **Updated**: Environment files with privacy testing dependencies
-- **Added**: Complete privacy testing documentation and test coverage
+- **Enhanced**: Lightweight implementation; no external privacy libraries required
+- **Updated**: Documentation to reflect new privacy approach
 
 ### Version 2.0.0
 - **Major Update**: Implemented histogram-based binomial proportion test anomaly detection

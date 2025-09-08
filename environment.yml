@@ -36,9 +36,6 @@ dependencies:
   - psutil
   - zstandard
   - statsmodels
-  - pip
-  - pip:
-      - syntheval
   - anthropic
   - pip
      

@@ -52,36 +52,19 @@ class TestPrivacyTestingService:
         assert 'failed' in result['summary']
         assert 'errors' in result['summary']
 
-    def test_dcr_baseline_protection_test(self, privacy_service, sample_data):
-        """Test SDMetrics DCRBaselineProtection test."""
-        real_df, synth_df = sample_data
-        result = privacy_service._test_dcr_baseline_protection(real_df, synth_df)
-        assert result['type'] == 'DCRBaselineProtection'
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'REJECT', 'ACCEPT', 'WARNING']
-
-    def test_sdmetrics_diagnostic_score_test(self, privacy_service, sample_data):
-        """Test SDMetrics Diagnostic Report quality score."""
-        real_df, synth_df = sample_data
-        result = privacy_service.get_sdmetrics_diagnostic_score(real_df, synth_df)
-        assert result['type'] == 'Data Quality Assessment'
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']
+    # SDMetrics tests removed; fast privacy tests are now used
 
     # SDV privacy evaluator is no longer used; no tests required
 
-    def test_library_not_available_handling(self, privacy_service, sample_data):
-        """Test handling when privacy libraries are not available or fail."""
+    def test_fast_privacy_outputs(self, privacy_service, sample_data):
+        """Test that fast privacy tests return expected keys."""
         real_df, synth_df = sample_data
-        
-        # Test when SDMetrics Diagnostic Report is not available or fails
-        real_df, synth_df = sample_data
-        result = privacy_service.get_sdmetrics_diagnostic_score(real_df, synth_df)
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']
+        result = privacy_service.compute_privacy_tests(real_df, synth_df)
+        assert 'tests' in result and isinstance(result['tests'], list)
+        types = {t.get('type') for t in result['tests']}
+        assert any(t in types for t in ['NNDR', 'NN_Distance', 'ExactMatchRate'])
 
-    def test_error_handling(self, privacy_service, sample_data):
-        """Test error handling in privacy tests (diagnostic score path)."""
-        real_df, synth_df = sample_data
-        result = privacy_service.get_sdmetrics_diagnostic_score(real_df, synth_df)
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']
+    # Diagnostic score path removed; error handling covered by compute_privacy_tests
 
     def test_privacy_level_assessment(self, privacy_service):
         """Test privacy level assessment logic."""

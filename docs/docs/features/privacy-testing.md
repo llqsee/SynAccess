@@ -1,43 +1,31 @@
 # Privacy Testing
 
-MAVIS includes comprehensive privacy testing capabilities for synthetic data evaluation using established privacy assessment libraries and methodologies.
+MAVIS includes fast, practical privacy checks for synthetic data evaluation, integrated directly into the validation workflow.
 
 ## Overview
 
 Privacy testing evaluates how well synthetic data preserves privacy compared to the original dataset. MAVIS integrates privacy assessment into the main validation workflow for a comprehensive view of privacy and quality.
 
-## Privacy Testing Libraries
+## Privacy Metrics Implemented
 
-MAVIS uses industry-standard privacy testing libraries:
+The privacy block focuses on fast metrics that scale to large datasets:
 
-### SDMetrics
-- **Purpose**: Synthetic data quality and privacy metrics
-- **Metrics**: 
-  - Diagnostic Report quality score
-  - DCRBaselineProtection (privacy)
-- **Implementation**: `sdmetrics.reports.single_table.DiagnosticReport`, `sdmetrics.single_table.privacy.DCRBaselineProtection`
+- **NNDR (Nearest Neighbour Distance Ratio)**
+  - Ratio of nearest to second-nearest real neighbor distance for each synthetic row (lower suggests potential similarity to a specific real record).
+- **Nearest Neighbor Distance**
+  - Distance from each synthetic row to its closest real neighbor; reported via median/mean/quantiles.
+- **Exact Match Rate**
+  - Percentage of synthetic rows that exactly match any real row (row-wise collision).
 
 ## Privacy Test Categories
 
-### 1. Data Quality Assessment (SDMetrics Diagnostic Report)
-- **Test Type**: `Data Quality Assessment`
-- **Metric**: `sdmetrics_diagnostic_quality`
-- **Description**: Overall data quality score from SDMetrics Diagnostic Report
-- **Output**: Quality score (0-1) and qualitative level
+Privacy tests appear in the "Quality Metrics" category as individual tests with their specific names, e.g.,
+`Test Type: privacy test (NNDR)`, `Test Type: privacy test (nearest neighbor distance)`, and `Test Type: privacy test (exact match rate)`.
 
-### 2. DCRBaselineProtection (SDMetrics)
-- **Test Type**: `DCRBaselineProtection`
-- **Metric**: `dcr_baseline_protection`
-- **Description**: Distance between real and synthetic records vs random baseline (higher → better privacy)
-- **Output**: Privacy score (0-1), privacy level assessment
+## Notes on Interpretation
 
-## Privacy Level Assessment
-
-MAVIS maps privacy scores to levels and result labels:
-
-- **HIGH** (score > 0.8) → `result`: `ACCEPT`
-- **MEDIUM** (score > 0.6) → `result`: `WARNING`
-- **LOW** (score ≤ 0.6) → `result`: `REJECT`
+- NNDR and nearest-distance are comparative signals; lower NNDR or very small nearest distances may indicate higher privacy risk.
+- Exact-match rate directly flags verbatim copies of real rows. For very large datasets, this check can be disabled via an environment flag (planned).
 
 ## Integration with Quality Metrics
 
@@ -52,9 +40,7 @@ This integration provides a holistic view of synthetic data quality including pr
 ## Test Execution
 
 ### Automatic Execution
-Privacy tests run automatically as part of the validation process when:
-- Both real and synthetic datasets are provided
-- Required privacy libraries are installed
+Privacy tests run automatically as part of the validation process when both real and synthetic datasets are provided.
 
 ### Manual Execution
 - Not exposed via standalone endpoints. Privacy results are produced within the main validation workflow.
@@ -62,9 +48,7 @@ Privacy tests run automatically as part of the validation process when:
 ## Error Handling
 
 ### Library Availability
-If privacy testing libraries are not installed:
-- Tests return `LIBRARY_NOT_AVAILABLE` status
-- Other validation tests continue normally
+No external privacy libraries are required for the fast checks.
 
 ### Data Requirements
 If insufficient data is available:
@@ -78,16 +62,17 @@ If privacy tests encounter errors:
 ## Output Format
 
 ### Test Results Structure
-Each privacy test returns:
+Each privacy test returns structured JSON, for example (NNDR):
 ```json
 {
-  "type": "DCRBaselineProtection",
-  "metric": "dcr_baseline_protection",
-  "privacy_score": 0.85,
-  "privacy_level": "HIGH|MEDIUM|LOW",
-  "result": "ACCEPT|WARNING|REJECT",
-  "description": "...",
-  "interpretation": "..."
+  "type": "NNDR",
+  "metric": "nearest_neighbor_distance_ratio",
+  "median": 0.42,
+  "mean": 0.45,
+  "q25": 0.31,
+  "q75": 0.56,
+  "result": "SUCCESS",
+  "description": "Ratio of nearest to second-nearest real neighbor distances for synthetic samples"
 }
 ```
 
@@ -103,6 +88,6 @@ Privacy test summary includes:
 
 ## Future Enhancements
 
-- **Differential Privacy**: Formal differential privacy guarantees
-- **k-Anonymity**: k-anonymity assessment capabilities
-- **Custom Metrics**: User-defined privacy assessment criteria
+- **Env flag & threshold**: Option to disable exact-match scanning or auto-disable above a row threshold.
+- **Differential Privacy**: Formal guarantees.
+- **k-Anonymity**: Additional structural privacy metrics.

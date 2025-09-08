@@ -32,8 +32,7 @@ Technical details of MAVIS's data validation framework.
 ### Quality Metrics
 - **Completeness**: Ratio of non-missing values (synthetic/real)
 - **Consistency**: Data type consistency across columns
-- **SDMetrics Diagnostic Report**: Overall quality score via `sdmetrics.reports.single_table.DiagnosticReport`
-- **Privacy (SDMetrics)**: `DCRBaselineProtection` integrated into Quality Metrics when available
+- **Privacy (Fast Checks)**: NNDR (nearest-neighbour distance ratio), nearest-neighbour distance summary, exact match rate
 
 ## Execution Strategy
 - Tests operate on full datasets for maximum accuracy and consistency
