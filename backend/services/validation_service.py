@@ -139,6 +139,38 @@ class ValidationService:
             self.logger.warning("GPU mutual information computation failed, falling back to CPU", extra={"error": str(e)})
             return mutual_info_score(real_data.flatten(), synth_data.flatten())
     
+    def _ensure_min_numeric_columns(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> None:
+        """Ensure there are at least two numeric columns by converting numeric-like strings.
+
+        This function mutates the provided DataFrames in place. All logging is gated
+        behind the validation debug flag to keep default console output quiet.
+        """
+        numeric_cols = real_df.select_dtypes(include=[np.number]).columns.tolist()
+        if len(numeric_cols) >= 2:
+            return
+        if self.enable_validation_debug:
+            self.logger.warning("Insufficient numeric columns; attempting conversion", extra={"numeric_count": len(numeric_cols)})
+        for col in real_df.columns:
+            if col in numeric_cols:
+                continue
+            try:
+                converted = pd.to_numeric(real_df[col], errors='coerce')
+                if not converted.isna().all():
+                    if self.enable_validation_debug:
+                        self.logger.debug("Converted column to numeric", extra={"column": col})
+                    real_df[col] = converted
+                    synth_df[col] = pd.to_numeric(synth_df[col], errors='coerce')
+            except Exception as e:
+                if self.enable_validation_debug:
+                    self.logger.warning("Failed to convert column", extra={"column": col, "error": str(e)})
+        # Final info after conversion (only when debug flag enabled)
+        if self.enable_validation_debug:
+            numeric_cols_after = real_df.select_dtypes(include=[np.number]).columns.tolist()
+            self.logger.info("Numeric column conversion completed", extra={
+                "numeric_columns": numeric_cols_after,
+                "numeric_count": len(numeric_cols_after)
+            })
+    
     def _log_data_info(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> None:
         """Log information about the data for debugging."""
         self.logger.debug("Data Info", extra={
@@ -171,29 +203,7 @@ class ValidationService:
                 except (ValueError, TypeError):
                     self.logger.debug("Column cannot be converted to numeric", extra={"column": col})
         
-        # Check if we need to convert string columns to numeric
-        if len(numeric_cols) < 2:
-            self.logger.warning("Insufficient numeric columns; attempting conversion", extra={"numeric_count": len(numeric_cols)})
-            
-            for col in real_df.columns:
-                if col not in numeric_cols:
-                    try:
-                        # Try to convert to numeric
-                        converted = pd.to_numeric(real_df[col], errors='coerce')
-                        if not converted.isna().all():  # If conversion was successful
-                            self.logger.debug("Converted column to numeric", extra={"column": col})
-                            real_df[col] = converted
-                            synth_df[col] = pd.to_numeric(synth_df[col], errors='coerce')
-                    except Exception as e:
-                        self.logger.warning("Failed to convert column", extra={"column": col, "error": str(e)})
-            
-            # Re-check numeric columns after conversion
-            numeric_cols_after = real_df.select_dtypes(include=[np.number]).columns.tolist()
-            # After conversion, log a concise info that conversion succeeded
-            self.logger.info("Numeric column conversion completed", extra={
-                "numeric_columns": numeric_cols_after,
-                "numeric_count": len(numeric_cols_after)
-            })
+        # Note: conversion is handled by _ensure_min_numeric_columns; this function only logs.
     
     def compute_validation_statistics(self, real_data: Dict, synthetic_data: Dict, options: Dict = None) -> Dict:
         """
@@ -209,6 +219,9 @@ class ValidationService:
             real_df = pd.DataFrame(real_data['data'], columns=real_data['headers'])
             synth_df = pd.DataFrame(synthetic_data['data'], columns=synthetic_data['headers'])
             
+            # Always ensure we have sufficient numeric columns regardless of debug flag
+            self._ensure_min_numeric_columns(real_df, synth_df)
+
             # Log data information only when enabled via env flag
             if self.enable_validation_debug:
                 self._log_data_info(real_df, synth_df)
@@ -696,9 +709,8 @@ class ValidationService:
         if privacy_tests.get('tests'):
             tests.extend(privacy_tests['tests'])
         
-        # SDMetrics Diagnostic Report for overall data quality assessment
-        sdmetrics_quality_test = privacy_service.get_sdmetrics_diagnostic_score(real_df, synth_df)
-        tests.append(sdmetrics_quality_test)
+        # Note: Data Quality Assessment (SDMetrics Diagnostic Report) intentionally removed
+        # from Quality Metrics as requested.
         
         return {
             'testType': 'Quality Metrics',
