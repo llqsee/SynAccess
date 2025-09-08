@@ -1,7 +1,8 @@
 """
 Privacy testing service for synthetic data validation.
 
-This service implements comprehensive privacy tests using SDMetrics for robust privacy assessment.
+This service implements privacy tests using SynthEval for robust privacy assessment
+focused on NNDR, NNAA, and MIA metrics.
 """
 
 import numpy as np
@@ -18,16 +19,18 @@ logger = logging.getLogger(__name__)
 
 # Import privacy libraries with fallback
 try:
-    import sdmetrics
-except ImportError:
-    sdmetrics = None
+    from syntheval import SynthEval  # type: ignore
+except Exception:  # ImportError or other issues
+    SynthEval = None
 
 class PrivacyTestingService:
     """
-    Comprehensive privacy testing service using SDMetrics for privacy assessment.
+    Comprehensive privacy testing service using SynthEval for privacy assessment.
     
-    Implements privacy tests using:
-    1. DCRBaselineProtection - Distance between real and synthetic records vs random baseline
+    Implements privacy tests focusing on:
+    - NNDR (Nearest Neighbour Distance Ratio)
+    - NNAA (Nearest Neighbour Adversarial Accuracy)
+    - MIA (Membership Inference Attack)
     """
     
     def __init__(self):
@@ -36,7 +39,7 @@ class PrivacyTestingService:
         
     def compute_privacy_tests(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Compute comprehensive privacy tests using SDMetrics.
+        Compute privacy tests using SynthEval (NNDR, NNAA, MIA).
         
         Args:
             real_df: Real dataset
@@ -49,7 +52,7 @@ class PrivacyTestingService:
         if real_df.empty or synth_df.empty:
             return {
                 'testType': 'Privacy Tests',
-                'description': 'Comprehensive privacy assessment using SDMetrics',
+                'description': 'Privacy assessment using SynthEval',
                 'tests': [],
                 'summary': {
                     'total': 0,
@@ -59,23 +62,104 @@ class PrivacyTestingService:
                 }
             }
         
-        tests = []
-        
-        # DCRBaselineProtection - Distance between real and synthetic records vs random baseline
-        dcr_baseline_test = self._test_dcr_baseline_protection(real_df, synth_df)
-        tests.append(dcr_baseline_test)
-        
-        return {
-            'testType': 'Privacy Tests',
-            'description': 'Comprehensive privacy assessment using SDMetrics',
-            'tests': tests,
-            'summary': {
-                'total': len(tests),
-                'passed': sum(1 for test in tests if test.get('result') == 'PASS'),
-                'failed': sum(1 for test in tests if test.get('result') == 'FAIL'),
-                'errors': sum(1 for test in tests if test.get('result') in ['ERROR', 'LIBRARY_NOT_AVAILABLE'])
+        if SynthEval is None:
+            return {
+                'testType': 'Privacy Tests',
+                'description': 'Privacy assessment using SynthEval',
+                'tests': [
+                    {
+                        'type': 'SynthEval',
+                        'result': 'LIBRARY_NOT_AVAILABLE',
+                        'reason': 'SynthEval library not installed. Install with: pip install syntheval',
+                        'description': 'SynthEval privacy metrics (NNDR, NNAA, MIA)'
+                    }
+                ],
+                'summary': {
+                    'total': 1,
+                    'passed': 0,
+                    'failed': 0,
+                    'errors': 1
+                }
             }
-        }
+        
+        try:
+            # Identify categorical columns for SynthEval
+            cat_cols = [col for col in real_df.columns if real_df[col].dtype == 'object']
+            
+            # Create a simple holdout split from the real dataset for evaluation
+            # Use a deterministic sample for reproducibility
+            if len(real_df) >= 10:
+                holdout_fraction = 0.2
+            else:
+                holdout_fraction = 0.5  # small datasets
+            df_holdout = real_df.sample(frac=holdout_fraction, random_state=42)
+            
+            # Suppress any library stdout/stderr during evaluation
+            with open(os.devnull, 'w') as devnull, redirect_stdout(devnull), redirect_stderr(devnull):
+                evaluator = SynthEval(real_df, holdout_dataframe=df_holdout, cat_cols=cat_cols)
+                report = evaluator.evaluate(synth_df, class_lab_col=None, presets_file="privacy")
+            
+            tests: List[Dict[str, Any]] = []
+            
+            def add_metric_if_present(key_aliases: List[str], display_name: str) -> None:
+                # Look for exact or case-insensitive matches in report dict
+                value = None
+                for k in report.keys():
+                    for alias in key_aliases:
+                        if k == alias or k.lower() == alias.lower():
+                            value = report[k]
+                            break
+                    if value is not None:
+                        break
+                if value is not None:
+                    tests.append({
+                        'type': display_name,
+                        'metric': display_name.lower(),
+                        'value': float(value) if isinstance(value, (int, float, np.floating)) else value,
+                        'result': 'SUCCESS',
+                        'description': f'{display_name} privacy metric from SynthEval'
+                    })
+            
+            add_metric_if_present(['NNDR', 'Nearest Neighbour Distance Ratio'], 'NNDR')
+            add_metric_if_present(['NNAA', 'Nearest Neighbour Adversarial Accuracy'], 'NNAA')
+            add_metric_if_present(['MIA', 'Membership Inference Attack'], 'MIA')
+            
+            # If none of the expected keys are present, add a diagnostic entry
+            if not tests:
+                tests.append({
+                    'type': 'SynthEval',
+                    'result': 'WARNING',
+                    'description': 'No NNDR/NNAA/MIA keys found in SynthEval report; returning raw keys.',
+                    'availableMetrics': list(report.keys())
+                })
+            
+            return {
+                'testType': 'Privacy Tests',
+                'description': 'Privacy assessment using SynthEval (NNDR, NNAA, MIA)',
+                'tests': tests,
+                'summary': {
+                    'total': len(tests),
+                    'passed': sum(1 for t in tests if t.get('result') == 'ACCEPT'),
+                    'failed': sum(1 for t in tests if t.get('result') == 'REJECT'),
+                    'errors': sum(1 for t in tests if t.get('result') in ['ERROR', 'LIBRARY_NOT_AVAILABLE'])
+                }
+            }
+        except Exception as e:
+            return {
+                'testType': 'Privacy Tests',
+                'description': 'Privacy assessment using SynthEval',
+                'tests': [{
+                    'type': 'SynthEval',
+                    'result': 'ERROR',
+                    'error': str(e)
+                }],
+                'summary': {
+                    'total': 1,
+                    'passed': 0,
+                    'failed': 0,
+                    'errors': 1
+                }
+            }
     
     def _assess_privacy_level(self, score: float) -> str:
         """Assess privacy level based on score."""
@@ -95,131 +179,7 @@ class PrivacyTestingService:
         else:
             return 'FAIL'
     
-    def _test_dcr_baseline_protection(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
-        """
-        Test privacy using SDMetrics DCRBaselineProtection.
-        Distance between real and synthetic records compared against a random baseline.
-        Higher score = better privacy.
-        """
-        if sdmetrics is None:
-            return {
-                'type': 'DCRBaselineProtection',
-                'result': 'LIBRARY_NOT_AVAILABLE',
-                'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
-                'description': 'Distance between real and synthetic records vs random baseline'
-            }
-        
-        try:
-            from sdmetrics.single_table.privacy import DCRBaselineProtection
-            
-            # Create metadata for DCR baseline protection
-            metadata = {
-                'columns': {
-                    col: {'sdtype': 'categorical' if real_df[col].dtype == 'object' else 'numerical'}
-                    for col in real_df.columns
-                }
-            }
-            
-            # Compute DCR baseline protection with metadata
-            dcr_score = DCRBaselineProtection.compute(real_df, synth_df, metadata)
-            
-            # Determine privacy level (higher score = better privacy)
-            if dcr_score > 0.8:
-                privacy_level = 'HIGH'
-                result = 'ACCEPT'
-            elif dcr_score > 0.6:
-                privacy_level = 'MEDIUM'
-                result = 'WARNING'
-            else:
-                privacy_level = 'LOW'
-                result = 'REJECT'
-            
-            return {
-                'type': 'DCRBaselineProtection',
-                'metric': 'dcr_baseline_protection',
-                'privacy_score': float(dcr_score),
-                'privacy_level': privacy_level,
-                'result': result,
-                'description': f'DCR Baseline Protection: {dcr_score:.3f}',
-                'interpretation': f'Distance between real and synthetic records vs random baseline: {dcr_score:.3f} indicates {privacy_level.lower()} privacy protection'
-            }
-            
-        except Exception as e:
-            return {
-                'type': 'DCRBaselineProtection',
-                'result': 'ERROR',
-                'error': str(e),
-                'description': 'Distance between real and synthetic records vs random baseline'
-            }
-    
-    def get_sdmetrics_diagnostic_score(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
-        """
-        Get SDMetrics Diagnostic Report score for quality metrics.
-        This is now separate from privacy tests and used for overall data quality assessment.
-        """
-        if sdmetrics is None:
-            return {
-                'type': 'Data Quality Assessment',
-                'result': 'LIBRARY_NOT_AVAILABLE',
-                'reason': 'SDMetrics library not installed. Install with: pip install sdmetrics',
-                'description': 'SDMetrics Diagnostic Report for overall data quality'
-            }
-        
-        try:
-            from sdmetrics.reports.single_table.diagnostic_report import DiagnosticReport
-            
-            # Create metadata for the diagnostic report
-            metadata = {
-                'columns': {
-                    col: {'sdtype': 'categorical' if real_df[col].dtype == 'object' else 'numerical'}
-                    for col in real_df.columns
-                }
-            }
-            
-            # Generate diagnostic report with metadata while suppressing library stdout/stderr
-            report = DiagnosticReport()
-            # Disable tqdm-style progress bars
-            original_tqdm_disable = os.environ.get('TQDM_DISABLE')
-            os.environ['TQDM_DISABLE'] = '1'
-            try:
-                with open(os.devnull, 'w') as devnull, redirect_stdout(devnull), redirect_stderr(devnull):
-                    report.generate(real_df, synth_df, metadata)
-                    # Get the overall score (also suppress potential prints)
-                    quality_score = report.get_score()
-            finally:
-                if original_tqdm_disable is None:
-                    os.environ.pop('TQDM_DISABLE', None)
-                else:
-                    os.environ['TQDM_DISABLE'] = original_tqdm_disable
-            
-            # Determine quality level
-            if quality_score > 0.8:
-                quality_level = 'EXCELLENT'
-                result = 'ACCEPT'
-            elif quality_score > 0.6:
-                quality_level = 'GOOD'
-                result = 'WARNING'
-            else:
-                quality_level = 'POOR'
-                result = 'REJECT'
-            
-            return {
-                'type': 'Data Quality Assessment',
-                'metric': 'sdmetrics_diagnostic_quality',
-                'quality_score': float(quality_score),
-                'quality_level': quality_level,
-                'result': result,
-                'description': f'SDMetrics Diagnostic Report quality score: {quality_score:.3f}',
-                'interpretation': f'Overall data quality score of {quality_score:.3f} indicates {quality_level.lower()} quality'
-            }
-            
-        except Exception as e:
-            return {
-                'type': 'Data Quality Assessment',
-                'result': 'ERROR',
-                'error': str(e),
-                'description': 'SDMetrics Diagnostic Report for overall data quality'
-            }
+    # SDMetrics-based helpers removed as we now rely on SynthEval for privacy metrics.
 
 # Global instance
 privacy_service = PrivacyTestingService()

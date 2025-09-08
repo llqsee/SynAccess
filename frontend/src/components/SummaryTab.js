@@ -270,7 +270,7 @@ const SummaryTab = ({
                         test.type === 'completeness_test' ? `Test Type: completeness test` :
                         test.type === 'consistency_test' ? `Test Type: consistency test` :
                         test.type === 'DCRBaselineProtection' ? `Test Type: privacy test` :
-                        test.type === 'Data Quality Assessment' ? `Test Type: data quality assessment` :
+                        (test.type === 'NNDR' || test.type === 'NNAA' || test.type === 'MIA' || test.type === 'SynthEval') ? `Test Type: privacy test` :
                         `Test Type: ${test.type}`
                       }
                     />
