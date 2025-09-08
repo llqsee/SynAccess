@@ -1,8 +1,9 @@
 """
 Privacy testing service for synthetic data validation.
 
-This service implements privacy tests using SynthEval for robust privacy assessment
-focused on NNDR, NNAA, and MIA metrics.
+This service implements fast privacy checks optimized for responsiveness:
+    - NNDR (Nearest Neighbour Distance Ratio) computed with scikit-learn NearestNeighbors
+    - ExactMatchRate (percentage of synthetic rows identical to any real row)
 """
 
 import numpy as np
@@ -13,24 +14,19 @@ import logging
 import os
 from contextlib import redirect_stdout, redirect_stderr
 from io import StringIO
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import MinMaxScaler
 
 warnings.filterwarnings('ignore')
 logger = logging.getLogger(__name__)
 
-# Import privacy libraries with fallback
-try:
-    from syntheval import SynthEval  # type: ignore
-except Exception:  # ImportError or other issues
-    SynthEval = None
+# No external privacy libraries required for fast checks
 
 class PrivacyTestingService:
     """
-    Comprehensive privacy testing service using SynthEval for privacy assessment.
-    
-    Implements privacy tests focusing on:
+    Comprehensive privacy testing service providing fast metrics:
     - NNDR (Nearest Neighbour Distance Ratio)
-    - NNAA (Nearest Neighbour Adversarial Accuracy)
-    - MIA (Membership Inference Attack)
+    - ExactMatchRate (exact row collisions with the real dataset)
     """
     
     def __init__(self):
@@ -39,7 +35,7 @@ class PrivacyTestingService:
         
     def compute_privacy_tests(self, real_df: pd.DataFrame, synth_df: pd.DataFrame) -> Dict:
         """
-        Compute privacy tests using SynthEval (NNDR, NNAA, MIA).
+        Compute fast privacy tests (NNDR and ExactMatchRate) using scikit-learn.
         
         Args:
             real_df: Real dataset
@@ -62,80 +58,104 @@ class PrivacyTestingService:
                 }
             }
         
-        if SynthEval is None:
-            return {
-                'testType': 'Privacy Tests',
-                'description': 'Privacy assessment using SynthEval',
-                'tests': [
-                    {
-                        'type': 'SynthEval',
-                        'result': 'LIBRARY_NOT_AVAILABLE',
-                        'reason': 'SynthEval library not installed. Install with: pip install syntheval',
-                        'description': 'SynthEval privacy metrics (NNDR, NNAA, MIA)'
-                    }
-                ],
-                'summary': {
-                    'total': 1,
-                    'passed': 0,
-                    'failed': 0,
-                    'errors': 1
-                }
-            }
-        
         try:
-            # Identify categorical columns for SynthEval
-            cat_cols = [col for col in real_df.columns if real_df[col].dtype == 'object']
-            
-            # Create a simple holdout split from the real dataset for evaluation
-            # Use a deterministic sample for reproducibility
-            if len(real_df) >= 10:
-                holdout_fraction = 0.2
-            else:
-                holdout_fraction = 0.5  # small datasets
-            df_holdout = real_df.sample(frac=holdout_fraction, random_state=42)
-            
-            # Suppress any library stdout/stderr during evaluation
-            with open(os.devnull, 'w') as devnull, redirect_stdout(devnull), redirect_stderr(devnull):
-                evaluator = SynthEval(real_df, holdout_dataframe=df_holdout, cat_cols=cat_cols)
-                report = evaluator.evaluate(synth_df, class_lab_col=None, presets_file="privacy")
-            
             tests: List[Dict[str, Any]] = []
-            
-            def add_metric_if_present(key_aliases: List[str], display_name: str) -> None:
-                # Look for exact or case-insensitive matches in report dict
-                value = None
-                for k in report.keys():
-                    for alias in key_aliases:
-                        if k == alias or k.lower() == alias.lower():
-                            value = report[k]
-                            break
-                    if value is not None:
-                        break
-                if value is not None:
-                    tests.append({
-                        'type': display_name,
-                        'metric': display_name.lower(),
-                        'value': float(value) if isinstance(value, (int, float, np.floating)) else value,
-                        'result': 'SUCCESS',
-                        'description': f'{display_name} privacy metric from SynthEval'
-                    })
-            
-            add_metric_if_present(['NNDR', 'Nearest Neighbour Distance Ratio'], 'NNDR')
-            add_metric_if_present(['NNAA', 'Nearest Neighbour Adversarial Accuracy'], 'NNAA')
-            add_metric_if_present(['MIA', 'Membership Inference Attack'], 'MIA')
-            
-            # If none of the expected keys are present, add a diagnostic entry
-            if not tests:
-                tests.append({
-                    'type': 'SynthEval',
-                    'result': 'WARNING',
-                    'description': 'No NNDR/NNAA/MIA keys found in SynthEval report; returning raw keys.',
-                    'availableMetrics': list(report.keys())
-                })
-            
+
+            # 1) Encode data quickly into numeric matrices (shared encoding)
+            def encode_dataframe_for_distance(df: pd.DataFrame, ref_categories: Dict[str, Dict[Any, int]]) -> np.ndarray:
+                encoded_cols: List[np.ndarray] = []
+                for col in df.columns:
+                    series = df[col]
+                    if pd.api.types.is_numeric_dtype(series):
+                        values = series.astype(float).fillna(series.median()).to_numpy()
+                        encoded_cols.append(values)
+                    else:
+                        # Use reference mapping; unseen categories -> -1
+                        mapping = ref_categories.setdefault(col, {})
+                        if not mapping:
+                            # Build mapping from real data only later; here we assume mapping exists
+                            unique_vals = []
+                        codes = series.map(mapping).fillna(-1).astype(int).to_numpy()
+                        # Normalize categorical codes to [0,1] using max code (avoid zero division)
+                        max_code = max(mapping.values()) if mapping else 0
+                        denom = max(1, max_code)
+                        encoded_cols.append(codes / denom)
+                return np.column_stack(encoded_cols) if encoded_cols else np.empty((len(df), 0))
+
+            # Build category maps from real_df
+            category_maps: Dict[str, Dict[Any, int]] = {}
+            for col in real_df.columns:
+                if not pd.api.types.is_numeric_dtype(real_df[col]):
+                    uniques = pd.Index(real_df[col].dropna().unique())
+                    category_maps[col] = {val: idx for idx, val in enumerate(uniques)}
+
+            X_real = encode_dataframe_for_distance(real_df, category_maps)
+            X_synth = encode_dataframe_for_distance(synth_df, category_maps)
+
+            # Scale each feature to [0,1] using real data stats
+            if X_real.shape[1] > 0:
+                scaler = MinMaxScaler()
+                scaler.fit(X_real)
+                X_real = scaler.transform(X_real)
+                X_synth = scaler.transform(X_synth)
+
+            # 2) Fast NN search from synthetic -> real
+            if X_real.shape[0] >= 2 and X_synth.shape[0] >= 1:
+                nn = NearestNeighbors(n_neighbors=2, algorithm='auto', metric='euclidean')
+                nn.fit(X_real)
+                dists, idxs = nn.kneighbors(X_synth, n_neighbors=2, return_distance=True)
+                # Distance ratio of nearest to second-nearest real neighbor
+                eps = 1e-12
+                ratios = (dists[:, 0] / (dists[:, 1] + eps)).clip(0, 1)
+                nndr_test = {
+                    'type': 'NNDR',
+                    'metric': 'nearest_neighbor_distance_ratio',
+                    'median': float(np.median(ratios)),
+                    'mean': float(np.mean(ratios)),
+                    'q25': float(np.quantile(ratios, 0.25)),
+                    'q75': float(np.quantile(ratios, 0.75)),
+                    'result': 'SUCCESS',
+                    'description': 'Ratio of nearest to second-nearest real neighbor distances for synthetic samples'
+                }
+                tests.append(nndr_test)
+
+                nn_dist_test = {
+                    'type': 'NN_Distance',
+                    'metric': 'nearest_neighbor_distance',
+                    'median': float(np.median(dists[:, 0])),
+                    'mean': float(np.mean(dists[:, 0])),
+                    'q25': float(np.quantile(dists[:, 0], 0.25)),
+                    'q75': float(np.quantile(dists[:, 0], 0.75)),
+                    'result': 'SUCCESS',
+                    'description': 'Distance from each synthetic sample to its nearest real neighbor'
+                }
+                tests.append(nn_dist_test)
+
+            # 3) Exact match rate (fast set lookup on row hashes)
+            def row_keys(df: pd.DataFrame) -> np.ndarray:
+                # Create a stable string key per row
+                return (
+                    df.fillna("<NA>").astype(str).agg("|".join, axis=1).to_numpy()
+                )
+
+            real_keys = set(row_keys(real_df))
+            synth_keys = row_keys(synth_df)
+            matches = int(sum(1 for k in synth_keys if k in real_keys))
+            rate = matches / max(1, len(synth_keys))
+            exact_match_test = {
+                'type': 'ExactMatchRate',
+                'metric': 'exact_match_rate',
+                'matches': matches,
+                'total': int(len(synth_keys)),
+                'rate': float(rate),
+                'result': 'SUCCESS' if matches == 0 else 'WARNING',
+                'description': 'Proportion of synthetic rows exactly matching a real row'
+            }
+            tests.append(exact_match_test)
+
             return {
                 'testType': 'Privacy Tests',
-                'description': 'Privacy assessment using SynthEval (NNDR, NNAA, MIA)',
+                'description': 'Fast privacy assessment (NNDR, nearest distance, exact match rate)',
                 'tests': tests,
                 'summary': {
                     'total': len(tests),
@@ -147,9 +167,9 @@ class PrivacyTestingService:
         except Exception as e:
             return {
                 'testType': 'Privacy Tests',
-                'description': 'Privacy assessment using SynthEval',
+                'description': 'Fast privacy assessment',
                 'tests': [{
-                    'type': 'SynthEval',
+                    'type': 'FastPrivacy',
                     'result': 'ERROR',
                     'error': str(e)
                 }],
