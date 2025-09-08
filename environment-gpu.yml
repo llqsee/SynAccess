@@ -36,9 +36,9 @@ dependencies:
   - psutil
   - zstandard
   - statsmodels
-  - syntheval
   - anthropic
   - pip:
+      - syntheval
       - cupy-cuda12x>=12.0.0 # GPU acceleration
       - cudnn>=8.9.0 # Deep learning acceleration
      
