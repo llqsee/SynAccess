@@ -270,7 +270,11 @@ const SummaryTab = ({
                         test.type === 'completeness_test' ? `Test Type: completeness test` :
                         test.type === 'consistency_test' ? `Test Type: consistency test` :
                         test.type === 'DCRBaselineProtection' ? `Test Type: privacy test` :
-                        (test.type === 'NNDR' || test.type === 'NN_Distance' || test.type === 'ExactMatchRate' || test.type === 'SynthEval' || test.type === 'FastPrivacy') ? `Test Type: privacy test` :
+                        test.type === 'NNDR' ? `Test Type: privacy test (NNDR)` :
+                        test.type === 'NN_Distance' ? `Test Type: privacy test (nearest neighbor distance)` :
+                        test.type === 'ExactMatchRate' ? `Test Type: privacy test (exact match rate)` :
+                        test.type === 'SynthEval' ? `Test Type: privacy test (SynthEval)` :
+                        test.type === 'FastPrivacy' ? `Test Type: privacy test` :
                         `Test Type: ${test.type}`
                       }
                     />
