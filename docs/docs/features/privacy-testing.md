@@ -27,6 +27,16 @@ Privacy tests appear in the "Quality Metrics" category as individual tests with 
 - NNDR and nearest-distance are comparative signals; lower NNDR or very small nearest distances may indicate higher privacy risk.
 - Exact-match rate directly flags verbatim copies of real rows. For very large datasets, this check can be disabled via an environment flag (planned).
 
+## Privacy Metrics Interpretation
+
+| Metric | What it measures | Directionality | Practical cues (non-binding) | Notes |
+|---|---|---|---|---|
+| NNDR (Nearest Neighbour Distance Ratio) | For each synthetic row, the ratio of its distance to the nearest real row vs the second-nearest real row | Lower ratios may indicate a synthetic row sits unusually close to one specific real row | Median NNDR < 0.35 may warrant inspection; > 0.6 is typically comfortable | Scale-invariant ratio; robust across mixed magnitudes after per-feature scaling |
+| Nearest Neighbor Distance | Distance from each synthetic row to its closest real row (after per-feature min–max scaling on real data) | Smaller distances imply stronger similarity to real data | Median distance near 0 suggests near-duplicates; values > 0.2 generally indicate healthy separation | Affected by feature scaling and encoding of categoricals |
+| Exact Match Rate | Fraction of synthetic rows that exactly match any real row | Higher rate implies direct leakage | Any matches (> 0) should be reviewed; often expected to be 0 | Can be disabled for extremely large datasets if needed |
+
+These guidelines are indicative only. Use domain policy and risk tolerance to set formal thresholds. Combine with quality tests to balance utility and privacy.
+
 ## Integration with Quality Metrics
 
 Privacy tests are integrated into the "Quality Metrics" category alongside:
