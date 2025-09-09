@@ -106,10 +106,12 @@ class TestPrivacyTestingService:
         assert result['summary']['errors'] == 0
 
     def test_insufficient_data_handling(self, privacy_service):
-        """Test handling of datasets with insufficient data (diagnostic path)."""
+        """Test handling of very small datasets with fast privacy checks."""
         # Create very small datasets
         small_real = pd.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
         small_synth = pd.DataFrame({'col1': [1.1, 2.1], 'col2': [3.1, 4.1]})
-        
-        result = privacy_service.get_sdmetrics_diagnostic_score(small_real, small_synth)
-        assert result['result'] in ['LIBRARY_NOT_AVAILABLE', 'ERROR', 'ACCEPT', 'WARNING', 'REJECT']
+
+        result = privacy_service.compute_privacy_tests(small_real, small_synth)
+        assert 'tests' in result and isinstance(result['tests'], list)
+        assert 'summary' in result and isinstance(result['summary'], dict)
+        assert 'total' in result['summary']
