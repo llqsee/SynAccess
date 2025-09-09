@@ -49,7 +49,7 @@ The validation system executes tests in the following order for coherent reporti
 3. **Correlation Structure Validation** (element-wise correlation comparison)
 4. **Statistical Tests** (Welch's t-tests)
 5. **Outlier Detection** (IQR-based)
-6. **Quality Metrics** (Completeness, Consistency, SDMetrics Diagnostic Report, Privacy DCRBaselineProtection)
+6. **Quality Metrics** (Completeness, Consistency, Privacy: NNDR, nearest distance, exact match rate)
 7. **Multivariate Distribution Tests** (Energy, Total Variation, KL Divergence, Jennrich)
 8. **FDR Correction** (Benjamini-Hochberg per test type)
 

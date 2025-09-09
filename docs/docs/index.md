@@ -75,9 +75,9 @@
 - **Implementation**: Cell-based analysis with visual overlay and CSV export
 
 #### **10. Privacy Testing**
-- **Requirement**: Comprehensive privacy assessment using established libraries (SDMetrics)
-- **Rationale**: Synthetic data must preserve privacy while maintaining utility. Robust assessment using industry-standard metrics
-- **Implementation**: Industry-standard privacy metrics integrated into quality validation workflow
+- **Requirement**: Fast privacy assessment that scales to large datasets
+- **Rationale**: Synthetic data must preserve privacy while maintaining utility; performance matters in production
+- **Implementation**: NN-based checks (NNDR, nearest distance, exact match rate) integrated into quality validation
 
 ### **Performance & Scalability Requirements**
 

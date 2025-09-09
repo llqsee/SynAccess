@@ -32,8 +32,6 @@ Privacy tests appear in the "Quality Metrics" category as individual tests with 
 Privacy tests are integrated into the "Quality Metrics" category alongside:
 - **Data Completeness**: Missing value analysis
 - **Data Consistency**: Data type and format consistency
-- **Data Quality Assessment**: Overall quality score (SDMetrics)
-- **Privacy Test**: DCRBaselineProtection (SDMetrics)
 
 This integration provides a holistic view of synthetic data quality including privacy characteristics.
 
