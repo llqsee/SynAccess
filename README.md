@@ -200,6 +200,73 @@ REACT_APP_DEBUG=1
 
 ## 📁 Project Structure
 
+## 🧭 Architecture Overview
+
+```mermaid
+graph TD
+  U[User] --> FE[React Frontend SPA]
+  FE -->|HTTP REST| GW[Gateway Nginx prod or FastAPI dev]
+  GW --> API[FastAPI Uvicorn]
+
+  subgraph Routes
+    R1[routes embed.py]
+    R2[routes validation.py]
+    R3[routes anomaly_detection.py]
+    R4[routes history.py]
+    R5[routes gpu.py]
+    R6[routes ai_analysis.py]
+  end
+
+  API --> R1
+  API --> R2
+  API --> R3
+  API --> R4
+  API --> R5
+  API --> R6
+
+  subgraph Services
+    ES[EmbeddingService]
+    VS[ValidationService]
+    AS[AnomalyDetectionService]
+    PRIV[PrivacyTestingService NNDR NN_Distance ExactMatchRate]
+    JS[JobService]
+    COMP[CompressionService]
+  end
+
+  R1 --> ES
+  R2 --> VS
+  R3 --> AS
+  R2 --> PRIV
+  R4 --> JS
+  JS --> COMP
+
+  subgraph Preprocessing_Embedding
+    PRE[Preprocessing OneHot + numeric passthrough]
+    DIM[UMAP or openTSNE]
+    RES[Embeddings]
+  end
+
+  ES --> PRE --> DIM --> RES
+
+  subgraph Validation
+    STATS[KS Chi-square Welch MI FDR]
+  end
+
+  VS --> STATS
+
+  subgraph Storage
+    DB[SQLAlchemy ORM SQLite default]
+    T1[jobs]
+    T2[job_results]
+    T3[compressed_data]
+  end
+
+  JS --> DB
+  DB --- T1
+  DB --- T2
+  DB --- T3
+```
+
 ```
 Scalable-Visualization-and-Explainability-of-Synthetic-Datasets/
 ├── backend/                    # FastAPI backend application
