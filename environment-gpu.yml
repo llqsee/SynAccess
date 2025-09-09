@@ -36,7 +36,6 @@ dependencies:
   - psutil
   - zstandard
   - statsmodels
-  - sdmetrics
   - anthropic
   - pip:
       - cupy-cuda12x>=12.0.0 # GPU acceleration

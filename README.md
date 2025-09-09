@@ -12,7 +12,7 @@ MAVIS is a comprehensive platform for analyzing, visualizing, and validating syn
 
 ### 2. **Dimensionality Reduction**
 - **UMAP** (Uniform Manifold Approximation and Projection)
-- **t-SNE** (t-Distributed Stochastic Neighbor Embedding)
+- **openTSNE (t‑SNE)** implementation
 - Configurable parameters for optimal visualization
 - Model persistence and reuse capabilities
 
@@ -43,7 +43,7 @@ MAVIS is a comprehensive platform for analyzing, visualizing, and validating syn
 - Comprehensive statistical tests
 - Distribution comparison analysis
 - Quality metrics calculation
-- Privacy testing with established libraries (SDMetrics)
+- Privacy testing with fast NN-based checks (NNDR, nearest distance, exact match)
 - Validation report generation
 
 ### 8. **Advanced Anomaly Detection**
@@ -158,7 +158,7 @@ ENV_FILE=environment-gpu.yml GPU_ENABLED=true ENABLE_GPU=true CONDA_ENV_NAME=mav
 - Ensure your data has a label column indicating "Real" vs "Synthetic"
 
 ### 2. Embedding Generation
-- Choose between UMAP or t-SNE
+- Choose between UMAP or openTSNE (t‑SNE)
 - Configure parameters (n_neighbors, min_dist, perplexity, etc.)
 - Start the embedding process
 - Monitor progress in real-time
@@ -300,7 +300,7 @@ python run_tests.py
 
 ### Optimization Features
 - **Asynchronous processing** with background tasks
-- **GPU acceleration** for UMAP/t-SNE computations
+- **GPU acceleration** for UMAP/openTSNE computations
 - **Model persistence** for faster repeated runs
 - **Memory-efficient** data handling
 - **Real-time monitoring** of system resources
@@ -332,7 +332,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 - **UMAP**: McInnes, L., Healy, J., & Melville, J. (2018). UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction.
-- **t-SNE**: van der Maaten, L., & Hinton, G. (2008). Visualizing Data using t-SNE.
+- **openTSNE (t‑SNE)**: Poličar, P. G., Stražar, M., & Zupan, B. openTSNE documentation: https://opentsne.readthedocs.io/
 - **D3.js**: Bostock, M., Ogievetsky, V., & Heer, J. (2011). D³: Data-Driven Documents.
 - **FastAPI**: Ramírez, S. (2018). FastAPI: Modern, Fast Web Framework for Building APIs.
 
@@ -346,11 +346,10 @@ For support and questions:
 ## 🔄 Changelog
 
 ### Version 2.1.0
-- **Major Update**: Implemented comprehensive privacy testing with SDMetrics
+- **Major Update**: Implemented fast privacy checks (NNDR, nearest distance, exact match rate)
 - **Added**: Privacy tests integrated into Quality Metrics category
-- **Enhanced**: Robust privacy assessment using DCRBaselineProtection and quality diagnostics
-- **Updated**: Environment files with privacy testing dependencies
-- **Added**: Complete privacy testing documentation and test coverage
+- **Enhanced**: Lightweight implementation; no external privacy libraries required
+- **Updated**: Documentation to reflect new privacy approach
 
 ### Version 2.0.0
 - **Major Update**: Implemented histogram-based binomial proportion test anomaly detection
