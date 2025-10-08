@@ -82,16 +82,12 @@ function TabPanel({ children, value, index, ...other }) {
     <div
       role="tabpanel"
       hidden={value !== index}
-      id={`analysis-tabpanel-${index}`}
-      aria-labelledby={`analysis-tab-${index}`}
-      style={{ height: '100%' }}
+      id={`tabpanel-${index}`}
+      aria-labelledby={`tab-${index}`}
       {...other}
+      style={{ height: '100%' }}
     >
-      {value === index && (
-        <Box sx={{ height: '100%' }}>
-          {children}
-        </Box>
-      )}
+      {value === index && children}
     </div>
   );
 }
@@ -213,40 +209,20 @@ function AppContent() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
-        <Container maxWidth="xl" sx={{ py: 2 }}>
+        <Container
+          maxWidth={false}
+          disableGutters
+          sx={{
+            m: 0,
+            p: 1,
+            width: '100%',
+            maxWidth: '100%',
+          }}
+        >
           {/* Header with Authentication */}
           <Header />
           
-          {/* Status Indicators */}
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {loading && (
-              <Chip
-                icon={<AutorenewRounded sx={{ animation: 'spin 1s linear infinite', '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />}
-                label="Generating Embeddings"
-                color="primary"
-                size="small"
-                variant="outlined"
-              />
-            )}
-            {validating && (
-              <Chip
-                icon={<Assessment sx={{ animation: 'pulse 2s ease-in-out infinite', '@keyframes pulse': { '0%': { opacity: 1 }, '50%': { opacity: 0.5 }, '100%': { opacity: 1 } } }} />}
-                label="Running Data Validation"
-                color="info"
-                size="small"
-                variant="outlined"
-              />
-            )}
-            {validationResults && !validating && (
-              <Chip
-                icon={<CheckCircle />}
-                label="Validation Complete"
-                color="success"
-                size="small"
-                variant="outlined"
-              />
-            )}
-          </Box>
+          {/* Status Indicators removed to eliminate gap above tabs */}
 
           {/* Error Alert */}
           {error && (
@@ -282,10 +258,13 @@ function AppContent() {
           )}
 
           {/* Main Content */}
-          <Paper sx={{ 
-            minHeight: '85vh', 
-            display: 'flex', 
-            flexDirection: 'column'
+          <Paper sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            width: '100%',
+            minHeight: 'calc(100vh - 0px)',
+            borderRadius: 0,
+            boxShadow: 'none'
           }}>
             {/* Navigation Tabs */}
             <Box sx={{ 
@@ -293,14 +272,32 @@ function AppContent() {
               borderColor: 'divider', 
               px: 2,
               py: 0,
-              minHeight: 48,
-              maxHeight: 48
+              minHeight: 28,
+              maxHeight: 40,
+              mt: 0 // ensure no extra margin collapses
             }}>
               <Tabs 
                 value={activeTab} 
                 onChange={handleTabChange}
                 aria-label="analysis tabs"
-                sx={{ minHeight: 48 }}
+                variant="scrollable"
+                allowScrollButtonsMobile
+                TabIndicatorProps={{ style: { height: 2 } }}
+                sx={{ 
+                  minHeight: 28,
+                  '& .MuiTab-root': {
+                    minHeight: 26,
+                    padding: '2px 8px',
+                    fontSize: '0.78rem', /* slightly increased font size */
+                    minWidth: 60,
+                    lineHeight: 1.15,
+                    letterSpacing: 0.1,
+                  },
+                  '& .MuiTab-iconWrapper': {
+                    fontSize: '0.9rem',
+                    mb: '-2px'
+                  }
+                }}
               >
                 <Tab 
                   icon={<CloudUpload />} 
@@ -337,10 +334,11 @@ function AppContent() {
             </Box>
 
             {/* Tab Content */}
-            <Box sx={{ 
-              flex: 1, 
+            <Box sx={{
+              flex: 1,
               minHeight: 0,
-              height: 'calc(85vh - 48px)'
+              height: 'calc(100vh - 48px)',
+              width: '100%'
             }}>
               {/* Data Upload Tab */}
               <TabPanel value={activeTab} index={0}>

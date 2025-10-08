@@ -45,23 +45,34 @@ const Header = () => {
       display: 'flex', 
       alignItems: 'center', 
       justifyContent: 'space-between',
-      mb: 2 
+      mb: 0,
+      px: 1.5,
+      py: 0.25,
+      minHeight: 38,
+      gap: 1.5
     }}>
-      <Box>
-        <Typography variant="h5" component="h1" sx={{ 
+      <Box sx={{ lineHeight: 1 }}>
+        <Typography component="h1" sx={{ 
           fontWeight: 700, 
           color: 'primary.main',
-          mb: 0.5 
+          lineHeight: 1,
+          mb: 0,
+          fontSize: '1.35rem',
+          letterSpacing: 0.2
         }}>
-          MAVIS
+          SynAccess
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Scalable Visualization and Explainability of Synthetic Datasets
+        <Typography 
+          variant="caption" 
+          color="text.secondary" 
+          sx={{ display: { xs: 'none', md: 'block' }, lineHeight: 1, mt: 0.1, fontSize: '0.85rem', opacity: 0.7 }}
+        >
+          Evaluating and Explaining Synthetic Data Generation Methods
         </Typography>
       </Box>
       
       {/* User Menu */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {/* Welcome Message */}
         <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
           <Typography variant="body2" color="text.secondary">
@@ -76,16 +87,16 @@ const Header = () => {
         <IconButton
           onClick={handleMenuOpen}
           size="small"
-          sx={{ ml: 2 }}
+          sx={{ ml: 0.5, p: 0.25 }}
           aria-controls={open ? 'account-menu' : undefined}
           aria-haspopup="true"
           aria-expanded={open ? 'true' : undefined}
         >
           <Avatar sx={{ 
-            width: 40, 
-            height: 40,
+            width: 28, 
+            height: 28,
             bgcolor: 'primary.main',
-            fontSize: '1.1rem'
+            fontSize: '0.75rem'
           }}>
             {getInitials(user?.username)}
           </Avatar>
