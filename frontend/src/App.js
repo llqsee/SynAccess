@@ -31,6 +31,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import EmbeddingPlot from './components/EmbeddingPlot';
 import RightSidebar from './components/rightsidebar';
+import CorrelationPlot from './components/CorrelationPlot';
 // import DistributionPlot from './components/DistributionPlot';
 
 // import ResultsPane from './components/ResultsPane';
@@ -479,7 +480,7 @@ function AppContent() {
                     </Paper>
                   ) : embeddingGenerated ? (
                     <Grid container spacing={1} sx={{ height: '100%' }}>
-                      <Grid item xs={12} md={8} lg={9} sx={{ height: '100%' }}>
+                      <Grid item xs={12} md={4} lg={4} sx={{ height: '100%' }}>
                         <Box sx={{ 
                           height: '100%', 
                           border: '1px solid', 
@@ -494,7 +495,24 @@ function AppContent() {
                           />
                         </Box>
                       </Grid>
-                      <Grid item xs={12} md={4} lg={3} sx={{ height: '100%' }}>
+                      {/* Correlation Plot in the middle column */}
+                      <Grid item xs={12} md={5} lg={5} sx={{ height: '100%' }}>
+                        <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', p: 1 }}>
+                          {/* Correlation heatmap between EmbeddingPlot and RightSidebar */}
+                          {embeddingGenerated && (
+                            <CorrelationPlot
+                              realData={realData?.data || embeddingMetadata?.realData?.data || originalRealData?.data}
+                              syntheticData={syntheticData?.data || embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data}
+                              realHeaders={realData?.headers || embeddingMetadata?.realData?.headers || originalRealData?.headers}
+                              syntheticHeaders={syntheticData?.headers || embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers}
+                              defaultDataset="combined"
+                              maxColumns={20}
+                              sampleSize={2000}
+                            />
+                          )}
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={3} lg={3} sx={{ height: '100%' }}>
                         <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
                           <RightSidebar
                             realData={realData?.data || embeddingMetadata?.realData?.data || originalRealData?.data}
@@ -569,4 +587,4 @@ function AppWithAuth() {
   );
 }
 
-export default AppWithAuth; 
+export default AppWithAuth;

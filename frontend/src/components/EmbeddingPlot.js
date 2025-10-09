@@ -536,7 +536,7 @@ const EmbeddingPlot = ({
     let yDomainMin = yExtent[0] - finalYPadding;
     let yDomainMax = yExtent[1] + finalYPadding;
 
-    if (showAnomalies && anomalyResults?.grid_info?.bounds) {
+    if (anomalyResults?.grid_info?.bounds) {
       const gb = anomalyResults.grid_info.bounds;
       xDomainMin = gb.x_min;
       xDomainMax = gb.x_max;
@@ -554,14 +554,14 @@ const EmbeddingPlot = ({
       .range([innerHeight, 0]);
 
     // Only "nice" when NOT using backend grid bounds
-    if (!(showAnomalies && anomalyResults?.grid_info?.bounds)) {
+    if (!(anomalyResults?.grid_info?.bounds)) {
       xScale.nice();
       yScale.nice();
     }
     
     // Validate that all data points fall within the scale domains
     // When using backend grid bounds, avoid auto-adjusting domains
-    if (!(showAnomalies && anomalyResults?.grid_info?.bounds)) {
+    if (!(anomalyResults?.grid_info?.bounds)) {
       const xDomain = xScale.domain();
       const yDomain = yScale.domain();
       const minX = Math.min(...x);
