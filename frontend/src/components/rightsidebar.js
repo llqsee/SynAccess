@@ -37,7 +37,7 @@ export default function RightSidebar({
   // Reset keys used to force Plot re-mount (reset zoom)
   const [globalResetKey, setGlobalResetKey] = useState(0);
   const [selectedResetKey, setSelectedResetKey] = useState(0);
-  const [yScale, setYScale] = useState('count'); // 'count' | 'percent' | 'density'
+  const [yScale, setYScale] = useState('count'); // 'count' | 'density'
 
   const abortControllerRef = useRef(null);
   const plotGenerationTimeoutRef = useRef(null);
@@ -325,8 +325,8 @@ export default function RightSidebar({
     const dataTypeFilter = dataObj.data_type_filter || 'mixed';
     const xAxisTitle = originalData?.headers?.[histogramColumn] || '';
     // Determine y-axis label and normalization for histograms based on selected scale
-    const getYAxisTitle = () => (yScale === 'percent' ? 'Percentage (%)' : 'Count');
-    const getHistnorm = () => (yScale === 'percent' ? 'percent' : undefined);
+  const getYAxisTitle = () => (yScale === 'density' ? 'Density' : 'Count');
+  const getHistnorm = () => (yScale === 'density' ? 'probability density' : undefined);
 
     const getPlotTitle = () => {
       const columnName = dataObj.column_name || `Column ${histogramColumn + 1}`;
@@ -351,7 +351,7 @@ export default function RightSidebar({
           const realX = Object.keys(realCounts);
           const synthX = Object.keys(synthCounts);
           const getY = (countsObj, xs, total) => (
-            yScale === 'percent' ? xs.map(x => (countsObj[x] / total) * 100) : xs.map(x => countsObj[x])
+            yScale === 'density' ? xs.map(x => (countsObj[x] / total)) : xs.map(x => countsObj[x])
           );
           const realY = getY(realCounts, realX, realTotal);
           const synthY = getY(synthCounts, synthX, synthTotal);
@@ -579,10 +579,10 @@ export default function RightSidebar({
       case 'bar': {
         const realTotal = dataObj.real_counts.reduce((s, c) => s + c, 0) || 1;
         const synthTotal = dataObj.synthetic_counts.reduce((s, c) => s + c, 0) || 1;
-        const usePercent = yScale === 'percent';
-        const realValues = usePercent ? dataObj.real_counts.map(c => (c / realTotal) * 100) : dataObj.real_counts;
-        const synthValues = usePercent ? dataObj.synthetic_counts.map(c => (c / synthTotal) * 100) : dataObj.synthetic_counts;
-        const yAxisTitle = usePercent ? 'Percentage (%)' : 'Count';
+  const useDensity = yScale === 'density';
+  const realValues = useDensity ? dataObj.real_counts.map(c => (c / realTotal)) : dataObj.real_counts;
+  const synthValues = useDensity ? dataObj.synthetic_counts.map(c => (c / synthTotal)) : dataObj.synthetic_counts;
+  const yAxisTitle = useDensity ? 'Density' : 'Count';
 
         if (dataTypeFilter === 'real-only') {
           return (
@@ -704,11 +704,11 @@ export default function RightSidebar({
   const availableYScales = useMemo(() => {
     if (!originalData || !originalData.headers || histogramColumn >= (originalData.headers?.length || 0)) return [];
     if (histogramPlotType === 'histogram') {
-      // Only support Count and Percentage for both discrete and continuous histograms
-      return ['count', 'percent'];
+      // Support Count and Density for both discrete and continuous histograms
+      return ['count', 'density'];
     }
     if (histogramPlotType === 'bar') {
-      return ['count', 'percent'];
+      return ['count', 'density'];
     }
     return [];
   }, [histogramPlotType, histogramColumn, originalData]);
@@ -814,7 +814,7 @@ export default function RightSidebar({
                 <Select value={yScale} label="Y-axis Scale" onChange={(e) => setYScale(e.target.value)} sx={{ '& .MuiSelect-select': { fontSize: 12, py: 0.5 } }}>
                   {availableYScales.map((s) => (
                     <MenuItem key={s} value={s} sx={{ fontSize: 12, minHeight: 32, py: 0.25 }}>
-                      <Typography variant="body2" sx={{ fontSize: 12 }}>{s === 'count' ? 'Count' : s === 'percent' ? 'Percentage' : 'Density'}</Typography>
+                      <Typography variant="body2" sx={{ fontSize: 12 }}>{s === 'count' ? 'Count' : 'Density'}</Typography>
                     </MenuItem>
                   ))}
                 </Select>
