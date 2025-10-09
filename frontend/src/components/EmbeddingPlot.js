@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { Box, Typography, Chip, IconButton, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
-import { Clear, BarChart, CropFree, Warning, Download, Help, SelectAll } from '@mui/icons-material';
+import { Clear, BarChart, CropFree, Warning, Download, Help, SelectAll, Gesture } from '@mui/icons-material';
 // import Plot from 'react-plotly.js';
 // import { generateDistributionPlot } from '../services/api';
 // import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
@@ -1524,12 +1524,25 @@ const EmbeddingPlot = ({
           });
       });
 
-    // Circular selection logic
-    let isDrawing = false;
-    let startPoint = null;
-    let selectionCircle = null;
-    let dragThreshold = 3; // pixels
-    let hasDragged = false;
+  // Lasso selection logic only
+  let isDrawing = false;
+  let hasDragged = false;
+    let lassoPath = null;
+    let lassoPoints = [];
+    const lassoMinDistance = 2; // pixels between successive lasso points
+
+    // Point-in-polygon test (ray casting) for lasso selection
+    const pointInPolygon = (x, y, polygon) => {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i][0], yi = polygon[i][1];
+        const xj = polygon[j][0], yj = polygon[j][1];
+        const intersect = ((yi > y) !== (yj > y)) &&
+          (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-12) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    };
 
     // Add background rectangle for reliable event handling
     const background = g.append("rect")
@@ -1555,67 +1568,62 @@ const EmbeddingPlot = ({
         event.preventDefault();
         isDrawing = true;
         hasDragged = false;
-        startPoint = d3.pointer(event, g.node());
-        selectionCircle = null;
+        // Lasso start
+        lassoPoints = [];
+        const p = d3.pointer(event, g.node());
+        lassoPoints.push(p);
+        lassoPath = g.append('path')
+          .attr('class', 'lasso-path')
+          .attr('d', `M ${p[0]},${p[1]}`)
+          .style('fill', 'rgba(37, 99, 235, 0.1)')
+          .style('stroke', '#2563eb')
+          .style('stroke-width', '2px')
+          .style('stroke-dasharray', '5,5')
+          .style('pointer-events', 'none');
       })
       .on("mousemove.selection", function(event) {
-        if (!isDrawing || !startPoint) return;
-
+        if (!isDrawing) return;
         const currentPoint = d3.pointer(event, g.node());
-        const distance = Math.sqrt((currentPoint[0] - startPoint[0])**2 + (currentPoint[1] - startPoint[1])**2);
-
-        if (distance > dragThreshold && !hasDragged) {
+        // Lasso drawing
+        const last = lassoPoints[lassoPoints.length - 1];
+        const dx = currentPoint[0] - last[0];
+        const dy = currentPoint[1] - last[1];
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > lassoMinDistance) {
           hasDragged = true;
-          selectionCircle = g.append("circle")
-            .attr("class", "selection-circle")
-            .attr("cx", startPoint[0])
-            .attr("cy", startPoint[1])
-            .attr("r", 0)
-            .style("fill", "rgba(37, 99, 235, 0.1)")
-            .style("stroke", "#2563eb")
-            .style("stroke-width", "2px")
-            .style("stroke-dasharray", "5,5")
-            .style("pointer-events", "none");
-        }
-
-        if (hasDragged && selectionCircle) {
-          const adjustedRadius = Math.max(0, distance - dragThreshold);
-          // Make circle expand toward the mouse direction
-          const centerX = startPoint[0] + (currentPoint[0] - startPoint[0]) * 0.5;
-          const centerY = startPoint[1] + (currentPoint[1] - startPoint[1]) * 0.5;
-          selectionCircle
-            .attr("cx", centerX)
-            .attr("cy", centerY)
-            .attr("r", adjustedRadius / 2);
+          lassoPoints.push(currentPoint);
+          const d = ['M', lassoPoints[0][0], lassoPoints[0][1], ...lassoPoints.slice(1).flatMap(p => ['L', p[0], p[1]])].join(' ');
+          lassoPath.attr('d', d);
         }
       })
       .on("mouseup.selection", function(event) {
-        if (!isDrawing || !startPoint) return;
+        if (!isDrawing) return;
         event.preventDefault();
-        if (hasDragged && selectionCircle) {
-          const currentPoint = d3.pointer(event, g.node());
-          const distance = Math.sqrt((currentPoint[0] - startPoint[0])**2 + (currentPoint[1] - startPoint[1])**2);
-          const adjustedRadius = Math.max(0, distance - dragThreshold);
-          const centerX = startPoint[0] + (currentPoint[0] - startPoint[0]) * 0.5;
-          const centerY = startPoint[1] + (currentPoint[1] - startPoint[1]) * 0.5;
-          const finalRadius = adjustedRadius / 2;
+        // Lasso finalize
+        if (hasDragged && lassoPath && lassoPoints.length > 2) {
+          // Close polygon visually
+          const closed = [...lassoPoints, lassoPoints[0]];
+          const d = ['M', closed[0][0], closed[0][1], ...closed.slice(1).flatMap(p => ['L', p[0], p[1]]), 'Z'].join(' ');
+          lassoPath.attr('d', d);
 
           const selected = [];
-          points.each(function(d, i) {
-            const cx = xScale(d[0]);
-            const cy = yScale(d[1]);
-            const pointDistance = Math.sqrt((cx - centerX)**2 + (cy - centerY)**2);
-            if (pointDistance <= finalRadius) {
+          points.each(function(dpt, i) {
+            const cx = xScale(dpt[0]);
+            const cy = yScale(dpt[1]);
+            if (pointInPolygon(cx, cy, lassoPoints)) {
               selected.push(indexMap[i]);
             }
           });
-
           setSelectedPoints(selected);
-          selectionCircle.remove();
+          lassoPath.remove();
+        } else if (lassoPath) {
+          // Not enough movement; cancel lasso
+          lassoPath.remove();
         }
         isDrawing = false;
         hasDragged = false;
-        startPoint = null;
+        lassoPoints = [];
+        lassoPath = null;
       });
 
     // Create tooltip
@@ -2436,10 +2444,9 @@ const EmbeddingPlot = ({
             variant={selectedPoints.length > 0 ? "filled" : "outlined"}
           />
           
-          {/* Selection Tool Info */}
           <Chip
-            icon={<CropFree />}
-            label="Drag to select cluster"
+            icon={<Gesture />}
+            label="Lasso select: drag to draw a region"
             size="small"
             color="primary"
             variant="outlined"

@@ -413,8 +413,8 @@ export default function RightSidebar({
         const minValue = Math.min(...combinedValues);
         const maxValue = Math.max(...combinedValues);
         const range = maxValue - minValue;
-  const histnorm = getHistnorm();
-  const yAxisTitle = getYAxisTitle();
+        const histnorm = getHistnorm();
+        const yAxisTitle = getYAxisTitle();
 
         if (range === 0) {
           const singleValue = minValue;
@@ -844,7 +844,7 @@ export default function RightSidebar({
           </Box>
         )}
 
-  {/* Divider intentionally removed to keep layout compact */}
+        {/* Divider intentionally removed to keep layout compact */}
 
         {/* Selected Distribution */}
         {originalData && originalData.headers && originalData.headers.length > 0 ? (
