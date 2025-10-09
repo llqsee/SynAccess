@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Paper, Typography, Divider, Chip, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress } from '@mui/material';
+import { Box, Paper, Typography, Chip, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
 import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
@@ -22,16 +23,26 @@ export default function RightSidebar({
   metadata,
   selectedPoints,
 }) {
+  const theme = useTheme();
   // Local sidebar states
   const [histogramColumn, setHistogramColumn] = useState(0);
   const [histogramPlotType, setHistogramPlotType] = useState('histogram');
   const [plotData, setPlotData] = useState(null);
   const [plotLoading, setPlotLoading] = useState(false);
   const [plotError, setPlotError] = useState(null);
+  // Overall (global) distribution state
+  const [globalPlotData, setGlobalPlotData] = useState(null);
+  const [globalPlotLoading, setGlobalPlotLoading] = useState(false);
+  const [globalPlotError, setGlobalPlotError] = useState(null);
+  // Reset keys used to force Plot re-mount (reset zoom)
+  const [globalResetKey, setGlobalResetKey] = useState(0);
+  const [selectedResetKey, setSelectedResetKey] = useState(0);
+  const [yScale, setYScale] = useState('count'); // 'count' | 'percent' | 'density'
 
   const abortControllerRef = useRef(null);
   const plotGenerationTimeoutRef = useRef(null);
   const lastRequestParamsRef = useRef(null);
+  const globalAbortControllerRef = useRef(null);
 
   // Precompute class-wise ranks for each embedding index to map back to original rows
   const classRanks = useMemo(() => {
@@ -100,6 +111,26 @@ export default function RightSidebar({
     return { data, headers, labels };
   }, [realData, syntheticData, realHeaders, syntheticHeaders]);
 
+  // Headers available for selection (exclude unnamed headers)
+  const displayHeaders = useMemo(() => {
+    const headers = originalData?.headers || [];
+    return headers
+      .map((h, idx) => ({ name: (h || '').trim(), index: idx }))
+      .filter(h => !!h.name);
+  }, [originalData]);
+
+  // Initialize column and plot type to first available named header
+  useEffect(() => {
+    if (!originalData || !displayHeaders.length) return;
+    const validIndices = new Set(displayHeaders.map(h => h.index));
+    if (!validIndices.has(histogramColumn)) {
+      const firstIdx = displayHeaders[0].index;
+      setHistogramColumn(firstIdx);
+      const firstType = classifyColumnType(firstIdx, originalData);
+      setHistogramPlotType(firstType === 'numeric' ? 'histogram' : 'bar');
+    }
+  }, [originalData, displayHeaders, histogramColumn]);
+
   // Compute selection summary
   const selectionSummary = useMemo(() => {
     if (!Array.isArray(selectedPoints) || !metadata?.labels) {
@@ -120,7 +151,7 @@ export default function RightSidebar({
       return {
         realValues: [],
         syntheticValues: [],
-        columnName: originalData.headers[histogramColumn] || `Column ${histogramColumn + 1}`,
+        columnName: originalData.headers[histogramColumn] || '',
         totalSelected: 0,
         realSelected: 0,
         syntheticSelected: 0,
@@ -152,7 +183,7 @@ export default function RightSidebar({
     return {
       realValues,
       syntheticValues,
-      columnName: originalData.headers[histogramColumn] || `Column ${histogramColumn + 1}`,
+      columnName: originalData.headers[histogramColumn] || '',
       totalSelected: selectedPoints.length,
       realSelected: realValues.length,
       syntheticSelected: syntheticValues.length,
@@ -274,12 +305,17 @@ export default function RightSidebar({
     };
   }, []);
 
-  const renderPlot = () => {
-    if (!plotData) return null;
-    const dataTypeFilter = plotData.data_type_filter || 'mixed';
+  // Generic renderer for any plot data
+  const renderPlotFor = (dataObj, plotKey) => {
+    if (!dataObj) return null;
+    const dataTypeFilter = dataObj.data_type_filter || 'mixed';
+    const xAxisTitle = originalData?.headers?.[histogramColumn] || '';
+    // Determine y-axis label and normalization for histograms based on selected scale
+    const getYAxisTitle = () => (yScale === 'percent' ? 'Percentage (%)' : 'Count');
+    const getHistnorm = () => (yScale === 'percent' ? 'percent' : undefined);
 
     const getPlotTitle = () => {
-      const columnName = plotData.column_name || `Column ${histogramColumn + 1}`;
+      const columnName = dataObj.column_name || `Column ${histogramColumn + 1}`;
       switch (dataTypeFilter) {
         case 'real-only': return `Real Data Distribution - ${columnName}`;
         case 'synthetic-only': return `Synthetic Data Distribution - ${columnName}`;
@@ -287,74 +323,82 @@ export default function RightSidebar({
       }
     };
 
-    switch (plotData.plot_type) {
+    switch (dataObj.plot_type) {
       case 'histogram': {
         const isDiscrete = originalData ? isDiscreteVariable(histogramColumn, originalData) : false;
         if (isDiscrete) {
           // Convert counts to percentages for discrete values
           const realCounts = {};
           const synthCounts = {};
-          plotData.real_values.forEach(v => realCounts[v] = (realCounts[v] || 0) + 1);
-          plotData.synthetic_values.forEach(v => synthCounts[v] = (synthCounts[v] || 0) + 1);
-          const realTotal = plotData.real_values.length || 1;
-          const synthTotal = plotData.synthetic_values.length || 1;
+          dataObj.real_values.forEach(v => realCounts[v] = (realCounts[v] || 0) + 1);
+          dataObj.synthetic_values.forEach(v => synthCounts[v] = (synthCounts[v] || 0) + 1);
+          const realTotal = dataObj.real_values.length || 1;
+          const synthTotal = dataObj.synthetic_values.length || 1;
           const realX = Object.keys(realCounts);
-          const realY = realX.map(x => (realCounts[x] / realTotal) * 100);
           const synthX = Object.keys(synthCounts);
-          const synthY = synthX.map(x => (synthCounts[x] / synthTotal) * 100);
+          const getY = (countsObj, xs, total) => (
+            yScale === 'percent' ? xs.map(x => (countsObj[x] / total) * 100) : xs.map(x => countsObj[x])
+          );
+          const realY = getY(realCounts, realX, realTotal);
+          const synthY = getY(synthCounts, synthX, synthTotal);
+          const discreteYAxisTitle = getYAxisTitle(false);
 
           if (dataTypeFilter === 'real-only') {
             return (
-              <Box sx={{ height: '300px' }}>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+              <Box sx={{ height: '190px' }}>
+                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb', fontSize: 14 }}>
                   {getPlotTitle()}
                 </Typography>
                 <Plot
                   data={[{ x: realX, y: realY, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
-                  layout={{ margin: { l: 40, r: 20, t: 40, b: 40 }, showlegend: false, xaxis: { title: '', type: 'category' }, yaxis: { title: 'Percentage (%)' }, bargap: 0.1 }}
-                  style={{ width: '100%', height: '260px' }}
-                  config={{ displayModeBar: false }}
+                  layout={plotLayout({ margin: { l: 40, r: 20, t: 40, b: 40 }, showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
+                  style={{ width: '100%', height: '130px' }}
+                  config={{ displayModeBar: false, doubleClick: 'reset' }}
+                  key={plotKey}
                 />
               </Box>
             );
           } else if (dataTypeFilter === 'synthetic-only') {
             return (
-              <Box sx={{ height: '300px' }}>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+              <Box sx={{ height: '190px' }}>
+                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626', fontSize: 14 }}>
                   {getPlotTitle()}
                 </Typography>
                 <Plot
                   data={[{ x: synthX, y: synthY, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
-                  layout={{ margin: { l: 40, r: 20, t: 40, b: 40 }, showlegend: false, xaxis: { title: '', type: 'category' }, yaxis: { title: 'Percentage (%)' }, bargap: 0.1 }}
-                  style={{ width: '100%', height: '260px' }}
-                  config={{ displayModeBar: false }}
+                  layout={plotLayout({ margin: { l: 40, r: 20, t: 40, b: 40 }, showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
+                  style={{ width: '100%', height: '130px' }}
+                  config={{ displayModeBar: false, doubleClick: 'reset' }}
+                  key={plotKey}
                 />
               </Box>
             );
           }
 
           return (
-            <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
-              <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
+            <Box sx={{ display: 'flex', gap: 1, height: '190px' }}>
+              <Box sx={{ flex: 1, minHeight: '190px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
                 <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
                   Real Data
                 </Typography>
                 <Plot
                   data={[{ x: realX, y: realY, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
-                  layout={{ margin: { l: 40, r: 20, t: 20, b: 40 }, showlegend: false, xaxis: { title: '', type: 'category' }, yaxis: { title: 'Percentage (%)' }, bargap: 0.1 }}
-                  style={{ width: '100%', height: '260px' }}
-                  config={{ displayModeBar: false }}
+                  layout={plotLayout({ margin: { l: 40, r: 20, t: 20, b: 40 }, showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
+                  style={{ width: '100%', height: '130px' }}
+                  config={{ displayModeBar: false, doubleClick: 'reset' }}
+                  key={`${plotKey}-real`}
                 />
               </Box>
-              <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
+              <Box sx={{ flex: 1, minHeight: '190px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
                 <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
                   Synthetic Data
                 </Typography>
                 <Plot
                   data={[{ x: synthX, y: synthY, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
-                  layout={{ margin: { l: 40, r: 20, t: 20, b: 40 }, showlegend: false, xaxis: { title: '', type: 'category' }, yaxis: { title: 'Percentage (%)' }, bargap: 0.1 }}
-                  style={{ width: '100%', height: '260px' }}
-                  config={{ displayModeBar: false }}
+                  layout={plotLayout({ margin: { l: 40, r: 20, t: 20, b: 40 }, showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
+                  style={{ width: '100%', height: '130px' }}
+                  config={{ displayModeBar: false, doubleClick: 'reset' }}
+                  key={`${plotKey}-synthetic`}
                 />
               </Box>
             </Box>
@@ -362,13 +406,15 @@ export default function RightSidebar({
         }
 
         // Continuous histogram (overlay)
-        const combinedValues = [...plotData.real_values, ...plotData.synthetic_values];
+        const combinedValues = [...dataObj.real_values, ...dataObj.synthetic_values];
         if (combinedValues.length === 0) {
           return <Typography>No data available for histogram</Typography>;
         }
         const minValue = Math.min(...combinedValues);
         const maxValue = Math.max(...combinedValues);
         const range = maxValue - minValue;
+  const histnorm = getHistnorm();
+  const yAxisTitle = getYAxisTitle();
 
         if (range === 0) {
           const singleValue = minValue;
@@ -376,28 +422,30 @@ export default function RightSidebar({
           if (dataTypeFilter === 'real-only') {
             return (
               <Box>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb', fontSize: 14 }}>
                   {getPlotTitle()}
                 </Typography>
                 <Plot
-                  data={[{ x: plotData.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, histnorm: 'count', xbins: sharedXBins }]}
-                  layout={{ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}` }, yaxis: { title: 'Count' }, showlegend: false }}
-                  style={{ width: '100%', height: '300px' }}
-                  config={{ displayModeBar: false }}
+                  data={[{ x: dataObj.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
+                  layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                  style={{ width: '100%', height: '200px' }}
+                  config={{ displayModeBar: false, doubleClick: 'reset' }}
+                  key={plotKey}
                 />
               </Box>
             );
           } else if (dataTypeFilter === 'synthetic-only') {
             return (
               <Box>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626', fontSize: 14 }}>
                   {getPlotTitle()}
                 </Typography>
                 <Plot
-                  data={[{ x: plotData.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, histnorm: 'count', xbins: sharedXBins }]}
-                  layout={{ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}` }, yaxis: { title: 'Count' }, showlegend: false }}
-                  style={{ width: '100%', height: '300px' }}
-                  config={{ displayModeBar: false }}
+                  data={[{ x: dataObj.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
+                  layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                  style={{ width: '100%', height: '200px' }}
+                  config={{ displayModeBar: false, doubleClick: 'reset' }}
+                  key={plotKey}
                 />
               </Box>
             );
@@ -405,12 +453,13 @@ export default function RightSidebar({
             return (
               <Plot
                 data={[
-                  { x: plotData.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.5, histnorm: 'count', xbins: sharedXBins },
-                  { x: plotData.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.5, histnorm: 'count', xbins: sharedXBins },
+                  { x: dataObj.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.5, histnorm, xbins: sharedXBins },
+                  { x: dataObj.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.5, histnorm, xbins: sharedXBins },
                 ]}
-                layout={{ margin: { l: 60, r: 20, t: 20, b: 40 }, barmode: 'overlay', xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}` }, yaxis: { title: 'Count' } }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, barmode: 'overlay', xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
               />
             );
           }
@@ -423,28 +472,30 @@ export default function RightSidebar({
         if (dataTypeFilter === 'real-only') {
           return (
             <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb', fontSize: 14 }}>
                 {getPlotTitle()}
               </Typography>
               <Plot
-                data={[{ x: plotData.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, histnorm: 'count', xbins: sharedXBins }]}
-                layout={{ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}` }, yaxis: { title: 'Count' }, showlegend: false }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
+                data={[{ x: dataObj.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
               />
             </Box>
           );
         } else if (dataTypeFilter === 'synthetic-only') {
           return (
             <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626', fontSize: 14 }}>
                 {getPlotTitle()}
               </Typography>
               <Plot
-                data={[{ x: plotData.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, histnorm: 'count', xbins: sharedXBins }]}
-                layout={{ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}` }, yaxis: { title: 'Count' }, showlegend: false }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
+                data={[{ x: dataObj.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
               />
             </Box>
           );
@@ -453,12 +504,13 @@ export default function RightSidebar({
         return (
           <Plot
             data={[
-              { x: plotData.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.5, histnorm: 'count', xbins: sharedXBins },
-              { x: plotData.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.5, histnorm: 'count', xbins: sharedXBins },
+              { x: dataObj.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.5, histnorm, xbins: sharedXBins },
+              { x: dataObj.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.5, histnorm, xbins: sharedXBins },
             ]}
-            layout={{ margin: { l: 60, r: 20, t: 20, b: 40 }, barmode: 'overlay', xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}` }, yaxis: { title: 'Count' } }}
-            style={{ width: '100%', height: '300px' }}
-            config={{ displayModeBar: false }}
+            layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, barmode: 'overlay', xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+            style={{ width: '100%', height: '160px' }}
+            config={{ displayModeBar: false, doubleClick: 'reset' }}
+            key={plotKey}
           />
         );
       }
@@ -467,28 +519,30 @@ export default function RightSidebar({
         if (dataTypeFilter === 'real-only') {
           return (
             <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb', fontSize: 14 }}>
                 {getPlotTitle()}
               </Typography>
               <Plot
-                data={[{ y: plotData.real_values, type: 'violin', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
-                layout={{ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}`, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
+                data={[{ y: dataObj.real_values, type: 'violin', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
               />
             </Box>
           );
         } else if (dataTypeFilter === 'synthetic-only') {
           return (
             <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
+              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626', fontSize: 14 }}>
                 {getPlotTitle()}
               </Typography>
               <Plot
-                data={[{ y: plotData.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
-                layout={{ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}`, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
+                data={[{ y: dataObj.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
               />
             </Box>
           );
@@ -497,21 +551,24 @@ export default function RightSidebar({
         return (
           <Plot
             data={[
-              { y: plotData.real_values, type: 'violin', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.5, box: { visible: true }, meanline: { visible: true } },
-              { y: plotData.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.5, box: { visible: true }, meanline: { visible: true } },
+              { y: dataObj.real_values, type: 'violin', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.5, box: { visible: true }, meanline: { visible: true } },
+              { y: dataObj.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.5, box: { visible: true }, meanline: { visible: true } },
             ]}
-            layout={{ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}`, showticklabels: false }, yaxis: { title: 'Value' } }}
-            style={{ width: '100%', height: '300px' }}
-            config={{ displayModeBar: false }}
+            layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
+            style={{ width: '100%', height: '160px' }}
+            config={{ displayModeBar: false, doubleClick: 'reset' }}
+            key={plotKey}
           />
         );
       }
 
       case 'bar': {
-        const realTotal = plotData.real_counts.reduce((s, c) => s + c, 0) || 1;
-        const synthTotal = plotData.synthetic_counts.reduce((s, c) => s + c, 0) || 1;
-        const realPercentages = plotData.real_counts.map(c => (c / realTotal) * 100);
-        const synthPercentages = plotData.synthetic_counts.map(c => (c / synthTotal) * 100);
+        const realTotal = dataObj.real_counts.reduce((s, c) => s + c, 0) || 1;
+        const synthTotal = dataObj.synthetic_counts.reduce((s, c) => s + c, 0) || 1;
+        const usePercent = yScale === 'percent';
+        const realValues = usePercent ? dataObj.real_counts.map(c => (c / realTotal) * 100) : dataObj.real_counts;
+        const synthValues = usePercent ? dataObj.synthetic_counts.map(c => (c / synthTotal) * 100) : dataObj.synthetic_counts;
+        const yAxisTitle = usePercent ? 'Percentage (%)' : 'Count';
 
         if (dataTypeFilter === 'real-only') {
           return (
@@ -520,10 +577,11 @@ export default function RightSidebar({
                 {getPlotTitle()}
               </Typography>
               <Plot
-                data={[{ x: plotData.categories, y: realPercentages, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
-                layout={{ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}` }, yaxis: { title: 'Percentage (%)' }, showlegend: false }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
+                data={[{ x: dataObj.categories, y: realValues, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
               />
             </Box>
           );
@@ -534,10 +592,11 @@ export default function RightSidebar({
                 {getPlotTitle()}
               </Typography>
               <Plot
-                data={[{ x: plotData.categories, y: synthPercentages, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
-                layout={{ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: plotData.column_name || `Column ${histogramColumn + 1}` }, yaxis: { title: 'Percentage (%)' }, showlegend: false }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
+                data={[{ x: dataObj.categories, y: synthValues, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
               />
             </Box>
           );
@@ -546,70 +605,165 @@ export default function RightSidebar({
         return (
           <Plot
             data={[
-              { x: plotData.categories, y: realPercentages, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 },
-              { x: plotData.categories, y: synthPercentages, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 },
+              { x: dataObj.categories, y: realValues, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 },
+              { x: dataObj.categories, y: synthValues, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 },
             ]}
-            layout={{ margin: { l: 40, r: 20, t: 20, b: 40 }, barmode: 'group', xaxis: { title: '' }, yaxis: { title: 'Percentage (%)' }, legend: { x: 0.7, y: 0.9 } }}
-            style={{ width: '100%', height: '300px' }}
-            config={{ displayModeBar: false }}
+            layout={plotLayout({ margin: { l: 40, r: 20, t: 20, b: 40 }, barmode: 'group', xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+            style={{ width: '100%', height: '160px' }}
+            config={{ displayModeBar: false, doubleClick: 'reset' }}
+            key={plotKey}
           />
         );
       }
 
       default:
-        return <Typography>Unsupported plot type: {plotData.plot_type}</Typography>;
+        return <Typography>Unsupported plot type: {dataObj.plot_type}</Typography>;
     }
   };
 
-  // Auto-initialize default plot type based on first column
+  // Backward-compatible renderer for selected plot
+  const renderPlot = () => renderPlotFor(plotData);
+
+  // Generate overall (global) distribution using full datasets
+  const generateGlobalPlotData = useCallback(async () => {
+    if (!originalData || !originalData.headers || originalData.headers.length === 0) return;
+    // Abort previous
+    if (globalAbortControllerRef.current) globalAbortControllerRef.current.abort();
+    const abortController = new AbortController();
+    globalAbortControllerRef.current = abortController;
+
+    const allReal = Array.isArray(realData) ? realData : [];
+    const allSynthetic = Array.isArray(syntheticData) ? syntheticData : [];
+    if (allReal.length === 0 && allSynthetic.length === 0) {
+      setGlobalPlotData(null);
+      setGlobalPlotError('No data available to plot');
+      setGlobalPlotLoading(false);
+      return;
+    }
+
+    const dataTypeFilter = allReal.length > 0 && allSynthetic.length > 0 ? 'mixed' : (allReal.length > 0 ? 'real-only' : 'synthetic-only');
+    const requestData = {
+      real_data: allReal,
+      synthetic_data: allSynthetic,
+      column: originalData.headers[histogramColumn],
+      plot_type: histogramPlotType,
+      real_headers: originalData.headers,
+      synthetic_headers: originalData.headers,
+      data_type_filter: dataTypeFilter,
+    };
+
+    setGlobalPlotLoading(true);
+    setGlobalPlotError(null);
+    try {
+      const resp = await generateDistributionPlot(requestData, abortController.signal);
+      if (abortController.signal.aborted) return;
+      setGlobalPlotData(resp);
+    } catch (err) {
+      if (err.name === 'AbortError' || abortController.signal.aborted) return;
+      setGlobalPlotError(`Failed to generate overall plot: ${err.message}`);
+    } finally {
+      if (!abortController.signal.aborted) setGlobalPlotLoading(false);
+    }
+  }, [originalData, histogramColumn, histogramPlotType, realData, syntheticData]);
+
+  // Trigger overall distribution when inputs change
   useEffect(() => {
-    if (!originalData || !originalData.headers || originalData.headers.length === 0 || histogramColumn !== 0) return;
-    const firstType = classifyColumnType(0, originalData);
-    const numericPlotTypes = ['histogram', 'violin'];
-    const categoricalPlotTypes = ['bar'];
-    const compatible = (firstType === 'numeric' && numericPlotTypes.includes(histogramPlotType)) || (firstType === 'categorical' && categoricalPlotTypes.includes(histogramPlotType));
-    if (!compatible) setHistogramPlotType(firstType === 'numeric' ? 'histogram' : 'bar');
-  }, [originalData, histogramColumn, histogramPlotType]);
+    if (!originalData || !originalData.headers || originalData.headers.length === 0) return;
+    generateGlobalPlotData();
+    return () => {
+      if (globalAbortControllerRef.current) globalAbortControllerRef.current.abort();
+    };
+  }, [originalData, histogramColumn, histogramPlotType, generateGlobalPlotData]);
+
+  // Removed legacy auto-init effect; initialization handled by displayHeaders effect
 
   const histogramData = useMemo(() => generateHistogramData(), [generateHistogramData]);
 
+  // Available Y-axis scales depending on plot type and data type
+  const availableYScales = useMemo(() => {
+    if (!originalData || !originalData.headers || histogramColumn >= (originalData.headers?.length || 0)) return [];
+    if (histogramPlotType === 'histogram') {
+      // Only support Count and Percentage for both discrete and continuous histograms
+      return ['count', 'percent'];
+    }
+    if (histogramPlotType === 'bar') {
+      return ['count', 'percent'];
+    }
+    return [];
+  }, [histogramPlotType, histogramColumn, originalData]);
+
+  // Coerce yScale when options change
+  useEffect(() => {
+    if (availableYScales.length && !availableYScales.includes(yScale)) {
+      setYScale(availableYScales[0]);
+    }
+  }, [availableYScales, yScale]);
+
+  // Consistent Plotly font styling aligned with MUI theme
+  const plotBaseFont = useMemo(() => ({
+    family: theme.typography?.fontFamily || 'Inter, Roboto, Helvetica, Arial, sans-serif',
+    size: 12,
+    color: theme.palette?.text?.primary || '#111',
+  }), [theme]);
+
+  const axisFonts = useMemo(() => ({
+    titlefont: {
+      family: plotBaseFont.family,
+      size: 12,
+      color: plotBaseFont.color,
+    },
+    tickfont: {
+      family: plotBaseFont.family,
+      size: 11,
+      color: theme.palette?.text?.secondary || '#555',
+    },
+  }), [plotBaseFont, theme]);
+
+  const plotLayout = useCallback((overrides = {}) => {
+    const xaxis = { ...(overrides.xaxis || {}) };
+    const yaxis = { ...(overrides.yaxis || {}) };
+    return {
+      font: plotBaseFont,
+      ...overrides,
+      xaxis: { ...xaxis, ...axisFonts },
+      yaxis: { ...yaxis, ...axisFonts },
+    };
+  }, [plotBaseFont, axisFonts]);
+
   return (
     <Paper sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="h6">Distributions</Typography>
+      <Box sx={{ p: 1, borderBottom: '0.1px solid', borderColor: 'divider' }}>
+        <Typography variant="subtitle2">Univariate Distribution Analysis</Typography>
       </Box>
 
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Divider />
 
-        {/* Selection Summary */}
-        <Box>
-          <Typography variant="subtitle2" gutterBottom>
-            Selection Summary
+      {/* Selection Summary */}
+      <Box sx={{ ml: 1, mb: 1 }}>
+        <Typography variant="subtitle2" gutterBottom sx={{ fontSize: 12 }}>
+          Selection Summary
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Total Selected: <strong>{selectionSummary.total}</strong>
           </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <Typography variant="body2">
-              Total Selected: <strong>{selectionSummary.total}</strong>
-            </Typography>
-            <Typography variant="body2">Real: <strong>{selectionSummary.real}</strong></Typography>
-            <Typography variant="body2">Synthetic: <strong>{selectionSummary.synthetic}</strong></Typography>
-          </Box>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>Real: <strong>{selectionSummary.real}</strong></Typography>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>Synthetic: <strong>{selectionSummary.synthetic}</strong></Typography>
         </Box>
+      </Box>
 
-        <Divider />
-
-        {/* Controls */}
-        {originalData && originalData.headers && originalData.headers.length > 0 ? (
-          <>
-            <FormControl fullWidth size="small">
-              <InputLabel>Column for Analysis</InputLabel>
-              <Select value={histogramColumn} label="Column for Analysis" onChange={(e) => setHistogramColumn(e.target.value)}>
-                {originalData.headers.map((header, index) => {
+      <Box sx={{ flex: 1, p: 1, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+        {/* Controls (apply to both Overall and Selected plots) */}
+        {originalData && originalData.headers && originalData.headers.length > 0 && (
+          <Box>
+            <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+              <InputLabel sx={{ fontSize: 12, '&.MuiInputLabel-shrink': { fontSize: 12 } }}>Column for Analysis</InputLabel>
+              <Select value={histogramColumn} label="Column for Analysis" onChange={(e) => setHistogramColumn(e.target.value)} sx={{ '& .MuiSelect-select': { fontSize: 12, py: 0.5 } }}>
+                {displayHeaders.map(({ name, index }) => {
                   const columnDataType = classifyColumnType(index, originalData);
                   return (
-                    <MenuItem key={index} value={index}>
+                    <MenuItem key={index} value={index} sx={{ fontSize: 12, minHeight: 32, py: 0.25 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                        <Typography variant="body2" sx={{ flex: 1 }}>{header || `Column ${index + 1}`}</Typography>
+                        <Typography variant="body2" sx={{ flex: 1, fontSize: 12 }}>{name}</Typography>
                         <Chip label={columnDataType} size="small" color={columnDataType === 'numeric' ? 'primary' : 'secondary'} variant="outlined" sx={{ fontSize: '0.7rem', height: '20px' }} />
                       </Box>
                     </MenuItem>
@@ -619,76 +773,138 @@ export default function RightSidebar({
             </FormControl>
 
             {histogramData && histogramData.availablePlotTypes && (
-              <FormControl fullWidth size="small">
-                <InputLabel>Plot Type</InputLabel>
-                <Select value={histogramPlotType} label="Plot Type" onChange={(e) => setHistogramPlotType(e.target.value)}>
+              <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                <InputLabel sx={{ fontSize: 12, '&.MuiInputLabel-shrink': { fontSize: 12 } }}>Plot Type</InputLabel>
+                <Select value={histogramPlotType} label="Plot Type" onChange={(e) => setHistogramPlotType(e.target.value)} sx={{ '& .MuiSelect-select': { fontSize: 12, py: 0.5 } }}>
                   {histogramData.availablePlotTypes.map((plotType) => (
-                    <MenuItem key={plotType.value} value={plotType.value}>
-                      <Typography variant="body2">{plotType.label}</Typography>
+                    <MenuItem key={plotType.value} value={plotType.value} sx={{ fontSize: 12, minHeight: 32, py: 0.25 }}>
+                      <Typography variant="body2" sx={{ fontSize: 12 }}>{plotType.label}</Typography>
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
             )}
 
-            {histogramData && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="caption" color="text.secondary">Data Type:</Typography>
-                <Chip label={histogramData.dataType} size="small" color={histogramData.dataType === 'numeric' ? 'primary' : 'secondary'} variant="outlined" />
+            {/* Y-axis Scale control */}
+            {availableYScales.length > 0 && (
+              <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                <InputLabel sx={{ fontSize: 12, '&.MuiInputLabel-shrink': { fontSize: 12 } }}>Y-axis Scale</InputLabel>
+                <Select value={yScale} label="Y-axis Scale" onChange={(e) => setYScale(e.target.value)} sx={{ '& .MuiSelect-select': { fontSize: 12, py: 0.5 } }}>
+                  {availableYScales.map((s) => (
+                    <MenuItem key={s} value={s} sx={{ fontSize: 12, minHeight: 32, py: 0.25 }}>
+                      <Typography variant="body2" sx={{ fontSize: 12 }}>{s === 'count' ? 'Count' : s === 'percent' ? 'Percentage' : 'Density'}</Typography>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </Box>
+        )}
+
+        {/* Overall Distribution (full dataset) */}
+        {originalData && originalData.headers && originalData.headers.length > 0 && (
+          <Box>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontSize: 12 }}>
+              Overall Distribution: {originalData.headers[histogramColumn] || `Column ${histogramColumn + 1}`}
+            </Typography>
+            {globalPlotLoading && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '160px', gap: 1 }}>
+                <CircularProgress size={40} />
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Generating overall plot...</Typography>
+              </Box>
+            )}
+            {globalPlotError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <Typography variant="body2" component="div" sx={{ fontSize: 12 }}><strong>Overall Plot Error:</strong></Typography>
+                <Typography variant="body2" sx={{ mt: 0.5, fontSize: 12 }}>{globalPlotError}</Typography>
+              </Alert>
+            )}
+            {!globalPlotLoading && !globalPlotError && globalPlotData && (
+              <Box sx={{ width: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', p: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {(globalPlotData?.data_type_filter === 'mixed' || globalPlotData?.data_type_filter === 'real-only') && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Box sx={{ width: 12, height: 12, bgcolor: '#2563eb', opacity: 0.7, borderRadius: 0.5 }} />
+                        <Typography variant="caption" sx={{ fontSize: 11 }}>Real</Typography>
+                      </Box>
+                    )}
+                    {(globalPlotData?.data_type_filter === 'mixed' || globalPlotData?.data_type_filter === 'synthetic-only') && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Box sx={{ width: 12, height: 12, bgcolor: '#dc2626', opacity: 0.7, borderRadius: 0.5 }} />
+                        <Typography variant="caption" sx={{ fontSize: 11 }}>Synthetic</Typography>
+                      </Box>
+                    )}
+                  </Box>
+                  <Button size="small" variant="outlined" onClick={() => setGlobalResetKey((k) => k + 1)} sx={{ fontSize: 11, px: 0.75, py: 0.25, minHeight: 22, textTransform: 'none' }}>Reset zoom</Button>
+                </Box>
+                {renderPlotFor(globalPlotData, `global-${globalResetKey}`)}
+              </Box>
+            )}
+          </Box>
+        )}
+
+  {/* Divider intentionally removed to keep layout compact */}
+
+        {/* Selected Distribution */}
+        {originalData && originalData.headers && originalData.headers.length > 0 ? (
+          <Box>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontSize: 12 }}>
+              Selected Distribution: {histogramData?.columnName || (originalData?.headers?.[histogramColumn] || `Column ${histogramColumn + 1}`)}
+            </Typography>
+
+            {plotLoading && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '160px', gap: 1 }}>
+                <CircularProgress size={40} />
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Generating plot...</Typography>
               </Box>
             )}
 
-            <Box>
-              <Typography variant="subtitle2" gutterBottom>
-                Distribution: {histogramData?.columnName || (originalData?.headers?.[histogramColumn] || `Column ${histogramColumn + 1}`)}
-              </Typography>
+            {plotError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <Typography variant="body2" component="div" sx={{ fontSize: 12 }}><strong>Plot Generation Error:</strong></Typography>
+                <Typography variant="body2" sx={{ mt: 0.5, fontSize: 12 }}>{plotError}</Typography>
+              </Alert>
+            )}
 
-              {plotLoading && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '200px', gap: 1 }}>
-                  <CircularProgress size={40} />
-                  <Typography variant="caption" color="text.secondary">Generating plot...</Typography>
+            {!plotLoading && !plotError && plotData && (
+              <Box sx={{ width: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', p: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {(plotData?.data_type_filter === 'mixed' || plotData?.data_type_filter === 'real-only') && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Box sx={{ width: 12, height: 12, bgcolor: '#2563eb', opacity: 0.7, borderRadius: 0.5 }} />
+                        <Typography variant="caption" sx={{ fontSize: 11 }}>Real</Typography>
+                      </Box>
+                    )}
+                    {(plotData?.data_type_filter === 'mixed' || plotData?.data_type_filter === 'synthetic-only') && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Box sx={{ width: 12, height: 12, bgcolor: '#dc2626', opacity: 0.7, borderRadius: 0.5 }} />
+                        <Typography variant="caption" sx={{ fontSize: 11 }}>Synthetic</Typography>
+                      </Box>
+                    )}
+                  </Box>
+                  <Button size="small" variant="outlined" onClick={() => setSelectedResetKey((k) => k + 1)} sx={{ fontSize: 11, px: 0.75, py: 0.25, minHeight: 22, textTransform: 'none' }}>Reset zoom</Button>
                 </Box>
-              )}
+                {renderPlotFor(plotData, `selected-${selectedResetKey}`)}
+              </Box>
+            )}
 
-              {plotError && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  <Typography variant="body2" component="div"><strong>Plot Generation Error:</strong></Typography>
-                  <Typography variant="body2" sx={{ mt: 0.5 }}>{plotError}</Typography>
-                </Alert>
-              )}
-
-              {!plotLoading && !plotError && plotData && (
-                <Box sx={{ width: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', p: 1 }}>
-                  {renderPlot()}
-                </Box>
-              )}
-
-              {!plotLoading && !plotError && !plotData && selectedPoints.length > 0 && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'grey.50' }}>
-                  <Typography variant="body2" color="text.secondary">Select points to view distribution</Typography>
-                </Box>
-              )}
-            </Box>
-          </>
+            {!plotLoading && !plotError && !plotData && selectedPoints.length > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '160px', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'grey.50' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>Select points to view distribution</Typography>
+              </Box>
+            )}
+          </Box>
         ) : (
           selectedPoints.length > 0 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100px', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'grey.50' }}>
-              <Typography variant="body2" color="text.secondary">Distribution analysis not available for this embedding</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>Distribution analysis not available for this embedding</Typography>
             </Box>
           )
         )}
 
-        {/* Legend */}
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Box sx={{ width: 12, height: 12, bgcolor: '#2563eb', opacity: 0.7 }} />
-            <Typography variant="caption">Real</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Box sx={{ width: 12, height: 12, bgcolor: '#dc2626', opacity: 0.7 }} />
-            <Typography variant="caption">Synthetic</Typography>
-          </Box>
-        </Box>
+        {/* Bottom legend removed: legend now lives inline with Reset zoom per plot */}
       </Box>
     </Paper>
   );
