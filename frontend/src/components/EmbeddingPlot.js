@@ -1638,66 +1638,29 @@ const EmbeddingPlot = ({
 
     // Responsive legend positioning - ensure it fits properly
     const showAnomalyLegend = showAnomalies && anomalyResults && anomalyResults.synthetic_data;
-    // Use more space for legend when sidebar is collapsed
-    const legendWidth = showAnomalyLegend ?
-      (shouldShowSidebar ? 220 : 250) : 
-      (shouldShowSidebar ? 190 : 220);
-    const legendHeight = wasDownsampled ? 85 :
-                        showAnomalyLegend ? 120 : 75;
     
-    // Calculate optimal legend position - ensure it doesn't get cut off
-    const legendX = Math.min(
-      plotWidth - (margin.right / devicePixelRatio) + 30,
-      plotWidth - legendWidth - 25
-    );
-    const legendY = (margin.top / devicePixelRatio) + 10;
+  // Place legend just to the right of the inner plotting area to avoid covering points
+  const legendX = margin.left + (innerWidth * devicePixelRatio) + 10;
+  const legendY = margin.top + 10;
     
 
     
     const legend = svg.append("g")
       .attr("transform", `translate(${legendX}, ${legendY})`);
 
-    legend.append("rect")
-      .attr("x", -10)
-      .attr("y", -10)
-      .attr("width", legendWidth)
-      .attr("height", legendHeight)
-      .attr("fill", "white")
-      .attr("stroke", "#e5e7eb")
-      .attr("stroke-width", 1)
-      .attr("rx", 6)
-      .attr("opacity", 0.95);
 
-    legend.append("text")
-      .attr("x", 0)
-      .attr("y", 8)
-      .text(showAnomalyLegend ? "Data Points" : "Dataset Type")
-      .style("font-size", "11px")
-      .style("font-weight", "600")
-      .style("font-family", "system-ui, -apple-system, sans-serif")
-      .style("fill", "#374151");
-
-    const realCount = sampledLabels.filter(label => label === "Real").length;
-    const syntheticCount = sampledLabels.filter(label => label === "Synthetic").length;
-
-    // Calculate anomaly counts if available
-    let syntheticAnomalies = 0;
-    let syntheticNormal = 0;
-    if (showAnomalyLegend && anomalyResults && anomalyResults.synthetic_data) {
-      syntheticAnomalies = anomalyResults.synthetic_data.filter(point => point.is_anomaly).length;
-      syntheticNormal = anomalyResults.synthetic_data.filter(point => !point.is_anomaly).length;
-    }
+    // Removed count-based legend details for a minimal legend
 
     // Show different legend based on anomaly display
     if (showAnomalyLegend) {
       // Real data
       const realLegendRow = legend.append("g")
-        .attr("transform", `translate(0, 25)`);
+        .attr("transform", `translate(0, 0)`);
 
       realLegendRow.append("circle")
         .attr("cx", 8)
         .attr("cy", 0)
-        .attr("r", Math.max(3, adjustedPointSize * 1.5))
+  .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
         .attr("fill", colorScale("Real")) // Use same color as data points
         .attr("stroke", d3.color(colorScale("Real")).darker(0.3))
         .attr("stroke-width", 0.5)
@@ -1706,20 +1669,20 @@ const EmbeddingPlot = ({
       realLegendRow.append("text")
         .attr("x", 20)
         .attr("y", 4)
-        .text(`Real (${realCount.toLocaleString()})`)
-        .style("font-size", "10px") // Smaller font to fit better
+        .text(`Real`)
+        .style("font-size", "9px")
         .style("font-weight", "500")
         .style("font-family", "system-ui, -apple-system, sans-serif")
         .style("fill", "#374151");
 
       // Normal synthetic data
       const normalLegendRow = legend.append("g")
-        .attr("transform", `translate(0, 47)`);
+        .attr("transform", `translate(0, 16)`);
 
       normalLegendRow.append("circle")
         .attr("cx", 8)
         .attr("cy", 0)
-        .attr("r", Math.max(3, adjustedPointSize * 1.5))
+  .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
         .attr("fill", colorScale("Synthetic")) // Use same color as data points
         .attr("stroke", d3.color(colorScale("Synthetic")).darker(0.3))
         .attr("stroke-width", 0.5)
@@ -1728,8 +1691,8 @@ const EmbeddingPlot = ({
       normalLegendRow.append("text")
         .attr("x", 20)
         .attr("y", 4)
-        .text(`Synthetic (${syntheticCount.toLocaleString()})`)
-        .style("font-size", "10px") // Smaller font to fit better
+        .text(`Synthetic`)
+        .style("font-size", "9px")
         .style("font-weight", "500")
         .style("font-family", "system-ui, -apple-system, sans-serif")
         .style("fill", "#374151");
@@ -1739,40 +1702,29 @@ const EmbeddingPlot = ({
       // Standard legend
       ["Real", "Synthetic"].forEach((label, i) => {
         const legendRow = legend.append("g")
-          .attr("transform", `translate(0, ${i * 22 + 25})`);
+          .attr("transform", `translate(0, ${i * 16})`);
 
         legendRow.append("circle")
           .attr("cx", 8)
           .attr("cy", 0)
-          .attr("r", Math.max(3, adjustedPointSize * 1.5))
+          .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
           .attr("fill", colorScale(label))
           .attr("stroke", d3.color(colorScale(label)).darker(0.3))
           .attr("stroke-width", 0.5)
           .attr("opacity", 0.85);
 
-        const count = label === "Real" ? realCount : syntheticCount;
         legendRow.append("text")
           .attr("x", 20)
           .attr("y", 4)
-          .text(`${label} (${count.toLocaleString()})`)
-          .style("font-size", "10px") // Smaller font to fit better
+          .text(`${label}`)
+          .style("font-size", "9px")
           .style("font-weight", "500")
           .style("font-family", "system-ui, -apple-system, sans-serif")
           .style("fill", "#374151");
       });
     }
 
-    if (wasDownsampled) {
-      legend.append("text")
-        .attr("x", 0)
-        .attr("y", 85)
-        .text("* Intelligently sampled")
-        .style("font-size", "10px")
-        .style("font-weight", "400")
-        .style("font-family", "system-ui, -apple-system, sans-serif")
-        .style("fill", "#6b7280")
-        .style("font-style", "italic");
-    }
+    // Omit downsampling footnote in compact legend to keep it short
 
 
   }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, showAnomalies, anomalyResults, getOriginalData, calculatePlotDimensions, sampleData]);
@@ -1838,7 +1790,7 @@ const EmbeddingPlot = ({
     // Use the EXACT data that user selected in sidebar (no additional sampling)
     // This ensures backend, frontend visualization, and cell counting all use same data
     const realData = [];
-    const syntheticData = [];
+    const syntheticData = []; 
     
     data.forEach((point, index) => {
       if (metadata.labels[index] === 'Real') {
@@ -2191,12 +2143,9 @@ const EmbeddingPlot = ({
       display: 'block',
       position: 'relative',
       overflow: 'visible',
-      width: '33vw',
-      height: '33vw',
+      width: '100%',
+      height: 'auto',
       minWidth: '260px',
-      minHeight: '260px',
-      maxWidth: '40vw',
-      maxHeight: '40vw',
       alignSelf: 'flex-start',
       justifySelf: 'flex-start',
       // Add CSS animation for pulsing effect
@@ -2215,10 +2164,8 @@ const EmbeddingPlot = ({
         className="embedding-plot" 
         sx={{ 
           width: '100%',
-          height: '100%',
-          position: 'absolute',
-          top: 0,
-          left: 0,
+          height: '33vw',
+          position: 'relative',
           minHeight: 'unset',
           backgroundColor: 'rgba(248, 250, 252, 0.5)',
           borderRadius: '8px',
@@ -2231,255 +2178,11 @@ const EmbeddingPlot = ({
         }}
       >
 
-        {/* Selection Controls */}
-        <Box sx={{ 
-          position: 'absolute', 
-          top: 16, 
-          left: 16, 
-          zIndex: 10,
-          display: 'flex',
-          gap: 1,
-          flexWrap: 'wrap'
-        }}>
-          <Chip
-            icon={<BarChart />}
-            label={`${selectedPoints.length} selected`}
-            size="small"
-            color={selectedPoints.length > 0 ? "primary" : "default"}
-            variant={selectedPoints.length > 0 ? "filled" : "outlined"}
-          />
-          
-          <Chip
-            icon={<Gesture />}
-            label="Lasso select: drag to draw a region"
-            size="small"
-            color="primary"
-            variant="outlined"
-            sx={{ bgcolor: 'white' }}
-          />
-          
-          <Tooltip title={selectedPoints.length === 0 ? "No points selected" : "Clear Selection"}>
-            <span>
-              <IconButton 
-                size="small" 
-                aria-label="Clear selection"
-                onClick={clearSelection}
-                disabled={selectedPoints.length === 0}
-                sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
-              >
-                <Clear fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          
-          {/* Removed Select All button */}
-          
-          {/* Enhanced Anomaly Detection Control */}
-          <Tooltip title="Run Anomaly Detection - Highlights anomalous regions">
-            <IconButton 
-              size="small" 
-              aria-label="Run anomaly detection"
-              onClick={() => {
-                console.log('🔘 Anomaly detection button clicked!');
-                console.log('Current data length:', data?.length);
-                console.log('Current metadata:', metadata);
-                console.log('Button state - anomalyLoading:', anomalyLoading);
-                console.log('Button state - anomalyResults:', !!anomalyResults);
-                setShowAnomalies(true); // Enable anomaly display
-                runAnomalyDetection();
-              }}
-              disabled={anomalyLoading}
-              sx={{ 
-                bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'rgba(59, 130, 246, 0.1)', 
-                '&:hover': { 
-                  bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.4)' : 'rgba(59, 130, 246, 0.2)' 
-                },
-                border: '1px solid',
-                borderColor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.5)' : 'rgba(59, 130, 246, 0.3)',
-                '&:disabled': {
-                  bgcolor: 'rgba(156, 163, 175, 0.1)',
-                  borderColor: 'rgba(156, 163, 175, 0.3)'
-                }
-              }}
-            >
-              {anomalyLoading ? (
-                <CircularProgress size={16} color="primary" />
-              ) : (
-                <Warning fontSize="small" color={anomalyResults && showAnomalies ? "error" : "primary"} />
-              )}
-            </IconButton>
-          </Tooltip>
-          
-          {anomalyError && (
-            <Chip
-              label={`Error: ${anomalyError}`}
-              size="small"
-              color="error"
-              variant="filled"
-              sx={{ 
-                bgcolor: 'rgba(220, 38, 38, 0.9)',
-                fontSize: '11px',
-                maxWidth: '200px'
-              }}
-            />
-          )}
-          
-          {anomalyResults && (
-            <Tooltip title="Download Anomaly CSV">
-              <IconButton 
-                size="small" 
-                aria-label="Download anomaly CSV"
-                onClick={downloadAnomalyCSV}
-                sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
-              >
-                <Download fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          
+        {/* Selection Controls moved below plot */}
 
-          
-          {/* Toggle Anomaly Display */}
-          {anomalyResults && (
-            <Tooltip title={showAnomalies ? "Hide Anomaly Grid" : "Show Anomaly Grid"}>
-              <IconButton 
-                size="small" 
-                aria-label="Toggle anomaly display"
-                onClick={() => setShowAnomalies(!showAnomalies)}
-                sx={{ 
-                  bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.2)' : 'white', 
-                  '&:hover': { bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'grey.100' } 
-                }}
-              >
-                <Warning fontSize="small" color={showAnomalies ? "error" : "inherit"} />
-              </IconButton>
-            </Tooltip>
-          )}
-          
-          {/* Help Button */}
-          {showAnomalies && anomalyResults && (
-            <Tooltip title="Anomaly Detection Help">
-              <IconButton 
-                size="small" 
-                aria-label="Anomaly detection help"
-                onClick={() => setShowHelpDialog(true)}
-                sx={{ 
-                  bgcolor: 'rgba(59, 130, 246, 0.1)', 
-                  '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' } 
-                }}
-              >
-                <Help fontSize="small" color="primary" />
-              </IconButton>
-            </Tooltip>
-          )}
-          
-          {/* Simplified: No filter buttons needed - all data is shown by default */}
-        </Box>
+        {/* Bottom controls moved below */}
 
-                {/* Plot Info Status */}
-        <Box sx={{ 
-          position: 'absolute', 
-          bottom: 16, 
-          left: 16, 
-          zIndex: 10,
-          display: 'flex',
-          gap: 1,
-          flexWrap: 'wrap'
-        }}>
-          <Chip
-            label={`${data?.length || 0} points`}
-            size="small"
-            variant="outlined"
-            sx={{ 
-              bgcolor: 'rgba(255, 255, 255, 0.9)',
-              fontSize: '11px'
-            }}
-          />
-          
-          {/* Simplified Anomaly Detection Status */}
-          {anomalyResults && anomalyResults.statistics && (
-            <Chip
-              icon={<Warning />}
-              label={`${anomalyResults.statistics.real_anomalies || 0} real + ${anomalyResults.statistics.synthetic_anomalies || 0} synthetic anomalies detected`}
-              size="small"
-              color="error"
-              variant="filled"
-              sx={{ 
-                bgcolor: 'rgba(220, 38, 38, 0.9)',
-                fontSize: '11px'
-              }}
-            />
-          )}
-          
-
-        </Box>
-
-        {/* Top-Left Anomaly Legend */}
-        {showAnomalies && anomalyResults && anomalyResults.cell_anomalies && (
-          <Box sx={{ 
-            position: 'absolute', 
-            top: 16, 
-            left: 16, 
-            zIndex: 10,
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: 0.5,
-            bgcolor: 'rgba(255, 255, 255, 0.4)',
-            p: 1.5,
-            borderRadius: 1,
-            border: '1px solid rgba(0, 0, 0, 0.15)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            maxWidth: '280px',
-            backdropFilter: 'blur(2px)'
-          }}>
-            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 0.5 }}>
-              Anomaly Legend
-            </Typography>
-            
-            {/* Real Overpopulation */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ 
-                width: 12, 
-                height: 12, 
-                borderRadius: '50%', 
-                bgcolor: 'rgba(239, 68, 68, 0.2)',
-                border: '2px solid rgba(239, 68, 68, 1.0)'
-              }} />
-              <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 'bold' }}>
-                Real Overpopulation ({anomalyResults.cell_anomalies.filter(a => a.test_type === 'real_overpopulation' && a.is_significant).length})
-              </Typography>
-            </Box>
-            
-            {/* Synthetic Overpopulation */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ 
-                width: 12, 
-                height: 12, 
-                borderRadius: '50%', 
-                bgcolor: 'rgba(59, 130, 246, 0.2)',
-                border: '2px solid rgba(59, 130, 246, 1.0)'
-              }} />
-              <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
-                Synthetic Overpopulation ({anomalyResults.cell_anomalies.filter(a => a.test_type === 'synthetic_overpopulation' && a.is_significant).length})
-              </Typography>
-            </Box>
-            
-            {/* Summary Statistics */}
-            {anomalyResults.statistics && (
-              <Box sx={{ mt: 0.5, pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                  📊 Real Anomalies: {anomalyResults.statistics.real_anomalies || 0}
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                  📊 Synthetic Anomalies: {anomalyResults.statistics.synthetic_anomalies || 0}
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
-                  📈 Total Anomalous Regions: {anomalyResults.cell_anomalies.length}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        )}
+        {/* Anomaly legend moved below */}
 
   {/* Removed aspect ratio controls - now fully automatic */}
 
@@ -2501,6 +2204,170 @@ const EmbeddingPlot = ({
           }}
         />
       </Box>
+
+      {/* Controls and generated information below the plot */}
+      <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <Chip
+          icon={<BarChart />}
+          label={`${selectedPoints.length} selected`}
+          size="small"
+          color={selectedPoints.length > 0 ? "primary" : "default"}
+          variant={selectedPoints.length > 0 ? "filled" : "outlined"}
+        />
+
+        <Tooltip title={selectedPoints.length === 0 ? "No points selected" : "Clear Selection"}>
+          <span>
+            <IconButton 
+              size="small" 
+              aria-label="Clear selection"
+              onClick={clearSelection}
+              disabled={selectedPoints.length === 0}
+              sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
+            >
+              <Clear fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+
+        <Tooltip title="Run Anomaly Detection - Highlights anomalous regions">
+          <IconButton 
+            size="small" 
+            aria-label="Run anomaly detection"
+            onClick={() => {
+              console.log('🔘 Anomaly detection button clicked!');
+              console.log('Current data length:', data?.length);
+              console.log('Current metadata:', metadata);
+              console.log('Button state - anomalyLoading:', anomalyLoading);
+              console.log('Button state - anomalyResults:', !!anomalyResults);
+              setShowAnomalies(true);
+              runAnomalyDetection();
+            }}
+            disabled={anomalyLoading}
+            sx={{ 
+              bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'rgba(59, 130, 246, 0.1)', 
+              '&:hover': { 
+                bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.4)' : 'rgba(59, 130, 246, 0.2)' 
+              },
+              border: '1px solid',
+              borderColor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.5)' : 'rgba(59, 130, 246, 0.3)',
+              '&:disabled': {
+                bgcolor: 'rgba(156, 163, 175, 0.1)',
+                borderColor: 'rgba(156, 163, 175, 0.3)'
+              }
+            }}
+          >
+            {anomalyLoading ? (
+              <CircularProgress size={16} color="primary" />
+            ) : (
+              <Warning fontSize="small" color={anomalyResults && showAnomalies ? "error" : "primary"} />
+            )}
+          </IconButton>
+        </Tooltip>
+
+        {anomalyResults && (
+          <Tooltip title="Download Anomaly CSV">
+            <IconButton 
+              size="small" 
+              aria-label="Download anomaly CSV"
+              onClick={downloadAnomalyCSV}
+              sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
+            >
+              <Download fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+
+        {anomalyResults && (
+          <Tooltip title={showAnomalies ? "Hide Anomaly Grid" : "Show Anomaly Grid"}>
+            <IconButton 
+              size="small" 
+              aria-label="Toggle anomaly display"
+              onClick={() => setShowAnomalies(!showAnomalies)}
+              sx={{ 
+                bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.2)' : 'white', 
+                '&:hover': { bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'grey.100' } 
+              }}
+            >
+              <Warning fontSize="small" color={showAnomalies ? "error" : "inherit"} />
+            </IconButton>
+          </Tooltip>
+        )}
+
+        {showAnomalies && anomalyResults && (
+          <Tooltip title="Anomaly Detection Help">
+            <IconButton 
+              size="small" 
+              aria-label="Anomaly detection help"
+              onClick={() => setShowHelpDialog(true)}
+              sx={{ 
+                bgcolor: 'rgba(59, 130, 246, 0.1)', 
+                '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' } 
+              }}
+            >
+              <Help fontSize="small" color="primary" />
+            </IconButton>
+          </Tooltip>
+        )}
+
+        {anomalyResults && anomalyResults.statistics && (
+          <Chip
+            icon={<Warning />}
+            label={`${anomalyResults.statistics.real_anomalies || 0} real + ${anomalyResults.statistics.synthetic_anomalies || 0} synthetic anomalies detected`}
+            size="small"
+            color="error"
+            variant="filled"
+            sx={{ 
+              bgcolor: 'rgba(220, 38, 38, 0.9)',
+              fontSize: '11px'
+            }}
+          />
+        )}
+      </Box>
+
+      {showAnomalies && anomalyResults && anomalyResults.cell_anomalies && (
+        <Box sx={{ 
+          mt: 1.5,
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: 0.5,
+          bgcolor: 'rgba(255, 255, 255, 0.6)',
+          p: 1.5,
+          borderRadius: 1,
+          border: '1px solid rgba(0, 0, 0, 0.12)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          maxWidth: '100%'
+        }}>
+          <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 0.5 }}>
+            Anomaly Legend
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'rgba(239, 68, 68, 0.2)', border: '2px solid rgba(239, 68, 68, 1.0)' }} />
+            <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 'bold' }}>
+              Real Overpopulation ({anomalyResults.cell_anomalies.filter(a => a.test_type === 'real_overpopulation' && a.is_significant).length})
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'rgba(59, 130, 246, 0.2)', border: '2px solid rgba(59, 130, 246, 1.0)' }} />
+            <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
+              Synthetic Overpopulation ({anomalyResults.cell_anomalies.filter(a => a.test_type === 'synthetic_overpopulation' && a.is_significant).length})
+            </Typography>
+          </Box>
+          {anomalyResults.statistics && (
+            <Box sx={{ mt: 0.5, pt: 0.5, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                📊 Real Anomalies: {anomalyResults.statistics.real_anomalies || 0}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                📊 Synthetic Anomalies: {anomalyResults.statistics.synthetic_anomalies || 0}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                📈 Total Anomalous Regions: {anomalyResults.cell_anomalies.length}
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      )}
+
 
       {/* Resize handle removed for fixed-size embedding */}
 
