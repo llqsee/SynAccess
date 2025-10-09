@@ -31,7 +31,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import EmbeddingPlot from './components/EmbeddingPlot';
 import RightSidebar from './components/rightsidebar';
-import DistributionPlot from './components/DistributionPlot';
+// import DistributionPlot from './components/DistributionPlot';
 
 // import ResultsPane from './components/ResultsPane';
 import History from './components/History';
@@ -204,7 +204,6 @@ function AppContent() {
   const tabsEnabled = {
     upload: true, // Always enabled
     embeddings: dataUploaded, // Enabled when data is uploaded
-    distributions: dataAvailable, // Enabled when data is uploaded OR loaded from history with compressed data
     summary: dataAvailable, // Enabled when data is uploaded OR loaded from history with compressed data
     history: true, // Always enabled - users can view history anytime
   };
@@ -321,12 +320,7 @@ function AppContent() {
                   iconPosition="start"
                   disabled={!tabsEnabled.embeddings}
                 />
-                <Tab 
-                  icon={<BarChart />} 
-                  label="Distributions" 
-                  iconPosition="start"
-                  disabled={!tabsEnabled.distributions}
-                />
+                {/* Distributions tab removed */}
 
                 <Tab 
                   icon={<HistoryIcon />} 
@@ -537,38 +531,12 @@ function AppContent() {
                 </Box>
               </TabPanel>
 
-              {/* Distributions Tab */}
+              {/* Distributions tab content removed */}
+
+
+
+              {/* History Tab (index adjusted after removing Distributions) */}
               <TabPanel value={activeTab} index={3}>
-                <Box sx={{ p: 2 }}>
-                  {dataAvailable ? (
-                    <Box sx={{ minHeight: '80vh' }}>
-                      <DistributionPlot
-                        realData={realData?.data || embeddingMetadata?.realData?.data || originalRealData?.data}
-                        syntheticData={syntheticData?.data || embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data}
-                        realHeaders={realData?.headers || embeddingMetadata?.realData?.headers || originalRealData?.headers}
-                        syntheticHeaders={syntheticData?.headers || embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers}
-                      />
-                    </Box>
-                  ) : (
-                    <Paper sx={{ p: 4, textAlign: 'center', minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Box>
-                        <BarChart sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                        <Typography variant="h6" color="text.secondary" gutterBottom>
-                          No Data Available
-                        </Typography>
-                        <Typography color="text.secondary">
-                          Upload both real and synthetic datasets to compare distributions.
-                        </Typography>
-                      </Box>
-                    </Paper>
-                  )}
-                </Box>
-              </TabPanel>
-
-
-
-              {/* History Tab */}
-              <TabPanel value={activeTab} index={4}>
                 <Box sx={{ p: 2, height: '100%' }}>
                   <History onLoadEmbedding={handleLoadFromHistory} />
                 </Box>
