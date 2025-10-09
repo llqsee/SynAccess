@@ -693,6 +693,13 @@ export default function RightSidebar({
 
   const histogramData = useMemo(() => generateHistogramData(), [generateHistogramData]);
 
+  // Derive Plot Type options from overall dataset (not selection)
+  const plotTypeOptions = useMemo(() => {
+    if (!originalData || !originalData.headers || histogramColumn >= (originalData.headers?.length || 0)) return [];
+    const columnDataType = classifyColumnType(histogramColumn, originalData);
+    return getAvailablePlotTypes(columnDataType) || [];
+  }, [originalData, histogramColumn]);
+
   // Available Y-axis scales depending on plot type and data type
   const availableYScales = useMemo(() => {
     if (!originalData || !originalData.headers || histogramColumn >= (originalData.headers?.length || 0)) return [];
@@ -787,11 +794,11 @@ export default function RightSidebar({
               </Select>
             </FormControl>
 
-            {histogramData && histogramData.availablePlotTypes && (
+            {plotTypeOptions && plotTypeOptions.length > 0 && (
               <FormControl fullWidth size="small" sx={{ mb: 1 }}>
                 <InputLabel sx={{ fontSize: 12, '&.MuiInputLabel-shrink': { fontSize: 12 } }}>Plot Type</InputLabel>
                 <Select value={histogramPlotType} label="Plot Type" onChange={(e) => setHistogramPlotType(e.target.value)} sx={{ '& .MuiSelect-select': { fontSize: 12, py: 0.5 } }}>
-                  {histogramData.availablePlotTypes.map((plotType) => (
+                  {plotTypeOptions.map((plotType) => (
                     <MenuItem key={plotType.value} value={plotType.value} sx={{ fontSize: 12, minHeight: 32, py: 0.25 }}>
                       <Typography variant="body2" sx={{ fontSize: 12 }}>{plotType.label}</Typography>
                     </MenuItem>
@@ -862,7 +869,7 @@ export default function RightSidebar({
         {/* Divider intentionally removed to keep layout compact */}
 
         {/* Selected Distribution */}
-        {originalData && originalData.headers && originalData.headers.length > 0 ? (
+        {originalData && originalData.headers && originalData.headers.length > 0 && Array.isArray(selectedPoints) && selectedPoints.length > 0 ? (
           <Box>
             <Typography variant="subtitle2" gutterBottom sx={{ fontSize: 12 }}>
               Selected Distribution: {histogramData?.columnName || (originalData?.headers?.[histogramColumn] || `Column ${histogramColumn + 1}`)}
@@ -905,14 +912,14 @@ export default function RightSidebar({
               </Box>
             )}
 
-            {!plotLoading && !plotError && !plotData && selectedPoints.length > 0 && (
+            {!plotLoading && !plotError && !plotData && (
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '160px', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'grey.50' }}>
                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>Select points to view distribution</Typography>
               </Box>
             )}
           </Box>
         ) : (
-          selectedPoints.length > 0 && (
+          selectedPoints && selectedPoints.length > 0 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100px', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'grey.50' }}>
               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>Distribution analysis not available for this embedding</Typography>
             </Box>
