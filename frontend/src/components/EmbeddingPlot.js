@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { Box, Typography, Paper, Chip, IconButton, Tooltip, Divider, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
-import { Clear, BarChart, CropFree, UnfoldLess, Warning, Download, Help, SelectAll } from '@mui/icons-material';
+import { Clear, BarChart, CropFree, Warning, Download, Help, SelectAll } from '@mui/icons-material';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
 import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
@@ -271,7 +271,6 @@ const EmbeddingPlot = ({
     return 30;
   });
   const [isResizing, setIsResizing] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Removed aspect ratio mode - now fully automatic
   
   // Refs for smooth resizing and API management
@@ -283,7 +282,7 @@ const EmbeddingPlot = ({
 
   // Calculate optimal plot dimensions based on screen characteristics
   const calculatePlotDimensions = useCallback((containerWidth, containerHeight, sidebarVisible) => {
-    const availableWidth = sidebarVisible && !sidebarCollapsed ? 
+    const availableWidth = sidebarVisible ? 
       containerWidth * ((100 - sidebarWidth) / 100) : containerWidth;
     
     // Get screen characteristics
@@ -331,7 +330,7 @@ const EmbeddingPlot = ({
     
     // Final ratio adjustment to prevent extreme ratios - allow wider plots when sidebar is present
     const finalRatio = plotWidth / plotHeight;
-    const maxRatio = shouldShowSidebar && !sidebarCollapsed ? 2.8 : 2.5; // Allow wider plots when sidebar is present
+  const maxRatio = shouldShowSidebar ? 2.8 : 2.5; // Allow wider plots when sidebar is present
     if (finalRatio > maxRatio) {
       // For extremely wide plots, constrain to maxRatio:1 ratio
       plotHeight = plotWidth / maxRatio;
@@ -341,7 +340,7 @@ const EmbeddingPlot = ({
     
     console.log('Calculated plot dimensions:', { plotWidth, plotHeight, ratio: plotWidth / plotHeight });
     return { plotWidth, plotHeight };
-  }, [sidebarWidth, sidebarCollapsed]);
+  }, [sidebarWidth]);
 
   // Generate histogram data for selected points
   const generateHistogramData = useCallback(() => {
@@ -1358,7 +1357,7 @@ const EmbeddingPlot = ({
     }, 50);
 
     return () => clearTimeout(renderTimeout);
-  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed, showAnomalies, anomalyResults, getOriginalData, calculatePlotDimensions]);
+  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, showAnomalies, anomalyResults, getOriginalData, calculatePlotDimensions]);
 
   // Separate function for the actual D3 plot rendering logic
   const renderD3Plot = useCallback(() => {
@@ -1397,8 +1396,7 @@ const EmbeddingPlot = ({
     });
     
     // Calculate responsive plot area based on sidebar state
-    const shouldShowSidebar = selectedPoints.length > 0;
-    const { plotWidth, plotHeight } = calculatePlotDimensions(containerWidth, containerHeight, shouldShowSidebar);
+  const { plotWidth, plotHeight } = calculatePlotDimensions(containerWidth, containerHeight, true);
     
     // Early return if dimensions are too small
     if (plotWidth < 350 || plotHeight < 280) {
@@ -1466,15 +1464,15 @@ const EmbeddingPlot = ({
     const baseMargin = {
       top: Math.max(30, Math.min(50, plotHeight * 0.06)), // Increased top margin for y-axis
       // Right margin for legend - optimized for sidebar state
-      right: shouldShowSidebar && !sidebarCollapsed ? 
+      right: shouldShowSidebar ?
         Math.max(100, Math.min(140, plotWidth * 0.15)) : 
-        Math.max(140, Math.min(180, plotWidth * 0.20)), // Increased margin when sidebar is collapsed
+        Math.max(140, Math.min(180, plotWidth * 0.20)),
       // Aggressive bottom margin to prevent x-axis overshooting
       bottom: Math.max(80, Math.min(100, plotHeight * 0.15)), // Slightly reduced bottom margin
       // Left margin for y-axis labels - increased for visibility when sidebar is present
-      left: shouldShowSidebar && !sidebarCollapsed ? 
+      left: shouldShowSidebar ?
         Math.max(50, Math.min(80, plotWidth * 0.12)) : 
-        Math.max(60, Math.min(80, plotWidth * 0.12)) // Standard margin when sidebar is collapsed
+        Math.max(60, Math.min(80, plotWidth * 0.12))
     };
     
     const margin = { 
@@ -1611,7 +1609,7 @@ const EmbeddingPlot = ({
     // Y-axis label with better positioning
     yAxis.append("text")
       .attr("transform", `rotate(-90)`)
-      .attr("y", shouldShowSidebar && !sidebarCollapsed ? -axisSpacing - 5 : -axisSpacing - 10) // Reduced spacing when sidebar is present to keep label visible
+  .attr("y", shouldShowSidebar ? -axisSpacing - 5 : -axisSpacing - 10)
       .attr("x", -innerHeight / 2)
       .attr("text-anchor", "middle")
       .attr("fill", "#1f2937")
@@ -2623,9 +2621,9 @@ const EmbeddingPlot = ({
     // Responsive legend positioning - ensure it fits properly
     const showAnomalyLegend = showAnomalies && anomalyResults && anomalyResults.synthetic_data;
     // Use more space for legend when sidebar is collapsed
-    const legendWidth = showAnomalyLegend ? 
-      (shouldShowSidebar && !sidebarCollapsed ? 220 : 250) : 
-      (shouldShowSidebar && !sidebarCollapsed ? 190 : 220);
+    const legendWidth = showAnomalyLegend ?
+      (shouldShowSidebar ? 220 : 250) : 
+      (shouldShowSidebar ? 190 : 220);
     const legendHeight = wasDownsampled ? 85 :
                         showAnomalyLegend ? 120 : 75;
     
@@ -2759,7 +2757,7 @@ const EmbeddingPlot = ({
     }
 
 
-  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, sidebarCollapsed, showAnomalies, anomalyResults, getOriginalData, calculatePlotDimensions, sampleData]);
+  }, [data, metadata, pointSize, pointOpacity, selectedPoints, sidebarWidth, showAnomalies, anomalyResults, getOriginalData, calculatePlotDimensions, sampleData]);
 
   // Add resize observer to handle container size changes when sidebar appears/disappears
   useEffect(() => {
@@ -3121,10 +3119,8 @@ const EmbeddingPlot = ({
     };
   }, []);
 
-  // 🎯 CLEAN SIDEBAR VISIBILITY - Simple and predictable
-  const shouldShowSidebar = useMemo(() => {
-    return selectedPoints.length > 0;
-  }, [selectedPoints.length]);
+  // 🎯 Sidebar always visible
+  const shouldShowSidebar = true;
 
   // Memoized data for performance
   const originalData = useMemo(() => getOriginalData(), [getOriginalData]);
@@ -3200,8 +3196,6 @@ const EmbeddingPlot = ({
 
   // 🎯 SIMPLIFIED AUTO-RESIZE LOGIC - Fully automatic
   useEffect(() => {
-    // Don't auto-resize if user has manually collapsed the sidebar
-    if (sidebarCollapsed) return;
     
     // Get current viewport dimensions
     const viewportWidth = window.innerWidth;
@@ -3233,12 +3227,12 @@ const EmbeddingPlot = ({
     if (Math.abs(sidebarWidth - idealWidth) > 3) {
       setSidebarWidth(idealWidth);
     }
-  }, [selectedPoints.length, plotData, sidebarWidth, sidebarCollapsed]);
+  }, [selectedPoints.length, plotData, sidebarWidth]);
 
   // Responsive sidebar adjustments on window resize
   useEffect(() => {
     const handleResize = () => {
-      if (sidebarCollapsed) return;
+  // Always adjust on resize (sidebar never collapses now)
       
       const viewportWidth = window.innerWidth;
       let newWidth;
@@ -3263,38 +3257,9 @@ const EmbeddingPlot = ({
     
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [sidebarCollapsed, selectedPoints.length, plotData]);
+  }, [selectedPoints.length, plotData]);
 
-  // Toggle sidebar collapse/expand with intelligent width restoration
-  const toggleSidebarExpansion = useCallback(() => {
-    const newCollapsedState = !sidebarCollapsed;
-    setSidebarCollapsed(newCollapsedState);
-    
-    if (newCollapsedState) {
-      setSidebarWidth(0);
-    } else {
-      // Restore to intelligent width based on current viewport
-      const viewportWidth = window.innerWidth;
-      let restoredWidth;
-      
-      if (viewportWidth < 768) {
-        restoredWidth = 40;
-      } else if (viewportWidth < 1024) {
-        restoredWidth = 35;
-      } else if (viewportWidth < 1440) {
-        restoredWidth = 30;
-      } else {
-        restoredWidth = 25;
-      }
-      
-      // Expand if there's active data
-      if (selectedPoints.length > 0 && plotData) {
-        restoredWidth = Math.min(restoredWidth + 5, 45);
-      }
-      
-      setSidebarWidth(restoredWidth);
-    }
-  }, [sidebarCollapsed, selectedPoints.length, plotData]);
+  // Sidebar collapse is disabled; no toggle function needed
 
   // New function to handle clicking on anomalous regions
   const handleAnomalyCellClick = useCallback(async (cellData, i, j) => {
@@ -3448,10 +3413,10 @@ const EmbeddingPlot = ({
         ref={containerRef} 
         className="embedding-plot" 
         sx={{ 
-          flex: shouldShowSidebar && !sidebarCollapsed ? 1 : 1, // Use full available space when sidebar is present
+          flex: 1,
           width: '100%', // Use full width of parent container
-          marginLeft: shouldShowSidebar && !sidebarCollapsed ? '-80px' : '0px', // Expand 20px to the left when sidebar is present
-          marginRight: shouldShowSidebar && !sidebarCollapsed ? '-80px' : '0px', // Expand 20px to the right when sidebar is present
+          marginLeft: shouldShowSidebar ? '-80px' : '0px',
+          marginRight: shouldShowSidebar ? '-80px' : '0px',
           height: '100vh', // Use full viewport height
           minHeight: '600px', // Increased minimum height
           backgroundColor: 'rgba(248, 250, 252, 0.5)',
@@ -3748,8 +3713,7 @@ const EmbeddingPlot = ({
       </Box>
 
       {/* Resize Handle */}
-      {shouldShowSidebar && !sidebarCollapsed && (
-        <Box
+      <Box
           onMouseDown={handleMouseDown}
           sx={{
             width: 8,
@@ -3773,40 +3737,9 @@ const EmbeddingPlot = ({
             }
           }}
         />
-      )}
-
-      {/* Floating Restore Button - Only show when sidebar is collapsed */}
-      {shouldShowSidebar && sidebarCollapsed && (
-        <Box sx={{
-          position: 'absolute',
-          top: 16,
-          right: 16,
-          zIndex: 1000
-        }}>
-          <Tooltip title="Show distribution sidebar">
-            <IconButton 
-              onClick={toggleSidebarExpansion}
-              sx={{
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 1)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-                },
-                width: '48px',
-                height: '48px'
-              }}
-              color="primary"
-            >
-              <BarChart />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      )}
 
       {/* Histogram Sidebar */}
-      {shouldShowSidebar && !sidebarCollapsed && (
-        <Paper sx={{ 
+      <Paper sx={{ 
           flex: `0 0 ${sidebarWidth}%`,
           display: 'flex',
           flexDirection: 'column',
@@ -3828,26 +3761,7 @@ const EmbeddingPlot = ({
               <BarChart color="primary" />
               Distributions
             </Typography>
-            
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Tooltip title="Hide sidebar (maximize plot)">
-                <IconButton 
-                  size="small" 
-                  onClick={toggleSidebarExpansion}
-                  color="primary"
-                  sx={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 1)',
-                    },
-                    border: '1px solid',
-                    borderColor: 'divider'
-                  }}
-                >
-                  <UnfoldLess />
-                </IconButton>
-              </Tooltip>
-            </Box>
+
           </Box>
 
           {/* Scrollable content */}
@@ -4092,7 +4006,6 @@ const EmbeddingPlot = ({
           </Box>
           </Box>
         </Paper>
-      )}
 
       {/* Help Dialog */}
       <Dialog 

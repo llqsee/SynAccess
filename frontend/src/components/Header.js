@@ -41,9 +41,9 @@ const Header = () => {
   };
 
   return (
-    <Box sx={{ 
-      display: 'flex', 
-      alignItems: 'center', 
+    <Box sx={{
+      display: 'flex',
+      alignItems: 'center',
       justifyContent: 'space-between',
       mb: 0,
       px: 1.5,
@@ -52,8 +52,8 @@ const Header = () => {
       gap: 1.5
     }}>
       <Box sx={{ lineHeight: 1 }}>
-        <Typography component="h1" sx={{ 
-          fontWeight: 700, 
+        <Typography component="h1" sx={{
+          fontWeight: 700,
           color: 'primary.main',
           lineHeight: 1,
           mb: 0,
@@ -62,17 +62,17 @@ const Header = () => {
         }}>
           SynAccess
         </Typography>
-        <Typography 
-          variant="caption" 
-          color="text.secondary" 
+        <Typography
+          variant="caption"
+          color="text.secondary"
           sx={{ display: { xs: 'none', md: 'block' }, lineHeight: 1, mt: 0.1, fontSize: '0.85rem', opacity: 0.7 }}
         >
           Evaluating and Explaining Synthetic Data Generation Methods
         </Typography>
       </Box>
-      
+
       {/* User Menu */}
-  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {/* Welcome Message */}
         <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
           <Typography variant="body2" color="text.secondary">
@@ -92,8 +92,8 @@ const Header = () => {
           aria-haspopup="true"
           aria-expanded={open ? 'true' : undefined}
         >
-          <Avatar sx={{ 
-            width: 28, 
+          <Avatar sx={{
+            width: 28,
             height: 28,
             bgcolor: 'primary.main',
             fontSize: '0.75rem'
@@ -146,10 +146,10 @@ const Header = () => {
             <Typography variant="body2" color="text.secondary">
               {user?.email}
             </Typography>
-            <Chip 
-              label={user?.role || 'User'} 
-              size="small" 
-              color="primary" 
+            <Chip
+              label={user?.role || 'User'}
+              size="small"
+              color="primary"
               sx={{ mt: 1 }}
             />
           </Box>
