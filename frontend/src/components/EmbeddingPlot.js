@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { Box, Typography, Chip, IconButton, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
-import { Clear, BarChart, CropFree, Warning, Download, Help, SelectAll, Gesture } from '@mui/icons-material';
+import { Clear, BarChart, CropFree, Warning, Download, Help, Gesture } from '@mui/icons-material';
 // import Plot from 'react-plotly.js';
 // import { generateDistributionPlot } from '../services/api';
 // import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
@@ -262,82 +262,15 @@ const EmbeddingPlot = ({
   }, [data, metadata]);
   
   // Enhanced layout state with intelligent defaults
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    // Smart initial sidebar width based on viewport
-    if (typeof window !== 'undefined') {
-      const viewportWidth = window.innerWidth;
-      if (viewportWidth < 768) return 40; // Mobile: reasonable sidebar
-      if (viewportWidth < 1024) return 35; // Tablet: balanced
-      if (viewportWidth < 1440) return 30; // Desktop: more plot space
-      return 25; // Large screens: maximize plot area
-    }
-    return 30;
-  });
-  const [isResizing, setIsResizing] = useState(false);
-  // Removed aspect ratio mode - now fully automatic
-  
-  // Refs for smooth resizing and API management
-  const resizeTimeoutRef = useRef(null);
-  const lastResizeTimeRef = useRef(0);
+  // Fixed-size embedding: remove sidebar width state and resizing
+  const [sidebarWidth] = useState(30);
+  const [isResizing] = useState(false);
 
   // Calculate optimal plot dimensions based on screen characteristics
   const calculatePlotDimensions = useCallback((containerWidth, containerHeight, _sidebarVisible) => {
-    const availableWidth = containerWidth;
-    
-    // Get screen characteristics
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const screenRatio = viewportWidth / viewportHeight;
-    const containerRatio = availableWidth / containerHeight;
-    
-    // More aggressive space utilization - use most of the available container
-    let plotWidth, plotHeight;
-    
-    // Use container ratio to determine optimal dimensions - maximize space utilization
-    if (containerRatio > 2.5) {
-      // Extremely wide container - prioritize height to match sidebar
-      plotHeight = containerHeight * 0.98; // Use 98% of available height
-      plotWidth = Math.min(availableWidth * 0.98, plotHeight * 2.0); // Increased width constraint to 2.0:1 ratio
-    } else if (containerRatio > 1.5) {
-      // Wide container - prioritize height to match sidebar
-      plotHeight = containerHeight * 0.98; // Use 98% of available height
-      plotWidth = Math.min(availableWidth * 0.98, plotHeight * 1.8); // Increased width constraint to 1.8:1 ratio
-    } else if (containerRatio < 0.8) {
-      // Tall container - maximize both dimensions
-      plotWidth = availableWidth * 0.98; // Use 98% of available width
-      plotHeight = containerHeight * 0.98; // Use 98% of available height
-    } else {
-      // Balanced container - maximize both dimensions
-      plotWidth = availableWidth * 0.98; // Use 98% of available width
-      plotHeight = containerHeight * 0.98; // Use 98% of available height
-    }
-    
-    // Ensure the plot fits within the container with minimal safety margin
-    if (plotWidth > availableWidth * 0.995) {
-      plotWidth = availableWidth * 0.995;
-    }
-    if (plotHeight > containerHeight * 0.995) {
-      plotHeight = containerHeight * 0.995;
-    }
-    
-    // Apply minimum constraints only (remove overly restrictive maximum constraints)
-    const minWidth = Math.max(400, viewportWidth * 0.15);
-    const minHeight = Math.max(400, viewportHeight * 0.20); // Increased minimum height
-    
-    plotWidth = Math.max(plotWidth, minWidth);
-    plotHeight = Math.max(plotHeight, minHeight);
-    
-    // Final ratio adjustment to prevent extreme ratios - allow wider plots when sidebar is present
-    const finalRatio = plotWidth / plotHeight;
-    const maxRatio = 2.5;
-    if (finalRatio > maxRatio) {
-      // For extremely wide plots, constrain to maxRatio:1 ratio
-      plotHeight = plotWidth / maxRatio;
-    } else if (finalRatio < 0.4) {
-      plotWidth = plotHeight * 0.4;
-    }
-    
-    console.log('Calculated plot dimensions:', { plotWidth, plotHeight, ratio: plotWidth / plotHeight });
+    // Use the container's size directly; container is a fixed square
+    const plotWidth = containerWidth;
+    const plotHeight = containerHeight;
     return { plotWidth, plotHeight };
   }, []);
 
@@ -348,11 +281,7 @@ const EmbeddingPlot = ({
     setSelectedPoints([]);
   }, []);
 
-  // Select all points
-  const selectAllPoints = useCallback(() => {
-    if (!data) return;
-    setSelectedPoints(Array.from({ length: data.length }, (_, i) => i));
-  }, [data]);
+  // Removed: select all points functionality
 
   // Sidebar-removed: distribution plot API moved to RightSidebar
 
@@ -2131,138 +2060,9 @@ const EmbeddingPlot = ({
   const originalData = useMemo(() => getOriginalData(), [getOriginalData]);
   // Sidebar-removed: histogram data memoization moved to RightSidebar
 
-  // Handle mouse events for resizing
-  const handleMouseDown = useCallback((e) => {
-    setIsResizing(true);
-    e.preventDefault();
-  }, []);
+  // Resizing disabled: remove handlers and listeners
 
-  const handleMouseMove = useCallback((e) => {
-    if (!isResizing) return;
-    
-    const container = containerRef.current?.parentElement;
-    if (!container) return;
-    
-    const containerRect = container.getBoundingClientRect();
-    // Calculate width from left edge so sidebar expands leftward
-    const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
-    
-    // Constrain between 20% and 80% (allowing larger expansion to the left)
-    const constrainedWidth = Math.max(20, Math.min(80, newWidth));
-    const newSidebarWidth = 100 - constrainedWidth;
-    
-    // Throttle updates for smooth performance (update every 16ms = ~60fps)
-    const now = Date.now();
-    if (now - lastResizeTimeRef.current > 16) {
-      setSidebarWidth(newSidebarWidth);
-      lastResizeTimeRef.current = now;
-    } else {
-      // Ensure final update after throttling
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-      resizeTimeoutRef.current = setTimeout(() => {
-        setSidebarWidth(newSidebarWidth);
-      }, 16);
-    }
-  }, [isResizing]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsResizing(false);
-    
-    // Clean up resize timeout
-    if (resizeTimeoutRef.current) {
-      clearTimeout(resizeTimeoutRef.current);
-      resizeTimeoutRef.current = null;
-    }
-  }, []);
-
-  // Add global mouse event listeners for resizing
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    } else {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizing, handleMouseMove, handleMouseUp]);
-
-  // 🎯 SIMPLIFIED AUTO-RESIZE LOGIC - Fully automatic
-  useEffect(() => {
-    
-    // Get current viewport dimensions
-    const viewportWidth = window.innerWidth;
-    
-    // Calculate ideal sidebar width based on viewport size only
-    const calculateIdealSidebarWidth = () => {
-      let idealWidth;
-      if (viewportWidth < 768) {
-        idealWidth = 40; // Mobile: reasonable sidebar for touch
-      } else if (viewportWidth < 1024) {
-        idealWidth = 35; // Tablet: balanced
-      } else if (viewportWidth < 1440) {
-        idealWidth = 30; // Desktop: more plot space
-      } else {
-        idealWidth = 25; // Large screens: maximize plot area
-      }
-      
-      // Adjust based on selection state - expand slightly when selection exists
-      if (selectedPoints.length > 0) {
-        idealWidth = Math.min(idealWidth + 3, 45);
-      }
-      
-      return idealWidth;
-    };
-    
-    const idealWidth = calculateIdealSidebarWidth();
-    
-    // Only adjust if there's a meaningful difference (avoid constant small adjustments)
-    if (Math.abs(sidebarWidth - idealWidth) > 3) {
-      setSidebarWidth(idealWidth);
-    }
-  }, [selectedPoints.length, sidebarWidth]);
-
-  // Responsive sidebar adjustments on window resize
-  useEffect(() => {
-    const handleResize = () => {
-  // Always adjust on resize (sidebar never collapses now)
-      
-      const viewportWidth = window.innerWidth;
-      let newWidth;
-      
-      if (viewportWidth < 768) {
-        newWidth = 40;
-      } else if (viewportWidth < 1024) {
-        newWidth = 35;
-      } else if (viewportWidth < 1440) {
-        newWidth = 30;
-      } else {
-        newWidth = 25;
-      }
-      
-      // Expand slightly if there's a selection
-      if (selectedPoints.length > 0) {
-        newWidth = Math.min(newWidth + 3, 45);
-      }
-      
-      setSidebarWidth(newWidth);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [selectedPoints.length]);
+  // Auto-resize logic removed for fixed-size embedding
 
   // Sidebar collapse is disabled; no toggle function needed
 
@@ -2388,11 +2188,17 @@ const EmbeddingPlot = ({
 
   return (
     <Box sx={{ 
-      display: 'flex', 
-      height: '100%', 
-      position: 'relative', 
-      overflow: 'visible', 
-      width: '100%',
+      display: 'block',
+      position: 'relative',
+      overflow: 'visible',
+      width: '33vw',
+      height: '33vw',
+      minWidth: '260px',
+      minHeight: '260px',
+      maxWidth: '40vw',
+      maxHeight: '40vw',
+      alignSelf: 'flex-start',
+      justifySelf: 'flex-start',
       // Add CSS animation for pulsing effect
       '& .anomaly-pulse': {
         animation: 'pulse 2s ease-in-out infinite'
@@ -2408,21 +2214,20 @@ const EmbeddingPlot = ({
         ref={containerRef} 
         className="embedding-plot" 
         sx={{ 
-          flex: 1,
-          width: '100%', // Use full width of parent container
-          marginLeft: shouldShowSidebar ? '-80px' : '0px',
-          marginRight: shouldShowSidebar ? '-80px' : '0px',
-          height: '100%', // Fill parent height
-          minHeight: '600px', // Increased minimum height
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          minHeight: 'unset',
           backgroundColor: 'rgba(248, 250, 252, 0.5)',
           borderRadius: '8px',
-          padding: '12px', // Increased padding for more margin from parent container
-          position: 'relative',
+          padding: '12px',
           display: 'flex',
           alignItems: 'stretch',
-          justifyContent: 'center', // Center the plot within its container
-          transition: isResizing ? 'none' : shouldShowSidebar ? 'flex 0.3s ease' : 'none',
-          overflow: 'visible' // Allow overflow to use more space
+          justifyContent: 'center',
+          transition: 'none',
+          overflow: 'visible'
         }}
       >
 
@@ -2467,16 +2272,7 @@ const EmbeddingPlot = ({
             </span>
           </Tooltip>
           
-          <Tooltip title="Select All">
-            <IconButton 
-              size="small" 
-              aria-label="Select all"
-              onClick={selectAllPoints}
-              sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
-            >
-              <SelectAll fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {/* Removed Select All button */}
           
           {/* Enhanced Anomaly Detection Control */}
           <Tooltip title="Run Anomaly Detection - Highlights anomalous regions">
@@ -2685,7 +2481,7 @@ const EmbeddingPlot = ({
           </Box>
         )}
 
-        {/* Removed aspect ratio controls - now fully automatic */}
+  {/* Removed aspect ratio controls - now fully automatic */}
 
         <svg 
           ref={svgRef} 
@@ -2706,31 +2502,7 @@ const EmbeddingPlot = ({
         />
       </Box>
 
-      {/* Resize Handle */}
-      <Box
-          onMouseDown={handleMouseDown}
-          sx={{
-            width: 8,
-            cursor: 'col-resize',
-            backgroundColor: isResizing ? 'primary.main' : 'divider',
-            transition: 'background-color 0.2s ease',
-            position: 'relative',
-            '&:hover': {
-              backgroundColor: 'primary.main'
-            },
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 3,
-              height: 20,
-              backgroundColor: 'white',
-              borderRadius: 1
-            }
-          }}
-        />
+      {/* Resize handle removed for fixed-size embedding */}
 
       {/* External RightSidebar will be rendered by parent next to this plot */}
 
