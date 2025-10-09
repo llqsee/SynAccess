@@ -33,6 +33,53 @@ export default function RightSidebar({
   const plotGenerationTimeoutRef = useRef(null);
   const lastRequestParamsRef = useRef(null);
 
+  // Precompute class-wise ranks for each embedding index to map back to original rows
+  const classRanks = useMemo(() => {
+    const labels = metadata?.labels;
+    const total = embeddingData?.length || 0;
+    if (!labels || !Array.isArray(labels) || total === 0) return null;
+
+    const realRank = new Array(total).fill(0);
+    const synthRank = new Array(total).fill(0);
+    let rc = 0;
+    let sc = 0;
+    for (let i = 0; i < total; i++) {
+      if (labels[i] === 'Real') {
+        rc += 1;
+        realRank[i] = rc;
+        synthRank[i] = sc;
+      } else if (labels[i] === 'Synthetic') {
+        sc += 1;
+        synthRank[i] = sc;
+        realRank[i] = rc;
+      } else {
+        // Unknown label, keep previous counts
+        realRank[i] = rc;
+        synthRank[i] = sc;
+      }
+    }
+    return { realRank, synthRank };
+  }, [metadata, embeddingData]);
+
+  // Helper to map an embedding index to original row data and label
+  const mapEmbeddingIndexToOriginal = useCallback((embeddingIndex) => {
+    if (!metadata?.labels || !classRanks) return null;
+    if (embeddingIndex < 0 || embeddingIndex >= (embeddingData?.length || 0)) return null;
+    const label = metadata.labels[embeddingIndex];
+    if (label === 'Real') {
+      const rank = classRanks.realRank[embeddingIndex] - 1; // 0-based
+      if (rank >= 0 && Array.isArray(realData) && rank < realData.length) {
+        return { label, row: realData[rank], rank };
+      }
+    } else if (label === 'Synthetic') {
+      const rank = classRanks.synthRank[embeddingIndex] - 1; // 0-based
+      if (rank >= 0 && Array.isArray(syntheticData) && rank < syntheticData.length) {
+        return { label, row: syntheticData[rank], rank };
+      }
+    }
+    return null;
+  }, [metadata, classRanks, embeddingData, realData, syntheticData]);
+
   // Combine original data
   const originalData = useMemo(() => {
     const headers = realHeaders && realHeaders.length ? realHeaders : (syntheticHeaders || []);
@@ -83,32 +130,17 @@ export default function RightSidebar({
       };
     }
 
-    // Map selected embedding points back to original rows
-    const selectedData = selectedPoints
-      .filter(embeddingIndex => embeddingIndex >= 0 && embeddingIndex < (embeddingData?.length || 0))
-      .map(embeddingIndex => {
-        const pointLabel = metadata?.labels?.[embeddingIndex];
-        if (!pointLabel) return null;
-
-        // Direct index mapping first
-        if (embeddingIndex >= 0 && embeddingIndex < originalData.data.length && originalData.labels[embeddingIndex] === pointLabel) {
-          const originalDataPoint = originalData.data[embeddingIndex];
-          if (originalDataPoint && Array.isArray(originalDataPoint) && originalDataPoint.length > histogramColumn) {
-            return { value: originalDataPoint[histogramColumn], label: pointLabel, index: embeddingIndex };
-          }
-        }
-        // Fallback: scan by label
-        for (let i = 0; i < originalData.data.length; i++) {
-          if (originalData.labels[i] === pointLabel && Array.isArray(originalData.data[i]) && originalData.data[i].length > histogramColumn) {
-            return { value: originalData.data[i][histogramColumn], label: pointLabel, index: i };
-          }
-        }
-        return null;
-      })
-      .filter(Boolean);
-
-    const realValues = selectedData.filter(d => d.label === 'Real').map(d => d.value);
-    const syntheticValues = selectedData.filter(d => d.label === 'Synthetic').map(d => d.value);
+    // Use class-wise rank mapping to get correct rows per class
+    const realValues = [];
+    const syntheticValues = [];
+    for (const embeddingIndex of selectedPoints) {
+      const mapped = mapEmbeddingIndexToOriginal(embeddingIndex);
+      if (!mapped || !Array.isArray(mapped.row)) continue;
+      const val = mapped.row[histogramColumn];
+      if (val === undefined) continue;
+      if (mapped.label === 'Real') realValues.push(val);
+      else if (mapped.label === 'Synthetic') syntheticValues.push(val);
+    }
 
     let dataTypeFilter = 'mixed';
     if (realValues.length > 0 && syntheticValues.length === 0) dataTypeFilter = 'real-only';
@@ -128,7 +160,7 @@ export default function RightSidebar({
       availablePlotTypes,
       dataTypeFilter
     };
-  }, [selectedPoints, histogramColumn, originalData, metadata, embeddingData]);
+  }, [selectedPoints, histogramColumn, originalData, mapEmbeddingIndexToOriginal]);
 
   // Debounced API call to generate plot
   const generatePlotData = useCallback(async () => {
@@ -141,31 +173,15 @@ export default function RightSidebar({
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
-    // Build payload rows
+    // Build payload rows using the class-wise rank mapping
     const selectedRealData = [];
     const selectedSyntheticData = [];
-
-    selectedPoints.forEach(embeddingIndex => {
-      if (embeddingIndex < 0 || embeddingIndex >= (embeddingData?.length || 0) || !metadata?.labels?.[embeddingIndex]) return;
-      const pointLabel = metadata.labels[embeddingIndex];
-
-      if (embeddingIndex >= 0 && embeddingIndex < originalData.data.length && originalData.labels[embeddingIndex] === pointLabel) {
-        const originalDataPoint = originalData.data[embeddingIndex];
-        if (Array.isArray(originalDataPoint)) {
-          if (pointLabel === 'Real') selectedRealData.push(originalDataPoint);
-          else if (pointLabel === 'Synthetic') selectedSyntheticData.push(originalDataPoint);
-        }
-      } else {
-        // Fallback scan
-        for (let i = 0; i < originalData.data.length; i++) {
-          if (originalData.labels[i] === pointLabel && Array.isArray(originalData.data[i])) {
-            if (pointLabel === 'Real') selectedRealData.push(originalData.data[i]);
-            else if (pointLabel === 'Synthetic') selectedSyntheticData.push(originalData.data[i]);
-            break;
-          }
-        }
-      }
-    });
+    for (const embeddingIndex of selectedPoints) {
+      const mapped = mapEmbeddingIndexToOriginal(embeddingIndex);
+      if (!mapped || !Array.isArray(mapped.row)) continue;
+      if (mapped.label === 'Real') selectedRealData.push(mapped.row);
+      else if (mapped.label === 'Synthetic') selectedSyntheticData.push(mapped.row);
+    }
 
     if (selectedRealData.length === 0 && selectedSyntheticData.length === 0) {
       setPlotError('No valid data points found for the selected column');
@@ -211,7 +227,7 @@ export default function RightSidebar({
         setPlotLoading(false);
       }
     }
-  }, [selectedPoints, histogramColumn, histogramPlotType, originalData, embeddingData, metadata, generateHistogramData]);
+  }, [selectedPoints, histogramColumn, histogramPlotType, originalData, generateHistogramData, mapEmbeddingIndexToOriginal]);
 
   // Auto-correct plot type when column changes
   useEffect(() => {
