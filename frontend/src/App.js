@@ -30,6 +30,7 @@ import Login from './components/Login';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import EmbeddingPlot from './components/EmbeddingPlot';
+import RightSidebar from './components/rightsidebar';
 import DistributionPlot from './components/DistributionPlot';
 
 // import ResultsPane from './components/ResultsPane';
@@ -142,6 +143,9 @@ function AppContent() {
 
   const error = uploadError || embeddingError || validationError;
   
+  // Selection state lifted to App to coordinate EmbeddingPlot and RightSidebar
+  const [selectedEmbeddingPoints, setSelectedEmbeddingPoints] = useState([]);
+
   const setError = useCallback((error) => {
     setUploadError(error);
     setEmbeddingError(error);
@@ -480,18 +484,36 @@ function AppContent() {
                       </Box>
                     </Paper>
                   ) : embeddingGenerated ? (
-                    <Box sx={{ 
-                      flex: 1, 
-                      border: '1px solid', 
-                      borderColor: 'divider', 
-                      borderRadius: 1,
-                      overflow: 'hidden'
-                    }}>
-                      <EmbeddingPlot
-                        data={embeddingData}
-                        metadata={embeddingMetadata}
-                      />
-                    </Box>
+                    <Grid container spacing={1} sx={{ height: '100%' }}>
+                      <Grid item xs={12} md={8} lg={9} sx={{ height: '100%' }}>
+                        <Box sx={{ 
+                          height: '100%', 
+                          border: '1px solid', 
+                          borderColor: 'divider', 
+                          borderRadius: 1,
+                          overflow: 'hidden'
+                        }}>
+                          <EmbeddingPlot
+                            data={embeddingData}
+                            metadata={embeddingMetadata}
+                            onSelectionChange={setSelectedEmbeddingPoints}
+                          />
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={4} lg={3} sx={{ height: '100%' }}>
+                        <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                          <RightSidebar
+                            realData={realData?.data || embeddingMetadata?.realData?.data || originalRealData?.data}
+                            syntheticData={syntheticData?.data || embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data}
+                            realHeaders={realData?.headers || embeddingMetadata?.realData?.headers || originalRealData?.headers}
+                            syntheticHeaders={syntheticData?.headers || embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers}
+                            embeddingData={embeddingData}
+                            metadata={embeddingMetadata}
+                            selectedPoints={selectedEmbeddingPoints}
+                          />
+                        </Box>
+                      </Grid>
+                    </Grid>
                   ) : (
                     <Paper sx={{ 
                       p: 4, 

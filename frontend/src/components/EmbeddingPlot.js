@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
-import { Box, Typography, Paper, Chip, IconButton, Tooltip, Divider, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
+import { Box, Typography, Chip, IconButton, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { Clear, BarChart, CropFree, Warning, Download, Help, SelectAll } from '@mui/icons-material';
-import Plot from 'react-plotly.js';
-import { generateDistributionPlot } from '../services/api';
-import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
+// import Plot from 'react-plotly.js';
+// import { generateDistributionPlot } from '../services/api';
+// import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
 import anomalyDetectionService from '../services/anomalyDetectionService';
 // import logger from '../utils/logger';
 
@@ -20,18 +20,14 @@ const EmbeddingPlot = ({
   data, 
   metadata,
   pointSize = 0.8,  
-  pointOpacity = 0.5  
+  pointOpacity = 0.5,  
+  onSelectionChange
 }) => {
   // All React hooks must be called first, before any early returns
   const svgRef = useRef();
   const containerRef = useRef();
   const [selectedPoints, setSelectedPoints] = useState([]);
-  const [histogramColumn, setHistogramColumn] = useState(0);
-  const [histogramPlotType, setHistogramPlotType] = useState('histogram');
-
-  const [plotData, setPlotData] = useState(null);
-  const [plotLoading, setPlotLoading] = useState(false);
-  const [plotError, setPlotError] = useState(null);
+  // Sidebar-removed: distribution state now handled in external RightSidebar
   
   // Anomaly detection state
   const [anomalyResults, setAnomalyResults] = useState(null);
@@ -41,6 +37,13 @@ const EmbeddingPlot = ({
   // const [showGrid, setShowGrid] = useState(true); // Show grid cells by default
   // const [contamination, setContamination] = useState('auto');
   const [showHelpDialog, setShowHelpDialog] = useState(false);
+  
+  // Notify parent (e.g., App) when the selection changes so RightSidebar can update
+  useEffect(() => {
+    if (typeof onSelectionChange === 'function') {
+      onSelectionChange(selectedPoints);
+    }
+  }, [selectedPoints, onSelectionChange]);
   
   // Interactive filtering state
   // const [showSyntheticNormal, setShowSyntheticNormal] = useState(true);
@@ -276,14 +279,10 @@ const EmbeddingPlot = ({
   // Refs for smooth resizing and API management
   const resizeTimeoutRef = useRef(null);
   const lastResizeTimeRef = useRef(0);
-  const abortControllerRef = useRef(null);
-  const plotGenerationTimeoutRef = useRef(null);
-  const lastRequestParamsRef = useRef(null);
 
   // Calculate optimal plot dimensions based on screen characteristics
-  const calculatePlotDimensions = useCallback((containerWidth, containerHeight, sidebarVisible) => {
-    const availableWidth = sidebarVisible ? 
-      containerWidth * ((100 - sidebarWidth) / 100) : containerWidth;
+  const calculatePlotDimensions = useCallback((containerWidth, containerHeight, _sidebarVisible) => {
+    const availableWidth = containerWidth;
     
     // Get screen characteristics
     const viewportWidth = window.innerWidth;
@@ -330,7 +329,7 @@ const EmbeddingPlot = ({
     
     // Final ratio adjustment to prevent extreme ratios - allow wider plots when sidebar is present
     const finalRatio = plotWidth / plotHeight;
-  const maxRatio = shouldShowSidebar ? 2.8 : 2.5; // Allow wider plots when sidebar is present
+    const maxRatio = 2.5;
     if (finalRatio > maxRatio) {
       // For extremely wide plots, constrain to maxRatio:1 ratio
       plotHeight = plotWidth / maxRatio;
@@ -340,106 +339,9 @@ const EmbeddingPlot = ({
     
     console.log('Calculated plot dimensions:', { plotWidth, plotHeight, ratio: plotWidth / plotHeight });
     return { plotWidth, plotHeight };
-  }, [sidebarWidth]);
+  }, []);
 
-  // Generate histogram data for selected points
-  const generateHistogramData = useCallback(() => {
-    if (selectedPoints.length === 0) return null;
-    
-    const originalData = getOriginalData();
-    if (!originalData || histogramColumn >= originalData.headers.length) return null;
-
-    // Get visible points based on current filter state
-    const visiblePoints = getVisiblePoints();
-    
-    // Filter selectedPoints to only include visible points
-    const visibleSelectedPoints = selectedPoints.filter(pointIndex => 
-      visiblePoints.includes(pointIndex)
-    );
-    
-    if (visibleSelectedPoints.length === 0) {
-      return {
-        realValues: [],
-        syntheticValues: [],
-        columnName: originalData.headers[histogramColumn] || `Column ${histogramColumn + 1}`,
-        totalSelected: 0,
-        realSelected: 0,
-        syntheticSelected: 0,
-        dataType: 'categorical',
-        availablePlotTypes: ['bar'],
-        dataTypeFilter: 'mixed' // 'real-only', 'synthetic-only', or 'mixed'
-      };
-    }
-
-    const selectedData = visibleSelectedPoints
-      .filter(embeddingIndex => {
-        // Validate embedding index
-        const isValidEmbeddingIndex = embeddingIndex >= 0 && embeddingIndex < data.length;
-        const hasEmbeddingLabel = metadata.labels[embeddingIndex];
-        return isValidEmbeddingIndex && hasEmbeddingLabel;
-      })
-      .map(embeddingIndex => {
-        const pointLabel = metadata.labels[embeddingIndex];
-        
-        // Try direct mapping first
-        if (embeddingIndex >= 0 && embeddingIndex < originalData.data.length && 
-            originalData.labels[embeddingIndex] === pointLabel) {
-          
-          const originalDataPoint = originalData.data[embeddingIndex];
-          if (originalDataPoint && Array.isArray(originalDataPoint) && originalDataPoint.length > histogramColumn) {
-            return {
-              value: originalDataPoint[histogramColumn],
-              label: pointLabel,
-              index: embeddingIndex
-            };
-          }
-        }
-        
-        // Fallback: find matching data in original dataset
-        for (let i = 0; i < originalData.data.length; i++) {
-          if (originalData.labels[i] === pointLabel && 
-              originalData.data[i] && 
-              Array.isArray(originalData.data[i]) && 
-              originalData.data[i].length > histogramColumn) {
-            return {
-              value: originalData.data[i][histogramColumn],
-              label: pointLabel,
-              index: i
-            };
-          }
-        }
-        
-        return null; // Invalid data point
-      })
-      .filter(item => item !== null);
-    
-    const realValues = selectedData.filter(d => d.label === 'Real').map(d => d.value);
-    const syntheticValues = selectedData.filter(d => d.label === 'Synthetic').map(d => d.value);
-    
-    // Determine if we have only one type of data selected
-    let dataTypeFilter = 'mixed';
-    if (realValues.length > 0 && syntheticValues.length === 0) {
-      dataTypeFilter = 'real-only';
-    } else if (syntheticValues.length > 0 && realValues.length === 0) {
-      dataTypeFilter = 'synthetic-only';
-    }
-    
-    // Classify data type for this column
-    const dataType = classifyColumnType(histogramColumn, originalData);
-    const availablePlotTypes = getAvailablePlotTypes(dataType);
-    
-    return {
-      realValues,
-      syntheticValues,
-      columnName: originalData.headers[histogramColumn] || `Column ${histogramColumn + 1}`,
-      totalSelected: visibleSelectedPoints.length,
-      realSelected: realValues.length,
-      syntheticSelected: syntheticValues.length,
-      dataType,
-      availablePlotTypes,
-      dataTypeFilter
-    };
-  }, [selectedPoints, histogramColumn, getOriginalData, data, metadata, getVisiblePoints]);
+  // Sidebar-removed: histogram data generation moved to RightSidebar
 
   // Clear selection
   const clearSelection = useCallback(() => {
@@ -452,833 +354,12 @@ const EmbeddingPlot = ({
     setSelectedPoints(Array.from({ length: data.length }, (_, i) => i));
   }, [data]);
 
-  // API call logic for generating distribution plots
-  const generatePlotData = useCallback(async () => {
-    const histogramData = generateHistogramData();
-    if (!histogramData) return;
+  // Sidebar-removed: distribution plot API moved to RightSidebar
 
-    const originalData = getOriginalData();
-    if (!originalData) return;
-
-    // Cancel any existing request
-    if (abortControllerRef.current) {
-      console.log('🚫 Cancelling previous API request to prevent race condition');
-      abortControllerRef.current.abort();
-    }
-
-    // Get visible points based on current filter state
-    const visiblePoints = getVisiblePoints();
-    
-    // Filter selectedPoints to only include visible points
-    const visibleSelectedPoints = selectedPoints.filter(pointIndex => 
-      visiblePoints.includes(pointIndex)
-    );
-
-    // Prepare selected data in the same format as the full dataset
-    const selectedRealData = [];
-    const selectedSyntheticData = [];
-
-    // FIXED: Map embedding indices to original data indices correctly
-    visibleSelectedPoints.forEach(embeddingIndex => {
-      // Check if this is a valid embedding index
-      if (embeddingIndex < 0 || embeddingIndex >= data.length || !metadata.labels[embeddingIndex]) {
-        return;
-      }
-
-      // Get the label for this embedding point
-      const pointLabel = metadata.labels[embeddingIndex];
-      
-      // Get the coordinates for this embedding point
-      const embeddingCoords = data[embeddingIndex];
-      if (!embeddingCoords || !Array.isArray(embeddingCoords)) {
-        return;
-      }
-
-      // Now we need to find this point in the original data
-      // Since embedding coordinates correspond to original data points,
-      // we need to map back to the original data structure
-      
-      // The embedding data should maintain the same order as the combined original data
-      // But let's be more robust and find the corresponding original data point
-      
-      // For now, use the embedding index directly but validate it exists in original data
-      if (embeddingIndex >= 0 && embeddingIndex < originalData.data.length && 
-          originalData.labels[embeddingIndex] === pointLabel) {
-        
-        const originalDataPoint = originalData.data[embeddingIndex];
-        if (originalDataPoint && Array.isArray(originalDataPoint)) {
-          if (pointLabel === 'Real') {
-            selectedRealData.push(originalDataPoint);
-          } else if (pointLabel === 'Synthetic') {
-            selectedSyntheticData.push(originalDataPoint);
-          }
-        }
-      } else {
-        // If direct mapping fails, we need to find the correct original data point
-        // This happens when there's a mismatch between embedding and original data ordering
-        console.warn(`Index mismatch detected for embedding point ${embeddingIndex} with label ${pointLabel}`);
-        
-        // As a fallback, try to find matching data in the original dataset
-        // This is less efficient but more robust
-        let foundInOriginal = false;
-        for (let i = 0; i < originalData.data.length && !foundInOriginal; i++) {
-          if (originalData.labels[i] === pointLabel && originalData.data[i] && Array.isArray(originalData.data[i])) {
-            // Additional validation could go here if needed
-            if (pointLabel === 'Real') {
-              selectedRealData.push(originalData.data[i]);
-            } else if (pointLabel === 'Synthetic') {
-              selectedSyntheticData.push(originalData.data[i]);
-            }
-            foundInOriginal = true;
-          }
-        }
-      }
-    });
-
-    // Check if we have any data to send
-    if (selectedRealData.length === 0 && selectedSyntheticData.length === 0) {
-      console.error('No valid data to send to API');
-      console.log('Debug info:', {
-        selectedPointsCount: selectedPoints.length,
-        visibleSelectedPointsCount: visibleSelectedPoints.length,
-        originalDataLength: originalData.data.length,
-        embeddingDataLength: data.length,
-        labelsLength: metadata.labels.length
-      });
-      setPlotError('No valid data points found for the selected column');
-      setPlotLoading(false);
-      return;
-    }
-
-    console.log(`Selected data: ${selectedRealData.length} real, ${selectedSyntheticData.length} synthetic`);
-
-    // Determine the data type filter based on what's selected
-    const dataTypeFilter = histogramData?.dataTypeFilter || 'mixed';
-
-    // Use the same API as DistributionPlot.js
-    const requestData = {
-      real_data: selectedRealData,
-      synthetic_data: selectedSyntheticData,
-      column: originalData.headers[histogramColumn],
-      plot_type: histogramPlotType,
-      real_headers: originalData.headers,
-      synthetic_headers: originalData.headers,
-      data_type_filter: dataTypeFilter // Add the data type filter to the request
-    };
-
-    // Check if this is the same request as last time (avoid duplicate API calls)
-    const requestKey = JSON.stringify({
-      selectedPoints: visibleSelectedPoints.sort(),
-      column: histogramColumn,
-      plotType: histogramPlotType,
-      dataTypeFilter: dataTypeFilter
-    });
-
-    if (lastRequestParamsRef.current === requestKey) {
-      console.log('🔄 Skipping duplicate API request for same parameters');
-      return; // Skip duplicate request
-    }
-
-    lastRequestParamsRef.current = requestKey;
-
-    // Create new abort controller for this request
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    setPlotLoading(true);
-    setPlotError(null);
-
-    try {
-      const data = await generateDistributionPlot(requestData, abortController.signal);
-      
-      // Check if request was cancelled
-      if (abortController.signal.aborted) {
-        return;
-      }
-      
-      setPlotData(data);
-    } catch (err) {
-      // Don't show error if request was cancelled
-      if (err.name === 'AbortError' || abortController.signal.aborted) {
-        return;
-      }
-      console.error('Error generating plot:', err);
-      setPlotError(`Failed to generate plot: ${err.message}`);
-    } finally {
-      // Only update loading state if this request wasn't cancelled
-      if (!abortController.signal.aborted) {
-        setPlotLoading(false);
-      }
-    }
-  }, [selectedPoints, histogramColumn, histogramPlotType, generateHistogramData, getOriginalData, data, metadata]);
-
-  // Auto-set plot type when column changes (using same logic as DistributionPlot.js)
-  useEffect(() => {
-    const originalData = getOriginalData();
-    if (originalData && originalData.headers.length > 0 && histogramColumn < originalData.headers.length) {
-      const columnDataType = classifyColumnType(histogramColumn, originalData);
-      
-      // Check if current plot type is compatible with new data type (same logic as DistributionPlot.js)
-      const numericPlotTypes = ['histogram', 'violin'];
-      const categoricalPlotTypes = ['bar'];
-      
-      const isCurrentPlotCompatible = 
-        (columnDataType === 'numeric' && numericPlotTypes.includes(histogramPlotType)) ||
-        (columnDataType === 'categorical' && categoricalPlotTypes.includes(histogramPlotType));
-      
-      // Only change plot type if current one is not compatible
-      if (!isCurrentPlotCompatible) {
-        const defaultPlotType = columnDataType === 'numeric' ? 'histogram' : 'bar';
-        setHistogramPlotType(defaultPlotType);
-      }
-    }
-  }, [metadata, getOriginalData, histogramColumn, histogramPlotType]);
+  // Sidebar-removed: plot type auto-correction handled in RightSidebar
 
   // Render plot using Plotly (same logic as DistributionPlot.js)
-  const renderPlot = () => {
-    if (!plotData) return null;
-    
-    // Get the data type filter from the response
-    const dataTypeFilter = plotData.data_type_filter || 'mixed';
-    
-    // Generate appropriate title based on data type filter
-    const getPlotTitle = () => {
-      const columnName = plotData.column_name || `Column ${histogramColumn + 1}`;
-      switch (dataTypeFilter) {
-        case 'real-only':
-          return `Real Data Distribution - ${columnName}`;
-        case 'synthetic-only':
-          return `Synthetic Data Distribution - ${columnName}`;
-        case 'mixed':
-        default:
-          return `Data Distribution Comparison - ${columnName}`;
-      }
-    };
-    
-    switch (plotData.plot_type) {
-      case 'histogram': {
-        // Check if this is a discrete variable
-        const originalData = getOriginalData();
-        const isDiscrete = originalData ? isDiscreteVariable(histogramColumn, originalData) : false;
-        
-        if (isDiscrete) {
-          // Render discrete histogram with gaps - separate side by side plots
-          // Convert to percentages for discrete variables
-          const realValueCounts = {};
-          plotData.real_values.forEach(val => {
-            realValueCounts[val] = (realValueCounts[val] || 0) + 1;
-          });
-          
-          const syntheticValueCounts = {};
-          plotData.synthetic_values.forEach(val => {
-            syntheticValueCounts[val] = (syntheticValueCounts[val] || 0) + 1;
-          });
-          
-          const realTotal = plotData.real_values.length;
-          const syntheticTotal = plotData.synthetic_values.length;
-          
-          // Convert counts to percentages
-          const realValuesWithPercentages = [];
-          const realPercentages = [];
-          Object.entries(realValueCounts).forEach(([value, count]) => {
-            realValuesWithPercentages.push(value);
-            realPercentages.push((count / realTotal) * 100);
-          });
-          
-          const syntheticValuesWithPercentages = [];
-          const syntheticPercentages = [];
-          Object.entries(syntheticValueCounts).forEach(([value, count]) => {
-            syntheticValuesWithPercentages.push(value);
-            syntheticPercentages.push((count / syntheticTotal) * 100);
-          });
-          
-          // Handle single data type cases
-          if (dataTypeFilter === 'real-only') {
-            return (
-              <Box sx={{ height: '300px' }}>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
-                  {getPlotTitle()}
-                </Typography>
-                <Plot
-                  data={[
-                    {
-                      x: realValuesWithPercentages,
-                      y: realPercentages,
-                      type: 'bar',
-                      name: 'Real',
-                      marker: { color: '#2563eb' },
-                      opacity: 0.7
-                    }
-                  ]}
-                  layout={{
-                    margin: { l: 40, r: 20, t: 40, b: 40 },
-                    showlegend: false,
-                    xaxis: { 
-                      title: '',
-                      type: 'category'
-                    },
-                    yaxis: { title: 'Percentage (%)' },
-                    bargap: 0.1
-                  }}
-                  style={{ width: '100%', height: '260px' }}
-                  config={{ displayModeBar: false }}
-                />
-              </Box>
-            );
-          } else if (dataTypeFilter === 'synthetic-only') {
-            return (
-              <Box sx={{ height: '300px' }}>
-                              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    x: syntheticValuesWithPercentages,
-                    y: syntheticPercentages,
-                    type: 'bar',
-                    name: 'Synthetic',
-                    marker: { color: '#dc2626' },
-                    opacity: 0.7
-                  }
-                ]}
-                  layout={{
-                    margin: { l: 40, r: 20, t: 40, b: 40 },
-                    showlegend: false,
-                    xaxis: { 
-                      title: '',
-                      type: 'category'
-                    },
-                    yaxis: { title: 'Percentage (%)' },
-                    bargap: 0.1
-                  }}
-                  style={{ width: '100%', height: '260px' }}
-                  config={{ displayModeBar: false }}
-                />
-              </Box>
-            );
-          } else {
-            // Mixed data - show side by side
-            return (
-              <Box sx={{ display: 'flex', gap: 1, height: '300px' }}>
-                <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
-                  <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
-                    Real Data
-                  </Typography>
-                  <Plot
-                    data={[
-                      {
-                        x: realValuesWithPercentages,
-                        y: realPercentages,
-                        type: 'bar',
-                        name: 'Real',
-                        marker: { color: '#2563eb' },
-                        opacity: 0.7
-                      }
-                    ]}
-                    layout={{
-                      margin: { l: 40, r: 20, t: 20, b: 40 },
-                      showlegend: false,
-                      xaxis: { 
-                        title: '',
-                        type: 'category'
-                      },
-                      yaxis: { title: 'Percentage (%)' },
-                      bargap: 0.1
-                    }}
-                    style={{ width: '100%', height: '260px' }}
-                    config={{ displayModeBar: false }}
-                  />
-                </Box>
-                
-                <Box sx={{ flex: 1, minHeight: '300px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
-                  <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
-                    Synthetic Data
-                  </Typography>
-                  <Plot
-                    data={[
-                      {
-                        x: syntheticValuesWithPercentages,
-                        y: syntheticPercentages,
-                        type: 'bar',
-                        name: 'Synthetic',
-                        marker: { color: '#dc2626' },
-                        opacity: 0.7
-                      }
-                    ]}
-                    layout={{
-                      margin: { l: 40, r: 20, t: 20, b: 40 },
-                      showlegend: false,
-                      xaxis: { 
-                        title: '',
-                        type: 'category'
-                      },
-                      yaxis: { title: 'Percentage (%)' },
-                      bargap: 0.1
-                    }}
-                    style={{ width: '100%', height: '260px' }}
-                    config={{ displayModeBar: false }}
-                  />
-                </Box>
-              </Box>
-            );
-          }
-        }
-        
-        // Regular continuous histogram with overlay
-        // Calculate shared bins and range for proper overlay comparison
-        const combinedValues = [...plotData.real_values, ...plotData.synthetic_values];
-        
-        // Handle edge cases
-        if (combinedValues.length === 0) {
-          return <Typography>No data available for histogram</Typography>;
-        }
-        
-        const minValue = Math.min(...combinedValues);
-        const maxValue = Math.max(...combinedValues);
-        const range = maxValue - minValue;
-        
-        // Handle case where all values are identical
-        if (range === 0) {
-          const singleValue = minValue;
-          const sharedXBins = {
-            start: singleValue - 0.5,
-            end: singleValue + 0.5,
-            size: 1
-          };
-          
-          // Handle single data type cases
-          if (dataTypeFilter === 'real-only') {
-            return (
-              <Box>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
-                  {getPlotTitle()}
-                </Typography>
-                <Plot
-                  data={[
-                    {
-                      x: plotData.real_values,
-                      type: 'histogram',
-                      name: 'Real',
-                      marker: { color: '#2563eb' },
-                      opacity: 0.7,
-                      histnorm: 'count',
-                      xbins: sharedXBins
-                    }
-                  ]}
-                  layout={{
-                    margin: { l: 60, r: 20, t: 40, b: 40 },
-                    xaxis: { 
-                      title: plotData.column_name || `Column ${histogramColumn + 1}`
-                    },
-                    yaxis: { title: 'Count' },
-                    showlegend: false
-                  }}
-                  style={{ width: '100%', height: '300px' }}
-                  config={{ displayModeBar: false }}
-                />
-              </Box>
-            );
-          } else if (dataTypeFilter === 'synthetic-only') {
-            return (
-              <Box>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
-                  {getPlotTitle()}
-                </Typography>
-                <Plot
-                  data={[
-                    {
-                      x: plotData.synthetic_values,
-                      type: 'histogram',
-                      name: 'Synthetic',
-                      marker: { color: '#dc2626' },
-                      opacity: 0.7,
-                      histnorm: 'count',
-                      xbins: sharedXBins
-                    }
-                  ]}
-                  layout={{
-                    margin: { l: 60, r: 20, t: 40, b: 40 },
-                    xaxis: { 
-                      title: plotData.column_name || `Column ${histogramColumn + 1}`
-                    },
-                    yaxis: { title: 'Count' },
-                    showlegend: false
-                  }}
-                  style={{ width: '100%', height: '300px' }}
-                  config={{ displayModeBar: false }}
-                />
-              </Box>
-            );
-          } else {
-            // Mixed data
-            return (
-              <Plot
-                data={[
-                  {
-                    x: plotData.real_values,
-                    type: 'histogram',
-                    name: 'Real',
-                    marker: { color: '#2563eb' },
-                    opacity: 0.5,
-                    histnorm: 'count',
-                    xbins: sharedXBins
-                  },
-                  {
-                    x: plotData.synthetic_values,
-                    type: 'histogram',
-                    name: 'Synthetic',
-                    marker: { color: '#dc2626' },
-                    opacity: 0.5,
-                    histnorm: 'count',
-                    xbins: sharedXBins
-                  }
-                ]}
-                layout={{
-                  margin: { l: 60, r: 20, t: 20, b: 40 },
-                  barmode: 'overlay',
-                  xaxis: { 
-                    title: plotData.column_name || `Column ${histogramColumn + 1}`
-                  },
-                  yaxis: { title: 'Count' }
-                }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
-              />
-            );
-          }
-        }
-        
-        // Normal case with range > 0
-        const binCount = Math.min(30, Math.ceil(Math.sqrt(combinedValues.length)));
-        const binSize = range / binCount;
-        const sharedXBins = {
-          start: minValue - binSize * 0.1,
-          end: maxValue + binSize * 0.1,
-          size: binSize
-        };
-        
-        // Handle single data type cases
-        if (dataTypeFilter === 'real-only') {
-          return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    x: plotData.real_values,
-                    type: 'histogram',
-                    name: 'Real',
-                    marker: { color: '#2563eb' },
-                    opacity: 0.7,
-                    histnorm: 'count',
-                    xbins: sharedXBins
-                  }
-                ]}
-                layout={{
-                  margin: { l: 60, r: 20, t: 40, b: 40 },
-                  xaxis: { 
-                    title: plotData.column_name || `Column ${histogramColumn + 1}`
-                  },
-                  yaxis: { title: 'Count' },
-                  showlegend: false
-                }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
-              />
-            </Box>
-          );
-        } else if (dataTypeFilter === 'synthetic-only') {
-          return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    x: plotData.synthetic_values,
-                    type: 'histogram',
-                    name: 'Synthetic',
-                    marker: { color: '#dc2626' },
-                    opacity: 0.7,
-                    histnorm: 'count',
-                    xbins: sharedXBins
-                  }
-                ]}
-                layout={{
-                  margin: { l: 60, r: 20, t: 40, b: 40 },
-                  xaxis: { 
-                    title: plotData.column_name || `Column ${histogramColumn + 1}`
-                  },
-                  yaxis: { title: 'Count' },
-                  showlegend: false
-                }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
-              />
-            </Box>
-          );
-        } else {
-          // Mixed data
-          return (
-            <Plot
-              data={[
-                {
-                  x: plotData.real_values,
-                  type: 'histogram',
-                  name: 'Real',
-                  marker: { color: '#2563eb' },
-                  opacity: 0.5,
-                  histnorm: 'count',
-                  xbins: sharedXBins
-                },
-                {
-                  x: plotData.synthetic_values,
-                  type: 'histogram',
-                  name: 'Synthetic',
-                  marker: { color: '#dc2626' },
-                  opacity: 0.5,
-                  histnorm: 'count',
-                  xbins: sharedXBins
-                }
-              ]}
-              layout={{
-                margin: { l: 60, r: 20, t: 20, b: 40 },
-                barmode: 'overlay',
-                xaxis: { 
-                  title: plotData.column_name || `Column ${histogramColumn + 1}`
-                },
-                yaxis: { title: 'Count' }
-              }}
-              style={{ width: '100%', height: '300px' }}
-              config={{ displayModeBar: false }}
-            />
-          );
-        }
-      }
-
-
-
-      case 'violin':
-        // Handle single data type cases
-        if (dataTypeFilter === 'real-only') {
-          return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    y: plotData.real_values,
-                    type: 'violin',
-                    name: 'Real',
-                    marker: { color: '#2563eb' },
-                    opacity: 0.7,
-                    box: { visible: true },
-                    meanline: { visible: true }
-                  }
-                ]}
-                layout={{
-                  margin: { l: 60, r: 20, t: 40, b: 40 },
-                  xaxis: { 
-                    title: plotData.column_name || `Column ${histogramColumn + 1}`,
-                    showticklabels: false
-                  },
-                  yaxis: { title: 'Value' },
-                  showlegend: false
-                }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
-              />
-            </Box>
-          );
-        } else if (dataTypeFilter === 'synthetic-only') {
-          return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    y: plotData.synthetic_values,
-                    type: 'violin',
-                    name: 'Synthetic',
-                    marker: { color: '#dc2626' },
-                    opacity: 0.7,
-                    box: { visible: true },
-                    meanline: { visible: true }
-                  }
-                ]}
-                layout={{
-                  margin: { l: 60, r: 20, t: 40, b: 40 },
-                  xaxis: { 
-                    title: plotData.column_name || `Column ${histogramColumn + 1}`,
-                    showticklabels: false
-                  },
-                  yaxis: { title: 'Value' },
-                  showlegend: false
-                }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
-              />
-            </Box>
-          );
-        } else {
-          // Mixed data
-          return (
-            <Plot
-              data={[
-                {
-                  y: plotData.real_values,
-                  type: 'violin',
-                  name: 'Real',
-                  marker: { color: '#2563eb' },
-                  opacity: 0.5,
-                  box: { visible: true },
-                  meanline: { visible: true }
-                },
-                {
-                  y: plotData.synthetic_values,
-                  type: 'violin',
-                  name: 'Synthetic',
-                  marker: { color: '#dc2626' },
-                  opacity: 0.5,
-                  box: { visible: true },
-                  meanline: { visible: true }
-                }
-              ]}
-              layout={{
-                margin: { l: 60, r: 20, t: 20, b: 40 },
-                xaxis: { 
-                  title: plotData.column_name || `Column ${histogramColumn + 1}`,
-                  showticklabels: false
-                },
-                yaxis: { title: 'Value' }
-              }}
-              style={{ width: '100%', height: '300px' }}
-              config={{ displayModeBar: false }}
-            />
-          );
-        }
-
-      case 'bar':
-        // Convert counts to percentages
-        const realTotal = plotData.real_counts.reduce((sum, count) => sum + count, 0);
-        const syntheticTotal = plotData.synthetic_counts.reduce((sum, count) => sum + count, 0);
-        
-        const realPercentages = realTotal > 0 
-          ? plotData.real_counts.map(count => (count / realTotal) * 100)
-          : plotData.real_counts.map(() => 0);
-          
-        const syntheticPercentages = syntheticTotal > 0
-          ? plotData.synthetic_counts.map(count => (count / syntheticTotal) * 100)
-          : plotData.synthetic_counts.map(() => 0);
-        
-        // Handle single data type cases
-        if (dataTypeFilter === 'real-only') {
-          return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    x: plotData.categories,
-                    y: realPercentages,
-                    type: 'bar',
-                    name: 'Real',
-                    marker: { color: '#2563eb' },
-                    opacity: 0.7
-                  }
-                ]}
-                layout={{
-                  margin: { l: 60, r: 20, t: 40, b: 40 },
-                  xaxis: { 
-                    title: plotData.column_name || `Column ${histogramColumn + 1}`
-                  },
-                  yaxis: { title: 'Percentage (%)' },
-                  showlegend: false
-                }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
-              />
-            </Box>
-          );
-        } else if (dataTypeFilter === 'synthetic-only') {
-          return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[
-                  {
-                    x: plotData.categories,
-                    y: syntheticPercentages,
-                    type: 'bar',
-                    name: 'Synthetic',
-                    marker: { color: '#dc2626' },
-                    opacity: 0.7
-                  }
-                ]}
-                layout={{
-                  margin: { l: 60, r: 20, t: 40, b: 40 },
-                  xaxis: { 
-                    title: plotData.column_name || `Column ${histogramColumn + 1}`
-                  },
-                  yaxis: { title: 'Percentage (%)' },
-                  showlegend: false
-                }}
-                style={{ width: '100%', height: '300px' }}
-                config={{ displayModeBar: false }}
-              />
-            </Box>
-          );
-        } else {
-          // Mixed data
-          return (
-            <Plot
-              data={[
-                {
-                  x: plotData.categories,
-                  y: realPercentages,
-                  type: 'bar',
-                  name: 'Real',
-                  marker: { color: '#2563eb' },
-                  opacity: 0.7
-                },
-                {
-                  x: plotData.categories,
-                  y: syntheticPercentages,
-                  type: 'bar',
-                  name: 'Synthetic',
-                  marker: { color: '#dc2626' },
-                  opacity: 0.7
-                }
-              ]}
-              layout={{
-                margin: { l: 40, r: 20, t: 20, b: 40 },
-                barmode: 'group',
-                xaxis: { title: '' },
-                yaxis: { title: 'Percentage (%)' },
-                legend: { x: 0.7, y: 0.9 }
-              }}
-              style={{ width: '100%', height: '300px' }}
-              config={{ displayModeBar: false }}
-            />
-          );
-        }
-
-      default:
-        return <Typography>Unsupported plot type: {plotData.plot_type}</Typography>;
-    }
-  };
+  // Sidebar-removed: distribution rendering handled in RightSidebar
 
 
 
@@ -2782,79 +1863,7 @@ const EmbeddingPlot = ({
   }, [data, metadata]);
 
   // API trigger for distribution plot generation
-  useEffect(() => {
-    // Clear any existing timeout
-    if (plotGenerationTimeoutRef.current) {
-      clearTimeout(plotGenerationTimeoutRef.current);
-    }
-
-    if (selectedPoints.length > 0) {
-      const originalData = getOriginalData();
-      if (originalData && histogramColumn < originalData.headers.length) {
-        // Auto-set appropriate plot type if current type doesn't match data
-        const currentDataType = classifyColumnType(histogramColumn, originalData);
-        const isValidCombination = 
-          (currentDataType === 'numeric' && ['histogram', 'violin'].includes(histogramPlotType)) ||
-          (currentDataType === 'categorical' && histogramPlotType === 'bar');
-        
-        if (!isValidCombination) {
-          // Auto-set appropriate plot type - choose the most informative
-          const defaultPlotType = currentDataType === 'numeric' ? 'histogram' : 'bar';
-          setHistogramPlotType(defaultPlotType);
-          // The plot will be generated when histogramPlotType updates
-          return;
-        }
-        
-        // Generate plot with smart debouncing
-        if (plotData === null) {
-          // First-time plot generation - immediate loading for best UX
-          generatePlotData();
-        } else {
-          // Subsequent updates - minimal debounce to prevent API spam
-          plotGenerationTimeoutRef.current = setTimeout(() => {
-            generatePlotData();
-          }, 100); // Slightly longer debounce for stability
-        }
-      }
-    } else {
-      // Cancel any pending request when no points selected
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      setPlotData(null);
-      setPlotError(null);
-      setPlotLoading(false);
-    }
-
-    // Cleanup function
-    return () => {
-      if (plotGenerationTimeoutRef.current) {
-        clearTimeout(plotGenerationTimeoutRef.current);
-      }
-    };
-  }, [selectedPoints, histogramColumn, histogramPlotType, generatePlotData, getOriginalData, data, metadata, getVisiblePoints, plotData]);
-
-  // Initialize plot type based on first column's data type (same logic as DistributionPlot.js)
-  useEffect(() => {
-    const originalData = getOriginalData();
-    if (originalData && originalData.headers.length > 0 && histogramColumn === 0) {
-      const firstColumnDataType = classifyColumnType(0, originalData);
-      
-      // Check if current plot type is compatible with first column
-      const numericPlotTypes = ['histogram', 'violin'];
-      const categoricalPlotTypes = ['bar'];
-      
-      const isCurrentPlotCompatible = 
-        (firstColumnDataType === 'numeric' && numericPlotTypes.includes(histogramPlotType)) ||
-        (firstColumnDataType === 'categorical' && categoricalPlotTypes.includes(histogramPlotType));
-      
-      // Only update if current plot type is not compatible
-      if (!isCurrentPlotCompatible) {
-        const defaultPlotType = firstColumnDataType === 'numeric' ? 'histogram' : 'bar';
-        setHistogramPlotType(defaultPlotType);
-      }
-    }
-  }, [metadata, getOriginalData, histogramColumn, histogramPlotType]);
+  // Sidebar-removed: distribution plot generation handled externally in RightSidebar
 
   // Monitor anomaly detection state changes
   useEffect(() => {
@@ -3105,26 +2114,14 @@ const EmbeddingPlot = ({
     }
   }, [data, metadata, getOriginalData]);
 
-  // Cleanup effect to cancel pending requests on unmount
-  useEffect(() => {
-    return () => {
-      // Cancel any pending API request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      // Clear any pending timeout
-      if (plotGenerationTimeoutRef.current) {
-        clearTimeout(plotGenerationTimeoutRef.current);
-      }
-    };
-  }, []);
+  // Sidebar-removed: no pending distribution requests to clean up here
 
   // 🎯 Sidebar always visible
   const shouldShowSidebar = true;
 
   // Memoized data for performance
   const originalData = useMemo(() => getOriginalData(), [getOriginalData]);
-  const histogramData = useMemo(() => generateHistogramData(), [generateHistogramData]);
+  // Sidebar-removed: histogram data memoization moved to RightSidebar
 
   // Handle mouse events for resizing
   const handleMouseDown = useCallback((e) => {
@@ -3213,9 +2210,9 @@ const EmbeddingPlot = ({
         idealWidth = 25; // Large screens: maximize plot area
       }
       
-      // Adjust based on selection state - expand when data is available
-      if (selectedPoints.length > 0 && plotData) {
-        idealWidth = Math.min(idealWidth + 5, 45); // Expand for better plot visibility
+      // Adjust based on selection state - expand slightly when selection exists
+      if (selectedPoints.length > 0) {
+        idealWidth = Math.min(idealWidth + 3, 45);
       }
       
       return idealWidth;
@@ -3227,7 +2224,7 @@ const EmbeddingPlot = ({
     if (Math.abs(sidebarWidth - idealWidth) > 3) {
       setSidebarWidth(idealWidth);
     }
-  }, [selectedPoints.length, plotData, sidebarWidth]);
+  }, [selectedPoints.length, sidebarWidth]);
 
   // Responsive sidebar adjustments on window resize
   useEffect(() => {
@@ -3247,9 +2244,9 @@ const EmbeddingPlot = ({
         newWidth = 25;
       }
       
-      // Expand if there's active data
-      if (selectedPoints.length > 0 && plotData) {
-        newWidth = Math.min(newWidth + 5, 45);
+      // Expand slightly if there's a selection
+      if (selectedPoints.length > 0) {
+        newWidth = Math.min(newWidth + 3, 45);
       }
       
       setSidebarWidth(newWidth);
@@ -3257,7 +2254,7 @@ const EmbeddingPlot = ({
     
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [selectedPoints.length, plotData]);
+  }, [selectedPoints.length]);
 
   // Sidebar collapse is disabled; no toggle function needed
 
@@ -3352,16 +2349,6 @@ const EmbeddingPlot = ({
     console.log(`🎯 Setting selected points: ${selectedIndices.length} indices`);
     setSelectedPoints(selectedIndices);
     
-    // Auto-select the first column for the distribution plot
-    if (originalData.headers.length > 0) {
-      setHistogramColumn(0);
-    }
-    
-    // Set plot type based on data type
-    const columnDataType = classifyColumnType(0, originalData);
-    const defaultPlotType = columnDataType === 'numeric' ? 'histogram' : 'bar';
-    setHistogramPlotType(defaultPlotType);
-    
   }, [anomalyResults, data, metadata, getOriginalData]);
 
   // Early validation after all hooks are declared
@@ -3394,7 +2381,7 @@ const EmbeddingPlot = ({
   return (
     <Box sx={{ 
       display: 'flex', 
-      height: '100vh', 
+      height: '100%', 
       position: 'relative', 
       overflow: 'visible', 
       width: '100%',
@@ -3417,7 +2404,7 @@ const EmbeddingPlot = ({
           width: '100%', // Use full width of parent container
           marginLeft: shouldShowSidebar ? '-80px' : '0px',
           marginRight: shouldShowSidebar ? '-80px' : '0px',
-          height: '100vh', // Use full viewport height
+          height: '100%', // Fill parent height
           minHeight: '600px', // Increased minimum height
           backgroundColor: 'rgba(248, 250, 252, 0.5)',
           borderRadius: '8px',
@@ -3738,274 +2725,7 @@ const EmbeddingPlot = ({
           }}
         />
 
-      {/* Histogram Sidebar */}
-      <Paper sx={{ 
-          flex: `0 0 ${sidebarWidth}%`,
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100vh', // Use full viewport height
-          maxHeight: '100vh',
-          overflow: 'hidden',
-          transition: isResizing ? 'none' : 'flex 0.3s ease'
-        }}>
-          {/* Header with controls */}
-          <Box sx={{ 
-            p: 2, 
-            borderBottom: '1px solid', 
-            borderColor: 'divider',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}>
-            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <BarChart color="primary" />
-              Distributions
-            </Typography>
-
-          </Box>
-
-          {/* Scrollable content */}
-          <Box sx={{ 
-            flex: 1,
-            overflow: 'auto',
-            p: 2,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2
-          }}>
-          
-          <Divider />
-          
-          {/* Selection Stats */}
-          <Box>
-            <Typography variant="subtitle2" gutterBottom>
-              Selection Summary
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              <Typography variant="body2">
-                Total Selected: <strong>{histogramData?.totalSelected || 0}</strong>
-                {selectedPoints.length !== (histogramData?.totalSelected || 0) && (
-                  <span style={{ color: '#dc2626', fontSize: '0.8em' }}>
-                    {' '}({selectedPoints.length} total, {selectedPoints.length - (histogramData?.totalSelected || 0)} hidden by filters)
-                  </span>
-                )}
-              </Typography>
-              <Typography variant="body2">
-                Real: <strong>{histogramData?.realSelected || 0}</strong>
-              </Typography>
-              <Typography variant="body2">
-                Synthetic: <strong>{histogramData?.syntheticSelected || 0}</strong>
-              </Typography>
-              
-              
-            </Box>
-          </Box>
-
-                    <Divider />
-          
-          {/* Distribution Controls - Show when we have original data available */}
-          {originalData && originalData.headers && originalData.headers.length > 0 ? (
-            <>
-              {/* Column Selection */}
-              <FormControl fullWidth size="small">
-                <InputLabel>Column for Analysis</InputLabel>
-                <Select
-                  value={histogramColumn}
-                  label="Column for Analysis"
-                  onChange={(e) => {
-                    setHistogramColumn(e.target.value);
-                  }}
-                >
-                  {originalData?.headers?.map((header, index) => {
-                    const columnDataType = classifyColumnType(index, originalData);
-                    return (
-                      <MenuItem key={index} value={index}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                          <Typography variant="body2" sx={{ flex: 1 }}>
-                            {header || `Column ${index + 1}`}
-                          </Typography>
-                          <Chip 
-                            label={columnDataType} 
-                            size="small" 
-                            color={columnDataType === 'numeric' ? 'primary' : 'secondary'}
-                            variant="outlined"
-                            sx={{ fontSize: '0.7rem', height: '20px' }}
-                          />
-                        </Box>
-                      </MenuItem>
-                    );
-                  })}
-                </Select>
-              </FormControl>
-
-              {/* Plot Type Selection */}
-              {histogramData && histogramData.availablePlotTypes && (
-                <FormControl fullWidth size="small">
-                  <InputLabel>Plot Type</InputLabel>
-                  <Select
-                    value={histogramPlotType}
-                    label="Plot Type"
-                    onChange={(e) => {
-                      setHistogramPlotType(e.target.value);
-                    }}
-                  >
-                    {histogramData.availablePlotTypes.map((plotType) => (
-                      <MenuItem key={plotType.value} value={plotType.value}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2">
-                            {plotType.label}
-                          </Typography>
-                          {((histogramData.dataType === 'numeric' && plotType.value === 'histogram') ||
-                            (histogramData.dataType === 'categorical' && plotType.value === 'bar')) && (
-                            <Chip 
-                              label="default" 
-                              size="small" 
-                              color="primary"
-                              variant="outlined"
-                              sx={{ fontSize: '0.6rem', height: '16px' }}
-                            />
-                          )}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-
-              {/* Data Type Indicator */}
-              {histogramData && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    Data Type:
-                  </Typography>
-                  <Chip 
-                    label={histogramData.dataType} 
-                    size="small" 
-                    color={histogramData.dataType === 'numeric' ? 'primary' : 'secondary'}
-                    variant="outlined"
-                  />
-                </Box>
-              )}
-
-              {/* Plot Display */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Distribution: {histogramData?.columnName}
-                </Typography>
-                
-                {plotLoading && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '200px', gap: 1 }}>
-                    <CircularProgress size={40} />
-                    <Typography variant="caption" color="text.secondary">
-                      Generating plot...
-                    </Typography>
-                  </Box>
-                )}
-                
-                {plotError && (
-                  <Alert severity="error" sx={{ mb: 2 }}>
-                    <Typography variant="body2" component="div">
-                      <strong>Plot Generation Error:</strong>
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 0.5 }}>
-                      {plotError}
-                    </Typography>
-                    {plotError.includes('categorical') && plotError.includes('numeric') && (
-                      <Typography variant="caption" sx={{ mt: 1, display: 'block', fontStyle: 'italic' }}>
-                        💡 Tip: The system should auto-correct plot types, but you can manually select a compatible plot type above.
-                      </Typography>
-                    )}
-                  </Alert>
-                )}
-                
-                {!plotLoading && !plotError && plotData && (
-                  <Box sx={{ 
-                    width: '100%',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    bgcolor: 'background.paper',
-                    p: 1
-                  }}>
-                    {renderPlot()}
-                  </Box>
-                )}
-                
-                {!plotLoading && !plotError && !plotData && selectedPoints.length > 0 && (
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center', 
-                    minHeight: '200px',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    bgcolor: 'grey.50'
-                  }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Select points to view distribution
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
-            </>
-          ) : (
-            /* Simple message when no data available for distribution plots */
-            selectedPoints.length > 0 && (
-              <Box sx={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                minHeight: '100px',
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                bgcolor: 'grey.50'
-              }}>
-                <Typography variant="body2" color="text.secondary">
-                  Distribution analysis not available for this embedding
-                </Typography>
-              </Box>
-            )
-          )}
-
-          {/* Legend */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Box sx={{ width: 12, height: 12, bgcolor: '#2563eb', opacity: 0.7 }} />
-              <Typography variant="caption">Real</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Box sx={{ width: 12, height: 12, bgcolor: '#dc2626', opacity: 0.7 }} />
-              <Typography variant="caption">Synthetic</Typography>
-            </Box>
-            {showAnomalies && anomalyResults && (
-              <>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Box sx={{ 
-                    width: 16, 
-                    height: 16, 
-                    borderRadius: '50%',
-                    border: '2px solid rgba(239, 68, 68, 1.0)',
-                    bgcolor: 'rgba(239, 68, 68, 0.2)'
-                  }} />
-                  <Typography variant="caption">Real Overpopulation (p &lt; 0.05)</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Box sx={{ 
-                    width: 16, 
-                    height: 16, 
-                    borderRadius: '50%',
-                    border: '2px solid rgba(245, 158, 11, 1.0)',
-                    bgcolor: 'rgba(245, 158, 11, 0.2)'
-                  }} />
-                  <Typography variant="caption">Synthetic Overpopulation (p &lt; 0.05)</Typography>
-                </Box>
-              </>
-            )}
-          </Box>
-          </Box>
-        </Paper>
+      {/* External RightSidebar will be rendered by parent next to this plot */}
 
       {/* Help Dialog */}
       <Dialog 
