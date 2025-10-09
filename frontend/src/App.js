@@ -176,7 +176,7 @@ function AppContent() {
       handleVisualize(realData, syntheticData, params, backendStatus === 'connected');
     }
     
-    // Auto-switch to embeddings tab after visualization starts
+    // Auto-switch to visualization tab after visualization starts
     if (backendStatus === 'connected') {
       setActiveTab(2);
     }
@@ -188,7 +188,7 @@ function AppContent() {
 
   const handleLoadFromHistory = useCallback((embeddings, metadata, sessionState) => {
     loadFromHistory(embeddings, metadata, sessionState);
-    setActiveTab(2); // Switch to embeddings tab
+    setActiveTab(2); // Switch to visualization tab
   }, [loadFromHistory]);
 
   // Determine which tabs should be enabled
@@ -317,7 +317,7 @@ function AppContent() {
                 />
                 <Tab 
                   icon={<ScatterPlot />} 
-                  label="Embeddings" 
+                  label="Visualization" 
                   iconPosition="start"
                   disabled={!tabsEnabled.embeddings}
                 />
