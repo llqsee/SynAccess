@@ -16,11 +16,11 @@ import anomalyDetectionService from '../services/anomalyDetectionService';
 //   }
 // };
 
-const EmbeddingPlot = ({ 
-  data, 
+const EmbeddingPlot = ({
+  data,
   metadata,
-  pointSize = 0.8,  
-  pointOpacity = 0.5,  
+  pointSize = 0.8,
+  pointOpacity = 0.5,
   onSelectionChange
 }) => {
   // All React hooks must be called first, before any early returns
@@ -28,7 +28,7 @@ const EmbeddingPlot = ({
   const containerRef = useRef();
   const [selectedPoints, setSelectedPoints] = useState([]);
   // Sidebar-removed: distribution state now handled in external RightSidebar
-  
+
   // Anomaly detection state
   const [anomalyResults, setAnomalyResults] = useState(null);
   const [anomalyLoading, setAnomalyLoading] = useState(false);
@@ -37,20 +37,20 @@ const EmbeddingPlot = ({
   // const [showGrid, setShowGrid] = useState(true); // Show grid cells by default
   // const [contamination, setContamination] = useState('auto');
   const [showHelpDialog, setShowHelpDialog] = useState(false);
-  
+
   // Notify parent (e.g., App) when the selection changes so RightSidebar can update
   useEffect(() => {
     if (typeof onSelectionChange === 'function') {
       onSelectionChange(selectedPoints);
     }
   }, [selectedPoints, onSelectionChange]);
-  
+
   // Interactive filtering state
   // const [showSyntheticNormal, setShowSyntheticNormal] = useState(true);
   // const [showSyntheticAnomalies, setShowSyntheticAnomalies] = useState(true);
   // const [showRealNormal, setShowRealNormal] = useState(true);
   // const [showRealAnomalies, setShowRealAnomalies] = useState(true);
-  
+
   // Helper functions for filter controls - Fixed null reference issues
   // const showAllData = useCallback(() => {
   //   // setShowRealNormal(true);
@@ -58,21 +58,21 @@ const EmbeddingPlot = ({
   //   // setShowSyntheticNormal(true);
   //   // setShowSyntheticAnomalies(true);
   // }, []);
-  
+
   // const hideAllData = useCallback(() => {
   //   // setShowRealNormal(false);
   //   // setShowRealAnomalies(false);
   //   // setShowSyntheticNormal(false);
   //   // setShowSyntheticAnomalies(false);
   // }, []);
-  
+
   // const showOnlyAnomalies = useCallback(() => {
   //   // setShowRealNormal(false);
   //   // setShowRealAnomalies(true);
   //   // setShowSyntheticNormal(false);
   //   // setShowSyntheticAnomalies(true);
   // }, []);
-  
+
   // Helper function to interpret p-value for tooltips
   const getPValueInterpretation = useCallback((pValue) => {
     if (pValue === null || pValue === undefined) return "N/A";
@@ -87,7 +87,7 @@ const EmbeddingPlot = ({
     if (pValue < 0.05) return "Significant";
     return "Not significant";
   }, []);
-  
+
   // Helper function to get p-value color for tooltips
   // const getPValueColor = useCallback((pValue) => {
   //   if (pValue === null || pValue === undefined) return "#666666"; // Gray
@@ -102,13 +102,13 @@ const EmbeddingPlot = ({
   //   if (pValue < 0.05) return "#FFD700"; // Golden Yellow
   //   return "#666666"; // Gray
   // }, []);
-  
+
   // Helper function to create detailed tooltip content
   const createAnomalyTooltip = useCallback((cellData, i, j) => {
     const pValue = cellData?.p_value_adjusted;
     const interpretation = getPValueInterpretation(pValue);
     // const pValueColor = getPValueColor(pValue);
-    
+
     // Safe formatting function for numbers that might be strings like "Infinity"
     const formatNumber = (value, decimals = 3) => {
       if (value === null || value === undefined) return 'N/A';
@@ -123,15 +123,15 @@ const EmbeddingPlot = ({
       }
       return 'N/A';
     };
-    
-    const testTypeText = cellData?.test_type === 'real_overpopulation' 
-      ? '🔴 Real Overpopulation' 
+
+    const testTypeText = cellData?.test_type === 'real_overpopulation'
+      ? '🔴 Real Overpopulation'
       : '🔵 Synthetic Overpopulation';
-    
-    const testDescription = cellData?.test_type === 'real_overpopulation' 
+
+    const testDescription = cellData?.test_type === 'real_overpopulation'
       ? 'This region has significantly more real data than expected'
       : 'This region has significantly more synthetic data than expected';
-    
+
     return `🔍 Anomalous Region (${i}, ${j})
 
 📊 Data Distribution:
@@ -154,51 +154,51 @@ const EmbeddingPlot = ({
 
 💡 Click to view distribution plot of data in this region`;
   }, [getPValueInterpretation]);
-  
+
   // Get original data for histogram generation
   const getOriginalData = useCallback(() => {
     // Try to get data from metadata first (for history embeddings)
     if (metadata?.realData?.data && metadata?.syntheticData?.data) {
       const realData = metadata.realData.data;
       const syntheticData = metadata.syntheticData.data;
-      
+
       // Validate that data arrays contain valid arrays
       if (!Array.isArray(realData) || !Array.isArray(syntheticData)) return null;
-      
+
       // Filter out invalid data rows
       const validRealData = realData.filter(row => row && Array.isArray(row) && row.length > 0);
       const validSyntheticData = syntheticData.filter(row => row && Array.isArray(row) && row.length > 0);
-      
+
       if (validRealData.length === 0 && validSyntheticData.length === 0) return null;
-      
+
       const realLabels = Array(validRealData.length).fill('Real');
       const syntheticLabels = Array(validSyntheticData.length).fill('Synthetic');
-      
+
       return {
         data: [...validRealData, ...validSyntheticData],
         labels: [...realLabels, ...syntheticLabels],
         headers: metadata.realData.headers || []
       };
     }
-    
+
     // If metadata doesn't have original data, try to access session state data
     // This is the same pattern used in App.js for DistributionPlot
     try {
       // Access session state data directly (same as DistributionPlot component)
       const sessionRealData = window.sessionStorage.getItem('realData');
       const sessionSyntheticData = window.sessionStorage.getItem('syntheticData');
-      
+
       if (sessionRealData && sessionSyntheticData) {
         const realData = JSON.parse(sessionRealData);
         const syntheticData = JSON.parse(sessionSyntheticData);
-        
-        if (realData.data && syntheticData.data && 
-            Array.isArray(realData.data) && Array.isArray(syntheticData.data) &&
-            realData.data.length > 0 && syntheticData.data.length > 0) {
-          
+
+        if (realData.data && syntheticData.data &&
+          Array.isArray(realData.data) && Array.isArray(syntheticData.data) &&
+          realData.data.length > 0 && syntheticData.data.length > 0) {
+
           const realLabels = Array(realData.data.length).fill('Real');
           const syntheticLabels = Array(syntheticData.data.length).fill('Synthetic');
-          
+
           return {
             data: [...realData.data, ...syntheticData.data],
             labels: [...realLabels, ...syntheticLabels],
@@ -209,17 +209,17 @@ const EmbeddingPlot = ({
     } catch (error) {
       console.warn('Failed to access session state data:', error);
     }
-    
+
     return null;
   }, [metadata]);
-  
+
   // Helper function to get anomaly information for tooltip
   const getAnomalyInfo = useCallback((originalIndex, label) => {
     if (!anomalyResults) return '';
-    
+
     const originalData = getOriginalData();
     if (!originalData) return '';
-    
+
     if (label === 'Real' && anomalyResults.real_data) {
       let realIndexInOriginal = 0;
       for (let j = 0; j < originalIndex; j++) {
@@ -227,7 +227,7 @@ const EmbeddingPlot = ({
           realIndexInOriginal++;
         }
       }
-      
+
       if (realIndexInOriginal < anomalyResults.real_data.length) {
         const realPoint = anomalyResults.real_data[realIndexInOriginal];
         if (realPoint) {
@@ -241,7 +241,7 @@ const EmbeddingPlot = ({
           syntheticIndexInOriginal++;
         }
       }
-      
+
       if (syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
         const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
         if (syntheticPoint) {
@@ -249,18 +249,18 @@ const EmbeddingPlot = ({
         }
       }
     }
-    
+
     return '';
   }, [anomalyResults, getOriginalData]);
-  
+
   // Simplified visibility - show all points by default
   const getVisiblePoints = useCallback(() => {
     if (!data || !metadata) return [];
-    
+
     // Simplified: show all data points
     return Array.from({ length: data.length }, (_, i) => i);
   }, [data, metadata]);
-  
+
   // Enhanced layout state with intelligent defaults
   // Fixed-size embedding: remove sidebar width state and resizing
   const [sidebarWidth] = useState(30);
@@ -297,25 +297,25 @@ const EmbeddingPlot = ({
     // Filter out invalid data points first
     const validIndices = [];
     data.forEach((point, index) => {
-      if (point && Array.isArray(point) && point.length >= 2 && 
-          typeof point[0] === 'number' && typeof point[1] === 'number' &&
-          !isNaN(point[0]) && !isNaN(point[1]) && 
-          labels[index]) {
+      if (point && Array.isArray(point) && point.length >= 2 &&
+        typeof point[0] === 'number' && typeof point[1] === 'number' &&
+        !isNaN(point[0]) && !isNaN(point[1]) &&
+        labels[index]) {
         validIndices.push(index);
       }
     });
 
     if (validIndices.length <= maxPoints) {
-      return { 
-        sampledData: validIndices.map(i => data[i]), 
-        sampledLabels: validIndices.map(i => labels[i]), 
-        indexMap: validIndices 
+      return {
+        sampledData: validIndices.map(i => data[i]),
+        sampledLabels: validIndices.map(i => labels[i]),
+        indexMap: validIndices
       };
     }
 
     const realIndices = [];
     const syntheticIndices = [];
-    
+
     validIndices.forEach((index) => {
       const label = labels[index];
       if (label === "Real") {
@@ -332,7 +332,7 @@ const EmbeddingPlot = ({
     const sampledRealIndices = realIndices
       .sort(() => 0.5 - Math.random())
       .slice(0, Math.min(realSampleSize, realIndices.length));
-    
+
     const sampledSyntheticIndices = syntheticIndices
       .sort(() => 0.5 - Math.random())
       .slice(0, Math.min(syntheticSampleSize, syntheticIndices.length));
@@ -389,25 +389,25 @@ const EmbeddingPlot = ({
     container.style.display = 'none';
     void container.offsetHeight; // Force reflow
     container.style.display = 'flex';
-    
+
     const rect = container.getBoundingClientRect();
     // Use the full container dimensions, accounting for padding
     const containerWidth = rect.width > 0 ? rect.width : 800;
     const containerHeight = rect.height > 0 ? rect.height : 600;
-    
+
     // Debug logging
     const containerRatio = containerWidth / containerHeight;
     console.log('Window dimensions:', { width: window.innerWidth, height: window.innerHeight });
     console.log('Container dimensions:', { width: containerWidth, height: containerHeight });
     console.log('Container ratio:', containerRatio);
-    console.log('Available space utilization:', { 
+    console.log('Available space utilization:', {
       widthUtilization: (containerWidth / window.innerWidth * 100).toFixed(1) + '%',
       heightUtilization: (containerHeight / window.innerHeight * 100).toFixed(1) + '%'
     });
-    
+
     // Calculate responsive plot area based on sidebar state
-  const { plotWidth, plotHeight } = calculatePlotDimensions(containerWidth, containerHeight, true);
-    
+    const { plotWidth, plotHeight } = calculatePlotDimensions(containerWidth, containerHeight, true);
+
     // Early return if dimensions are too small
     if (plotWidth < 350 || plotHeight < 280) {
       console.warn('Container too small for embedding plot');
@@ -416,18 +416,18 @@ const EmbeddingPlot = ({
 
     // Get device pixel ratio for high-DPI displays
     const devicePixelRatio = window.devicePixelRatio || 1;
-    
+
     // Apply intelligent sampling for large datasets (now includes validation)
     const { sampledData, sampledLabels, indexMap } = sampleData(data, metadata.labels, 8000);
-    
 
-    
+
+
     // If no valid data, return early
     if (sampledData.length === 0) {
       console.warn('No valid data points found for embedding plot');
       return;
     }
-    
+
     const numPoints = sampledData.length;
     const wasDownsampled = sampledData.length < data.length;
 
@@ -469,29 +469,29 @@ const EmbeddingPlot = ({
     // Scale everything by device pixel ratio
     const scaledPlotWidth = plotWidth * devicePixelRatio;
     const scaledPlotHeight = plotHeight * devicePixelRatio;
-    
+
     // Optimized margins to maximize plot area while preventing overshooting
     const baseMargin = {
       top: Math.max(30, Math.min(50, plotHeight * 0.06)), // Increased top margin for y-axis
       // Right margin for legend - optimized for sidebar state
       right: shouldShowSidebar ?
-        Math.max(100, Math.min(140, plotWidth * 0.15)) : 
+        Math.max(100, Math.min(140, plotWidth * 0.15)) :
         Math.max(140, Math.min(180, plotWidth * 0.20)),
       // Aggressive bottom margin to prevent x-axis overshooting
       bottom: Math.max(80, Math.min(100, plotHeight * 0.15)), // Slightly reduced bottom margin
       // Left margin for y-axis labels - increased for visibility when sidebar is present
       left: shouldShowSidebar ?
-        Math.max(50, Math.min(80, plotWidth * 0.12)) : 
+        Math.max(50, Math.min(80, plotWidth * 0.12)) :
         Math.max(60, Math.min(80, plotWidth * 0.12))
     };
-    
-    const margin = { 
-      top: baseMargin.top * devicePixelRatio, 
-      right: baseMargin.right * devicePixelRatio, 
-      bottom: baseMargin.bottom * devicePixelRatio, 
-      left: baseMargin.left * devicePixelRatio 
+
+    const margin = {
+      top: baseMargin.top * devicePixelRatio,
+      right: baseMargin.right * devicePixelRatio,
+      bottom: baseMargin.bottom * devicePixelRatio,
+      left: baseMargin.left * devicePixelRatio
     };
-    
+
     // Calculate inner dimensions in the scaled coordinate system
     const innerWidth = plotWidth - (margin.left / devicePixelRatio) - (margin.right / devicePixelRatio);
     const innerHeight = plotHeight - (margin.top / devicePixelRatio) - (margin.bottom / devicePixelRatio);
@@ -516,20 +516,20 @@ const EmbeddingPlot = ({
     // Add aggressive padding to scales to ensure points stay well within bounds
     const xExtent = d3.extent(x);
     const yExtent = d3.extent(y);
-    
+
     // Calculate the actual data range
     const xRange = xExtent[1] - xExtent[0];
     const yRange = yExtent[1] - yExtent[0];
-    
+
     // Add substantial padding to ensure points stay within bounds
     const xPadding = xRange * 0.20; // Increased to 20% padding
     const yPadding = yRange * 0.20; // Increased to 20% padding
-    
+
     // Ensure we have a minimum padding even for small ranges
     const minPadding = 1.0; // Increased minimum padding in data units
     const finalXPadding = Math.max(xPadding, minPadding);
     const finalYPadding = Math.max(yPadding, minPadding);
-    
+
     // Align plot domains with backend grid bounds when anomalies are shown
     let xDomainMin = xExtent[0] - finalXPadding;
     let xDomainMax = xExtent[1] + finalXPadding;
@@ -558,7 +558,7 @@ const EmbeddingPlot = ({
       xScale.nice();
       yScale.nice();
     }
-    
+
     // Validate that all data points fall within the scale domains
     // When using backend grid bounds, avoid auto-adjusting domains
     if (!(anomalyResults?.grid_info?.bounds)) {
@@ -587,7 +587,7 @@ const EmbeddingPlot = ({
     const baseFontSize = Math.max(10, Math.min(14, plotWidth / 60));
     const labelFontSize = Math.max(12, Math.min(16, plotWidth / 50));
     const axisSpacing = Math.max(30, Math.min(50, plotHeight / 15));
-    
+
     // Add axes with proper tick formatting
     const xAxis = g.append("g")
       .attr("transform", `translate(0,${innerHeight})`)
@@ -619,7 +619,7 @@ const EmbeddingPlot = ({
     // Y-axis label with better positioning
     yAxis.append("text")
       .attr("transform", `rotate(-90)`)
-  .attr("y", shouldShowSidebar ? -axisSpacing - 5 : -axisSpacing - 10)
+      .attr("y", shouldShowSidebar ? -axisSpacing - 5 : -axisSpacing - 10)
       .attr("x", -innerHeight / 2)
       .attr("text-anchor", "middle")
       .attr("fill", "#1f2937")
@@ -680,7 +680,7 @@ const EmbeddingPlot = ({
       anomalyResultsType: typeof anomalyResults,
       anomalyResultsString: JSON.stringify(anomalyResults, null, 2).substring(0, 500)
     });
-    
+
     const shouldDrawGrid = showAnomalies && anomalyResults && anomalyResults.cell_anomalies;
     console.log('🔵 Grid drawing condition check:', {
       showAnomalies,
@@ -688,30 +688,30 @@ const EmbeddingPlot = ({
       hasCellAnomalies: !!(anomalyResults && anomalyResults.cell_anomalies),
       shouldDrawGrid
     });
-    
+
     if (shouldDrawGrid) {
       console.log('🔵 Drawing grid overlay:', anomalyResults.cell_anomalies.length, 'anomalous cells');
       console.log('🔵 Anomaly results structure:', Object.keys(anomalyResults));
       console.log('🔵 Grid info:', anomalyResults.grid_info);
       console.log('🔵 Cell anomalies sample:', anomalyResults.cell_anomalies.slice(0, 3));
-      
+
       // Create grid cell lookup for quick access
       const anomalousCells = new Set();
       anomalyResults.cell_anomalies.forEach(anomaly => {
         anomalousCells.add(`${anomaly.cell_x},${anomaly.cell_y}`);
       });
-      
+
       // Get grid info from results - now supports different X and Y grid sizes
       const xGridSize = anomalyResults.grid_info?.x_grid_size || 20;
       const yGridSize = anomalyResults.grid_info?.y_grid_size || 20;
       const gridSize = anomalyResults.grid_info?.grid_size || Math.min(xGridSize, yGridSize); // Backward compatibility
       const bounds = anomalyResults.grid_info?.bounds;
-      
+
       console.log('🔵 Grid sizes - X:', xGridSize, 'Y:', yGridSize, 'Legacy:', gridSize);
       console.log('🔵 Bounds:', bounds);
       console.log('🔵 Grid info full:', anomalyResults.grid_info);
       console.log('🔵 Anomalous cells:', Array.from(anomalousCells));
-      
+
       // Check if all data points are within grid bounds
       const dataExtent = {
         xMin: Math.min(...data.map(d => d[0])),
@@ -719,7 +719,7 @@ const EmbeddingPlot = ({
         yMin: Math.min(...data.map(d => d[1])),
         yMax: Math.max(...data.map(d => d[1]))
       };
-      
+
       console.log('🔍 Data extent vs Grid bounds:', {
         dataExtent,
         gridBounds: bounds,
@@ -730,16 +730,16 @@ const EmbeddingPlot = ({
           yMax: dataExtent.yMax <= bounds.y_max
         }
       });
-      
+
       // STRICTLY require exact bin edges from backend - NO FALLBACKS ALLOWED
-      const hasExactBins = anomalyResults.grid_info && 
-                         anomalyResults.grid_info.x_bins && 
-                         anomalyResults.grid_info.y_bins &&
-                         Array.isArray(anomalyResults.grid_info.x_bins) &&
-                         Array.isArray(anomalyResults.grid_info.y_bins) &&
-                         anomalyResults.grid_info.x_bins.length === xGridSize + 1 &&
-                         anomalyResults.grid_info.y_bins.length === yGridSize + 1;
-      
+      const hasExactBins = anomalyResults.grid_info &&
+        anomalyResults.grid_info.x_bins &&
+        anomalyResults.grid_info.y_bins &&
+        Array.isArray(anomalyResults.grid_info.x_bins) &&
+        Array.isArray(anomalyResults.grid_info.y_bins) &&
+        anomalyResults.grid_info.x_bins.length === xGridSize + 1 &&
+        anomalyResults.grid_info.y_bins.length === yGridSize + 1;
+
       if (!hasExactBins) {
         console.error('❌ CRITICAL: Backend bin edges missing or invalid - cannot render grid');
         console.error('Expected bin arrays of length X:', xGridSize + 1, 'Y:', yGridSize + 1, 'but got:', {
@@ -749,28 +749,28 @@ const EmbeddingPlot = ({
         });
         return; // STOP - no fallback rendering allowed
       }
-      
+
       // Store backend bin edges (guaranteed valid)
       const xBins = anomalyResults.grid_info.x_bins;
       const yBins = anomalyResults.grid_info.y_bins;
-      
+
       console.log('✅ Using STRICTLY backend bin edges:', {
         x_bins_length: xBins.length,
         y_bins_length: yBins.length,
         x_range: [xBins[0], xBins[xBins.length - 1]],
         y_range: [yBins[0], yBins[yBins.length - 1]]
       });
-      
+
       // Verify alignment by testing sample points with backend logic
       const samplePoints = data.slice(0, 3);
       console.log('🔍 Frontend-Backend alignment verification:');
       samplePoints.forEach((point, idx) => {
         const [x, y] = point;
-        
+
         // Use EXACT same logic as backend: np.digitize equivalent
         // np.digitize(x, bins) returns the index of the bin that x belongs to
         // Backend uses: x_idx = np.digitize(point[0], x_bins) - 1
-        
+
         // Find the bin index (equivalent to np.digitize)
         let x_digitize_idx = 0;
         for (let i = 0; i < xBins.length; i++) {
@@ -788,45 +788,45 @@ const EmbeddingPlot = ({
           }
           y_digitize_idx = j + 1;
         }
-        
+
         // Apply backend logic: subtract 1 and clamp
         let cellX = x_digitize_idx - 1;
         let cellY = y_digitize_idx - 1;
-        
+
         // Clamp to valid range (same as backend)
         cellX = Math.max(0, Math.min(cellX, xGridSize - 1));
         cellY = Math.max(0, Math.min(cellY, yGridSize - 1));
-        
+
         console.log(`📍 Point ${idx} (${x.toFixed(3)}, ${y.toFixed(3)}) -> Cell[${cellX}][${cellY}]`);
-        
+
         // Verify this matches backend logic
         const cellBounds = {
           xMin: xBins[cellX],
           xMax: xBins[cellX + 1],
-          yMin: yBins[cellY], 
+          yMin: yBins[cellY],
           yMax: yBins[cellY + 1]
         };
-        const withinBounds = (x >= cellBounds.xMin && x < cellBounds.xMax && 
-                             y >= cellBounds.yMin && y < cellBounds.yMax);
+        const withinBounds = (x >= cellBounds.xMin && x < cellBounds.xMax &&
+          y >= cellBounds.yMin && y < cellBounds.yMax);
         console.log(`   Cell bounds: [${cellBounds.xMin.toFixed(3)}, ${cellBounds.xMax.toFixed(3)}] x [${cellBounds.yMin.toFixed(3)}, ${cellBounds.yMax.toFixed(3)}]`);
         console.log(`   Point within cell: ${withinBounds}`);
       });
 
       if (bounds && bounds.x_min !== undefined && bounds.x_max !== undefined && bounds.y_min !== undefined && bounds.y_max !== undefined) {
 
-        
+
         // First, draw all grid cells (including non-anomalous ones for context)
         for (let i = 0; i < xGridSize; i++) {
           for (let j = 0; j < yGridSize; j++) {
             const cellId = `${i},${j}`;
             const isAnomalous = anomalousCells.has(cellId);
-            
+
             // Use ONLY backend bin edges - NO FALLBACKS
             const cellX = xBins[i];
             const cellXEnd = xBins[i + 1];
             const cellY = yBins[j];
             const cellYEnd = yBins[j + 1];
-            
+
             // Debug first few cells to verify backend alignment
             if (i < 2 && j < 2) {
               console.log(`🎯 Cell[${i}][${j}] backend bounds:`, {
@@ -839,7 +839,7 @@ const EmbeddingPlot = ({
                 screenYEnd: yScale(cellYEnd)
               });
             }
-            
+
             // Convert to screen coordinates (handle inverted Y-axis)
             const screenX1 = xScale(cellX);
             const screenX2 = xScale(cellXEnd);
@@ -849,7 +849,7 @@ const EmbeddingPlot = ({
             const rectY = Math.min(screenY1, screenY2);
             const rectWidth = Math.abs(screenX2 - screenX1);
             const rectHeight = Math.abs(screenY2 - screenY1);
-            
+
             // Draw grid cell background (subtle for all cells) if grid is enabled
             if (true) {
               const cellRect = gridLayer.append("rect")
@@ -858,11 +858,11 @@ const EmbeddingPlot = ({
                 .attr("y", rectY)
                 .attr("width", rectWidth)
                 .attr("height", rectHeight)
-                .attr("fill", isAnomalous ? 
+                .attr("fill", isAnomalous ?
                   (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.test_type === 'real_overpopulation' ?
                     "rgba(220, 38, 38, 0.2)" : "rgba(59, 130, 246, 0.2)") : // Red for real overpopulation, blue for synthetic overpopulation
                   "rgba(100, 100, 100, 0.01)") // Very subtle fill for normal cells
-                .attr("stroke", isAnomalous ? 
+                .attr("stroke", isAnomalous ?
                   (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.test_type === 'real_overpopulation' ?
                     "rgba(220, 38, 38, 0.9)" : "rgba(59, 130, 246, 0.9)") : // Red for real overpopulation, blue for synthetic overpopulation
                   "rgba(150, 150, 150, 0.3)") // More visible border for normal cells to see alignment
@@ -870,18 +870,18 @@ const EmbeddingPlot = ({
                 // Enable pointer events only for anomalous cells to show tooltips
                 .style("pointer-events", isAnomalous ? "all" : "none")
                 .style("cursor", isAnomalous ? "pointer" : "default");
-              
+
               // Add tooltips and click handlers to anomalous cells
               if (isAnomalous) {
                 const cellData = anomalyResults.cell_anomalies.find(
                   anomaly => anomaly.cell_x === i && anomaly.cell_y === j
                 );
-                
+
                 if (cellData) {
                   cellRect
-                    .on("mouseover", function(event) {
+                    .on("mouseover", function (event) {
                       const tooltipContent = createAnomalyTooltip(cellData, i, j);
-                      
+
                       // Create tooltip
                       const tooltip = d3.select("body")
                         .append("div")
@@ -899,16 +899,16 @@ const EmbeddingPlot = ({
                         .style("max-width", "300px")
                         .style("box-shadow", "0 2px 10px rgba(0,0,0,0.3)")
                         .html(tooltipContent);
-                      
+
                       // Position tooltip
                       const tooltipWidth = tooltip.node().getBoundingClientRect().width;
                       const tooltipHeight = tooltip.node().getBoundingClientRect().height;
                       const mouseX = event.pageX;
                       const mouseY = event.pageY;
-                      
+
                       let tooltipX = mouseX + 10;
                       let tooltipY = mouseY + 10;
-                      
+
                       // Adjust if tooltip would go off screen
                       if (tooltipX + tooltipWidth > window.innerWidth) {
                         tooltipX = mouseX - tooltipWidth - 10;
@@ -916,15 +916,15 @@ const EmbeddingPlot = ({
                       if (tooltipY + tooltipHeight > window.innerHeight) {
                         tooltipY = mouseY - tooltipHeight - 10;
                       }
-                      
+
                       tooltip
                         .style("left", tooltipX + "px")
                         .style("top", tooltipY + "px");
                     })
-                    .on("mouseout", function() {
+                    .on("mouseout", function () {
                       d3.select("body").selectAll(".anomaly-cell-tooltip").remove();
                     })
-                    .on("click", function() {
+                    .on("click", function () {
                       // Remove tooltip on click
                       d3.select("body").selectAll(".anomaly-cell-tooltip").remove();
                       // Handle the click to generate distribution plot
@@ -933,33 +933,33 @@ const EmbeddingPlot = ({
                 }
               }
             }
-            
+
             if (isAnomalous) {
               // Find cell data
               const cellData = anomalyResults.cell_anomalies.find(
                 anomaly => anomaly.cell_x === i && anomaly.cell_y === j
               );
-              
+
               // Calculate center based on actual data points in this cell
               const actualCellWidth = cellXEnd - cellX;
               const actualCellHeight = cellYEnd - cellY;
-              
+
               // Find data points that fall within this grid cell
               // Use the EXACT same data that was sent to backend (user-selected data from sidebar)
               // This ensures perfect consistency between visual count and backend count
               const cellPoints = data.filter(point => {
                 const pointX = point[0];
                 const pointY = point[1];
-                return pointX >= cellX && pointX < cellXEnd && 
-                       pointY >= cellY && pointY < cellYEnd;
+                return pointX >= cellX && pointX < cellXEnd &&
+                  pointY >= cellY && pointY < cellYEnd;
               });
-              
+
               // Verify point count accuracy
               const frontendCount = cellPoints.length;
               const backendRealCount = cellData?.real_count || 0;
               const backendSynthCount = cellData?.synthetic_count || 0;
               const backendTotalCount = backendRealCount + backendSynthCount;
-              
+
               console.log(`🔍 Cell (${i},${j}) Point Count Verification (USING USER-SELECTED DATA):`, {
                 frontendTotal: frontendCount,
                 backendReal: backendRealCount,
@@ -970,40 +970,40 @@ const EmbeddingPlot = ({
                 samplePoints: cellPoints.slice(0, 3), // Show first 3 points for verification
                 note: 'Using exact data user selected in sidebar - perfect consistency'
               });
-              
+
               // Calculate precise circle based on actual data points
               let centerDataX = cellX + actualCellWidth / 2; // Default to cell center
               let centerDataY = cellY + actualCellHeight / 2; // Default to cell center
               let circleRadius;
-              
+
               if (cellPoints.length > 0) {
                 // Use centroid of actual points
                 centerDataX = cellPoints.reduce((sum, point) => sum + point[0], 0) / cellPoints.length;
                 centerDataY = cellPoints.reduce((sum, point) => sum + point[1], 0) / cellPoints.length;
-                
+
                 // Calculate radius to encompass all points with some padding
                 const distances = cellPoints.map(point => {
                   const dx = point[0] - centerDataX;
                   const dy = point[1] - centerDataY;
                   return Math.sqrt(dx * dx + dy * dy);
                 });
-                
+
                 const maxDistance = Math.max(...distances);
                 const minVisibleRadius = Math.abs(actualCellWidth) / 8; // Minimum visible size
                 const paddingFactor = 1.2; // 20% padding around the furthest point
-                
+
                 // Radius in data coordinates
                 const radiusData = Math.max(maxDistance * paddingFactor, minVisibleRadius);
-                
+
                 // Calculate radius in screen coordinates
                 const radiusPoint1 = xScale(centerDataX + radiusData);
                 const radiusPoint2 = xScale(centerDataX);
                 const calculatedRadius = Math.abs(radiusPoint1 - radiusPoint2);
-                
+
                 // Ensure minimum visible radius (especially for single points)
                 const minScreenRadius = 8; // Minimum 8 pixels
                 circleRadius = Math.max(calculatedRadius, minScreenRadius);
-                
+
                 console.log(`🎯 Dynamic Circle for Cell (${i},${j}):`, {
                   pointCount: cellPoints.length,
                   center: { x: centerDataX, y: centerDataY },
@@ -1018,31 +1018,31 @@ const EmbeddingPlot = ({
                 // Fallback if no points found (shouldn't happen for anomalies)
                 // centerDataX and centerDataY already set to cell center defaults
                 circleRadius = 12;
-                
+
                 console.log(`⚠️ Fallback Circle for Cell (${i},${j}): No points found in anomalous cell!`);
               }
-              
+
               // Convert center to screen coordinates
               const centerX = xScale(centerDataX);
               const centerY = yScale(centerDataY);
-              
+
               console.log(`🔵 Drawing cell (${i}, ${j}):`, {
                 cellX, cellY, cellXEnd, cellYEnd,
                 centerDataX, centerDataY,
-                centerX, centerY, 
+                centerX, centerY,
                 dynamicRadius: circleRadius,
                 severity: cellData?.severity
               });
-              
+
               // Verify circle encompasses points
               console.log(`🔍 Circle Coverage Analysis for Cell (${i},${j}):`, {
                 circleCenter: { x: centerDataX, y: centerDataY },
                 circleRadiusScreen: circleRadius,
-                cellBounds: { 
-                  left: cellX, 
-                  right: cellXEnd, 
-                  top: cellY, 
-                  bottom: cellYEnd 
+                cellBounds: {
+                  left: cellX,
+                  right: cellXEnd,
+                  top: cellY,
+                  bottom: cellYEnd
                 },
                 pointsInCell: frontendCount,
                 expectedPoints: backendTotalCount,
@@ -1050,7 +1050,7 @@ const EmbeddingPlot = ({
                 actualDimensions: { width: actualCellWidth, height: actualCellHeight },
                 preciseSizing: true
               });
-              
+
               // Circle drawing removed - using colored grid cells instead
             }
           }
@@ -1087,7 +1087,7 @@ const EmbeddingPlot = ({
       const svgRootForHover = d3.select(svgRef.current);
       svgRootForHover.on('mousemove.gridHover', null).on('mouseleave.gridHover', null);
       svgRootForHover
-        .on('mousemove.gridHover', function(event) {
+        .on('mousemove.gridHover', function (event) {
           // If hovering a point, prefer point tooltip
           const target = event.target;
           if (target && target.tagName && target.tagName.toLowerCase() === 'circle') {
@@ -1145,7 +1145,7 @@ const EmbeddingPlot = ({
             .style('top', (event.pageY + 12) + 'px')
             .style('visibility', 'visible');
         })
-        .on('mouseleave.gridHover', function() {
+        .on('mouseleave.gridHover', function () {
           d3.select('body').select('.grid-cell-tooltip').style('visibility', 'hidden');
         });
     } else {
@@ -1179,12 +1179,12 @@ const EmbeddingPlot = ({
       .attr("r", (d, i) => {
         const originalIndex = indexMap[i];
         const label = sampledLabels[i];
-        
+
         // Early return if anomalyResults is null to prevent errors
         if (label === 'Synthetic' && (!anomalyResults || !anomalyResults.synthetic_data)) {
           return adjustedPointSize; // Default size for synthetic without anomaly data
         }
-        
+
         // Make anomalies larger and more visible
         if (showAnomalies && anomalyResults && anomalyResults.synthetic_data && label === 'Synthetic') {
           const originalData = getOriginalData();
@@ -1195,7 +1195,7 @@ const EmbeddingPlot = ({
                 syntheticIndexInOriginal++;
               }
             }
-            
+
             if (anomalyResults && anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
               const anomalyPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
               if (anomalyPoint && anomalyPoint.is_anomaly) {
@@ -1204,12 +1204,12 @@ const EmbeddingPlot = ({
             }
           }
         }
-        
+
         return adjustedPointSize; // Default size
       })
       .attr("fill", (d, i) => {
         const label = sampledLabels[i];
-        
+
         // Simple color coding: real vs synthetic data
         if (label === 'Real') {
           return "#3b82f6"; // Blue for real data
@@ -1231,15 +1231,15 @@ const EmbeddingPlot = ({
       })
       // Add interactive hover effects
       .style("cursor", "pointer")
-      .on("mouseover", function(event, d, i) {
+      .on("mouseover", function (event, d, i) {
         const originalIndex = indexMap[i];
         const label = sampledLabels[i];
-        
+
         // Create tooltip content
         let tooltipContent = `<strong>${label} Data Point</strong><br/>`;
         tooltipContent += `Index: ${originalIndex}<br/>`;
         tooltipContent += `Coordinates: (${d[0].toFixed(3)}, ${d[1].toFixed(3)})<br/>`;
-        
+
         // Add grid-based anomaly information if available
         if (showAnomalies && anomalyResults && anomalyResults.cell_anomalies) {
           // Find which grid cell this point belongs to using histogram bins
@@ -1247,7 +1247,7 @@ const EmbeddingPlot = ({
           const yBins = anomalyResults.grid_info?.y_bins;
           const xGridSize = anomalyResults.grid_info?.x_grid_size || 20;
           const yGridSize = anomalyResults.grid_info?.y_grid_size || 20;
-          
+
           if (xBins && yBins) {
             // Use np.digitize equivalent logic (same as backend)
             let x_digitize_idx = 0;
@@ -1266,16 +1266,16 @@ const EmbeddingPlot = ({
               }
               y_digitize_idx = j + 1;
             }
-            
+
             // Apply backend logic: subtract 1 and clamp
             const cellX = Math.max(0, Math.min(x_digitize_idx - 1, xGridSize - 1));
             const cellY = Math.max(0, Math.min(y_digitize_idx - 1, yGridSize - 1));
-            
+
             // Find if this cell is anomalous
             const cellData = anomalyResults.cell_anomalies.find(
               anomaly => anomaly.cell_x === cellX && anomaly.cell_y === cellY
             );
-            
+
             if (cellData) {
               tooltipContent += `<br/><strong>Grid Cell (${cellX}, ${cellY})</strong><br/>`;
               tooltipContent += `Real Points: ${cellData.real_count}<br/>`;
@@ -1287,7 +1287,7 @@ const EmbeddingPlot = ({
             }
           }
         }
-        
+
         // Show tooltip
         const tooltip = d3.select("body").append("div")
           .attr("class", "tooltip")
@@ -1337,9 +1337,9 @@ const EmbeddingPlot = ({
               ">Select Similar</button>
             </div>
           `);
-        
+
         // Add event listeners to tooltip buttons
-        tooltip.select("#select-point-btn").on("click", function() {
+        tooltip.select("#select-point-btn").on("click", function () {
           if (selectedPoints.includes(originalIndex)) {
             setSelectedPoints(prev => prev.filter(idx => idx !== originalIndex));
           } else {
@@ -1347,14 +1347,14 @@ const EmbeddingPlot = ({
           }
           tooltip.remove();
         });
-        
-        tooltip.select("#select-similar-btn").on("click", function() {
+
+        tooltip.select("#select-similar-btn").on("click", function () {
           // Select all points of the same type (Real/Synthetic)
           const similarPoints = sampledData
             .map((_, i) => ({ index: indexMap[i], label: sampledLabels[i] }))
             .filter(point => point.label === label)
             .map(point => point.index);
-          
+
           setSelectedPoints(prev => {
             const newSelection = [...prev];
             similarPoints.forEach(idx => {
@@ -1367,10 +1367,10 @@ const EmbeddingPlot = ({
           tooltip.remove();
         });
       })
-      .on("mouseout", function() {
+      .on("mouseout", function () {
         // Remove tooltip
         d3.selectAll(".tooltip").remove();
-        
+
         // Restore original appearance
         d3.select(this)
           .transition()
@@ -1378,12 +1378,12 @@ const EmbeddingPlot = ({
           .attr("r", d => {
             const originalIndex = indexMap[sampledData.indexOf(d)];
             const label = sampledLabels[sampledData.indexOf(d)];
-            
+
             // Restore original size logic
             if (label === 'Synthetic' && (!anomalyResults || !anomalyResults.synthetic_data)) {
               return adjustedPointSize;
             }
-            
+
             if (showAnomalies && anomalyResults && anomalyResults.synthetic_data && label === 'Synthetic') {
               const originalData = getOriginalData();
               if (originalData) {
@@ -1393,7 +1393,7 @@ const EmbeddingPlot = ({
                     syntheticIndexInOriginal++;
                   }
                 }
-                
+
                 if (anomalyResults && anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
                   const anomalyPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
                   if (anomalyPoint && anomalyPoint.is_anomaly) {
@@ -1402,7 +1402,7 @@ const EmbeddingPlot = ({
                 }
               }
             }
-            
+
             return adjustedPointSize;
           })
           .style("opacity", d => {
@@ -1412,7 +1412,7 @@ const EmbeddingPlot = ({
           .style("stroke-width", d => {
             const originalIndex = indexMap[sampledData.indexOf(d)];
             const label = sampledLabels[sampledData.indexOf(d)];
-            
+
             // Restore original stroke width logic
             if (showAnomalies && anomalyResults && (anomalyResults.real_data || anomalyResults.synthetic_data)) {
               const originalData = getOriginalData();
@@ -1424,7 +1424,7 @@ const EmbeddingPlot = ({
                       realIndexInOriginal++;
                     }
                   }
-                  
+
                   if (anomalyResults.real_data && realIndexInOriginal < anomalyResults.real_data.length) {
                     const realPoint = anomalyResults.real_data[realIndexInOriginal];
                     if (realPoint && realPoint.is_anomaly) {
@@ -1438,7 +1438,7 @@ const EmbeddingPlot = ({
                       syntheticIndexInOriginal++;
                     }
                   }
-                  
+
                   if (anomalyResults.synthetic_data && syntheticIndexInOriginal < anomalyResults.synthetic_data.length) {
                     const syntheticPoint = anomalyResults.synthetic_data[syntheticIndexInOriginal];
                     if (syntheticPoint && syntheticPoint.is_anomaly) {
@@ -1448,14 +1448,14 @@ const EmbeddingPlot = ({
                 }
               }
             }
-            
+
             return selectedPoints.includes(originalIndex) ? 2 * devicePixelRatio : 0.5 * devicePixelRatio;
           });
       });
 
-  // Lasso selection logic only
-  let isDrawing = false;
-  let hasDragged = false;
+    // Lasso selection logic only
+    let isDrawing = false;
+    let hasDragged = false;
     let lassoPath = null;
     let lassoPoints = [];
     const lassoMinDistance = 2; // pixels between successive lasso points
@@ -1484,14 +1484,14 @@ const EmbeddingPlot = ({
       .style("cursor", "crosshair")
       // Keep background passive so point hover/clicks are not blocked
       .style("pointer-events", "none");
-    
+
     console.log('🔍 Background pointer-events:', "none", { showAnomalies, hasAnomalyResults: !!anomalyResults });
 
     // Attach selection handlers to the SVG root so they work alongside point/tooltips
     const svgRoot = d3.select(svgRef.current);
     svgRoot.on("mousedown.selection", null).on("mousemove.selection", null).on("mouseup.selection", null);
     svgRoot
-      .on("mousedown.selection", function(event) {
+      .on("mousedown.selection", function (event) {
         // Start selection only when not clicking a point
         if (event.target && event.target.tagName && event.target.tagName.toLowerCase() === 'circle') return;
         event.preventDefault();
@@ -1510,14 +1510,14 @@ const EmbeddingPlot = ({
           .style('stroke-dasharray', '5,5')
           .style('pointer-events', 'none');
       })
-      .on("mousemove.selection", function(event) {
+      .on("mousemove.selection", function (event) {
         if (!isDrawing) return;
         const currentPoint = d3.pointer(event, g.node());
         // Lasso drawing
         const last = lassoPoints[lassoPoints.length - 1];
         const dx = currentPoint[0] - last[0];
         const dy = currentPoint[1] - last[1];
-        const dist = Math.sqrt(dx*dx + dy*dy);
+        const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > lassoMinDistance) {
           hasDragged = true;
           lassoPoints.push(currentPoint);
@@ -1525,7 +1525,7 @@ const EmbeddingPlot = ({
           lassoPath.attr('d', d);
         }
       })
-      .on("mouseup.selection", function(event) {
+      .on("mouseup.selection", function (event) {
         if (!isDrawing) return;
         event.preventDefault();
         // Lasso finalize
@@ -1536,7 +1536,7 @@ const EmbeddingPlot = ({
           lassoPath.attr('d', d);
 
           const selected = [];
-          points.each(function(dpt, i) {
+          points.each(function (dpt, i) {
             const cx = xScale(dpt[0]);
             const cy = yScale(dpt[1]);
             if (pointInPolygon(cx, cy, lassoPoints)) {
@@ -1576,10 +1576,10 @@ const EmbeddingPlot = ({
 
     // Enhanced hover effects
     points
-      .on("mouseover", function(event, d, i) {
+      .on("mouseover", function (event, d, i) {
         const originalIndex = indexMap[i];
         const dataType = sampledLabels[i];
-        
+
         d3.select(this)
           .transition()
           .duration(100)
@@ -1602,15 +1602,15 @@ const EmbeddingPlot = ({
           .style("left", (event.pageX + 10) + "px")
           .style("top", (event.pageY - 10) + "px");
       })
-      .on("mousemove", function(event) {
+      .on("mousemove", function (event) {
         tooltip
           .style("left", (event.pageX + 10) + "px")
           .style("top", (event.pageY - 10) + "px");
       })
-      .on("mouseout", function(event, d, i) {
+      .on("mouseout", function (event, d, i) {
         const originalIndex = indexMap[i];
         const isSelected = selectedPoints.includes(originalIndex);
-        
+
         d3.select(this)
           .transition()
           .duration(100)
@@ -1620,15 +1620,15 @@ const EmbeddingPlot = ({
 
         tooltip.style("visibility", "hidden");
       })
-      .on("click", function(event, d, i) {
+      .on("click", function (event, d, i) {
         // Don't handle click if we just finished a drag selection
         if (hasDragged) return;
-        
+
         event.stopPropagation();
         const originalIndex = indexMap[i];
-        
 
-        
+
+
         if (selectedPoints.includes(originalIndex)) {
           setSelectedPoints(prev => prev.filter(idx => idx !== originalIndex));
         } else {
@@ -1638,13 +1638,13 @@ const EmbeddingPlot = ({
 
     // Responsive legend positioning - ensure it fits properly
     const showAnomalyLegend = showAnomalies && anomalyResults && anomalyResults.synthetic_data;
-    
-  // Place legend just to the right of the inner plotting area to avoid covering points
-  const legendX = margin.left + (innerWidth * devicePixelRatio) + 10;
-  const legendY = margin.top + 10;
-    
 
-    
+    // Place legend just to the right of the inner plotting area to avoid covering points
+    const legendX = margin.left + (innerWidth * devicePixelRatio) + 10;
+    const legendY = margin.top + 10;
+
+
+
     const legend = svg.append("g")
       .attr("transform", `translate(${legendX}, ${legendY})`);
 
@@ -1660,7 +1660,7 @@ const EmbeddingPlot = ({
       realLegendRow.append("circle")
         .attr("cx", 8)
         .attr("cy", 0)
-  .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
+        .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
         .attr("fill", colorScale("Real")) // Use same color as data points
         .attr("stroke", d3.color(colorScale("Real")).darker(0.3))
         .attr("stroke-width", 0.5)
@@ -1682,7 +1682,7 @@ const EmbeddingPlot = ({
       normalLegendRow.append("circle")
         .attr("cx", 8)
         .attr("cy", 0)
-  .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
+        .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
         .attr("fill", colorScale("Synthetic")) // Use same color as data points
         .attr("stroke", d3.color(colorScale("Synthetic")).darker(0.3))
         .attr("stroke-width", 0.5)
@@ -1777,7 +1777,7 @@ const EmbeddingPlot = ({
     console.log('Data length:', data?.length);
     console.log('Metadata labels:', metadata?.labels);
     console.log('Sample data points:', data?.slice(0, 3));
-    
+
     if (!data || !metadata || !metadata.labels) {
       console.error('❌ Missing data or metadata');
       setAnomalyError('No embedding data available for anomaly detection');
@@ -1786,12 +1786,12 @@ const EmbeddingPlot = ({
 
     // Use 2D embedding coordinates for grid-based anomaly detection
     console.log('📊 Using 2D embedding coordinates for grid-based anomaly detection');
-    
+
     // Use the EXACT data that user selected in sidebar (no additional sampling)
     // This ensures backend, frontend visualization, and cell counting all use same data
     const realData = [];
-    const syntheticData = []; 
-    
+    const syntheticData = [];
+
     data.forEach((point, index) => {
       if (metadata.labels[index] === 'Real') {
         realData.push([point[0], point[1]]); // 2D coordinates from user-selected data
@@ -1800,28 +1800,28 @@ const EmbeddingPlot = ({
       }
     });
 
-    console.log('📊 Using EXACT user-selected data for consistency:', { 
-      realDataLength: realData.length, 
+    console.log('📊 Using EXACT user-selected data for consistency:', {
+      realDataLength: realData.length,
       syntheticDataLength: syntheticData.length,
       realDataSample: realData.slice(0, 3),
       syntheticDataSample: syntheticData.slice(0, 3),
       totalDataLength: data.length,
       note: 'No additional sampling - using exact data user selected in sidebar'
     });
-    
+
     // Check if we have enough valid data
     if (realData.length === 0) {
       console.error('❌ No valid real data found');
       setAnomalyError('No valid real data available for anomaly detection');
       return;
     }
-    
+
     if (syntheticData.length === 0) {
       console.error('❌ No valid synthetic data found');
       setAnomalyError('No valid synthetic data available for anomaly detection');
       return;
     }
-    
+
     // Validate data types
     const validateNumericData = (data, name) => {
       for (let i = 0; i < Math.min(data.length, 3); i++) {
@@ -1832,7 +1832,7 @@ const EmbeddingPlot = ({
         }
       }
     };
-    
+
     try {
       validateNumericData(realData, 'realData');
       validateNumericData(syntheticData, 'syntheticData');
@@ -1841,11 +1841,11 @@ const EmbeddingPlot = ({
       setAnomalyError(`Data validation failed: ${error.message}`);
       return;
     }
-    
+
     // Validate data
     const validation = anomalyDetectionService.validateData(realData, syntheticData);
     console.log('✅ Validation result:', validation);
-    
+
     if (!validation.isValid) {
       console.error('❌ Validation failed:', validation.errors);
       setAnomalyError(validation.errors.join(', '));
@@ -1858,14 +1858,14 @@ const EmbeddingPlot = ({
 
     try {
       const results = await anomalyDetectionService.detectAnomalies(
-        realData, 
-        syntheticData, 
+        realData,
+        syntheticData,
         20, // x_bins
         20, // y_bins
         0.05 // fdr_alpha
       );
       console.log('🎉 Grid-based anomaly detection completed:', results);
-      
+
       // Check if results have the expected structure
       if (results && results.status === 'success' && results.statistics) {
         console.log('🎯 Setting anomaly results:', {
@@ -1875,16 +1875,16 @@ const EmbeddingPlot = ({
           gridInfo: results.grid_info,
           statistics: results.statistics
         });
-        
+
         setAnomalyResults(results);
         setShowAnomalies(true); // Automatically show anomalies when detection completes
-        
+
         // Force a re-render to ensure the grid overlay is drawn
         setTimeout(() => {
           console.log('🔄 Forcing re-render after anomaly detection');
           setAnomalyResults(prev => ({ ...prev, ...results }));
         }, 100);
-        
+
         console.log('📈 Statistics:', results.statistics);
         console.log('📊 Real data results:', results.real_data?.length || 0);
         console.log('📊 Synthetic data results:', results.synthetic_data?.length || 0);
@@ -1907,7 +1907,7 @@ const EmbeddingPlot = ({
     console.log('Data available:', !!data);
     console.log('Metadata available:', !!metadata);
     console.log('Labels available:', !!(metadata && metadata.labels));
-    
+
     if (!data || !metadata || !metadata.labels) {
       console.error('❌ Missing required data for CSV download');
       alert('No anomaly detection data available. Please run anomaly detection first.');
@@ -1918,7 +1918,7 @@ const EmbeddingPlot = ({
     const jobId = metadata?.job_id;
     if (jobId) {
       console.log('🎯 Downloading CSV using preprocessed data from job:', jobId);
-      
+
       try {
         const csvResult = await anomalyDetectionService.generateAnomalyCSVFromJob(jobId, 20, 20, 0.05);
         console.log('CSV result from job:', csvResult);
@@ -1938,7 +1938,7 @@ const EmbeddingPlot = ({
 
     // Fallback to original method for fresh embeddings (using frontend data)
     console.log('📊 Downloading CSV using frontend data (fallback method)');
-    
+
     // Get preprocessed original data for anomaly detection
     const originalData = getOriginalData();
     if (!originalData) {
@@ -1950,7 +1950,7 @@ const EmbeddingPlot = ({
     // Separate real and synthetic data from preprocessed original data
     const realData = [];
     const syntheticData = [];
-    
+
     originalData.data.forEach((row, index) => {
       if (originalData.labels[index] === 'Real') {
         // Convert all values to numbers and filter out invalid data
@@ -1959,7 +1959,7 @@ const EmbeddingPlot = ({
           const num = typeof val === 'string' ? parseFloat(val) : Number(val);
           return isNaN(num) ? null : num;
         }).filter(val => val !== null);
-        
+
         if (numericRow.length > 0) {
           realData.push(numericRow);
         }
@@ -1970,23 +1970,23 @@ const EmbeddingPlot = ({
           const num = typeof val === 'string' ? parseFloat(val) : Number(val);
           return isNaN(num) ? null : num;
         }).filter(val => val !== null);
-        
+
         if (numericRow.length > 0) {
           syntheticData.push(numericRow);
         }
       }
     });
-    
+
     console.log('Real data points:', realData.length);
     console.log('Synthetic data points:', syntheticData.length);
-    
+
     // Check if we have enough valid data
     if (realData.length === 0 || syntheticData.length === 0) {
       console.error('❌ No valid numeric data available for CSV download');
       alert('No valid numeric data available for CSV download. Please check your data.');
       return;
     }
-    
+
     try {
       const csvResult = await anomalyDetectionService.generateAnomalyCSV(realData, syntheticData, 20, 20, 0.05);
       console.log('CSV result from frontend data:', csvResult);
@@ -2021,60 +2021,60 @@ const EmbeddingPlot = ({
   // New function to handle clicking on anomalous regions
   const handleAnomalyCellClick = useCallback(async (cellData, i, j) => {
     console.log(`🎯 Anomaly cell clicked: (${i}, ${j})`, cellData);
-    
+
     // Get the grid information to determine cell boundaries
     if (!anomalyResults?.grid_info) {
       console.error('No grid info available for cell click');
       return;
     }
-    
+
     const gridInfo = anomalyResults.grid_info;
     const cellX = gridInfo.x_bins[i];
     const cellXEnd = gridInfo.x_bins[i + 1];
     const cellY = gridInfo.y_bins[j];
     const cellYEnd = gridInfo.y_bins[j + 1];
-    
+
     console.log(`🔍 Cell boundaries: X[${cellX}, ${cellXEnd}), Y[${cellY}, ${cellYEnd})`);
-    
+
     // Find data points that fall within this grid cell
     const cellPoints = data.filter(point => {
       const pointX = point[0];
       const pointY = point[1];
-      return pointX >= cellX && pointX < cellXEnd && 
-             pointY >= cellY && pointY < cellYEnd;
+      return pointX >= cellX && pointX < cellXEnd &&
+        pointY >= cellY && pointY < cellYEnd;
     });
-    
+
     console.log(`📊 Found ${cellPoints.length} points in cell (${i}, ${j})`);
-    
+
     if (cellPoints.length === 0) {
       console.warn('No points found in clicked cell');
       return;
     }
-    
+
     // Get the indices of these points in the original data
     const originalData = getOriginalData();
     if (!originalData) {
       console.error('No original data available for distribution plot');
       return;
     }
-    
+
     // Map embedding points back to original data indices
     const selectedRealData = [];
     const selectedSyntheticData = [];
-    
+
     cellPoints.forEach(embeddingPoint => {
       // Find the index of this point in the embedding data
-      const embeddingIndex = data.findIndex(point => 
+      const embeddingIndex = data.findIndex(point =>
         point[0] === embeddingPoint[0] && point[1] === embeddingPoint[1]
       );
-      
+
       if (embeddingIndex >= 0 && embeddingIndex < metadata.labels.length) {
         const pointLabel = metadata.labels[embeddingIndex];
-        
+
         // Get corresponding original data point
-        if (embeddingIndex < originalData.data.length && 
-            originalData.labels[embeddingIndex] === pointLabel) {
-          
+        if (embeddingIndex < originalData.data.length &&
+          originalData.labels[embeddingIndex] === pointLabel) {
+
           const originalDataPoint = originalData.data[embeddingIndex];
           if (originalDataPoint && Array.isArray(originalDataPoint)) {
             if (pointLabel === 'Real') {
@@ -2086,29 +2086,29 @@ const EmbeddingPlot = ({
         }
       }
     });
-    
+
     console.log(`📈 Selected data for distribution plot: ${selectedRealData.length} real, ${selectedSyntheticData.length} synthetic`);
-    
+
     if (selectedRealData.length === 0 && selectedSyntheticData.length === 0) {
       console.error('No valid data found for distribution plot');
       return;
     }
-    
+
     // Set the selected points to trigger distribution plot generation
     // We need to find the indices of these points in the current data array
     const selectedIndices = [];
     cellPoints.forEach(embeddingPoint => {
-      const index = data.findIndex(point => 
+      const index = data.findIndex(point =>
         point[0] === embeddingPoint[0] && point[1] === embeddingPoint[1]
       );
       if (index >= 0) {
         selectedIndices.push(index);
       }
     });
-    
+
     console.log(`🎯 Setting selected points: ${selectedIndices.length} indices`);
     setSelectedPoints(selectedIndices);
-    
+
   }, [anomalyResults, data, metadata, getOriginalData]);
 
   // Early validation after all hooks are declared
@@ -2139,7 +2139,7 @@ const EmbeddingPlot = ({
 
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       display: 'block',
       position: 'relative',
       overflow: 'visible',
@@ -2158,18 +2158,22 @@ const EmbeddingPlot = ({
         '100%': { opacity: 0.8, transform: 'scale(1)' }
       }
     }}>
+      {/* Title */}
+      <Typography variant="h6" sx={{ fontSize: '1.05rem', fontWeight: 500, mb: 0.5, ml: 1 }}>
+        Overall Analysis
+      </Typography>
       {/* Main Plot Area */}
-      <Box 
-        ref={containerRef} 
-        className="embedding-plot" 
-        sx={{ 
+      <Box
+        ref={containerRef}
+        className="embedding-plot"
+        sx={{
           width: '100%',
-          height: '33vw',
+          aspectRatio: '1 / 1',
           position: 'relative',
           minHeight: 'unset',
           backgroundColor: 'rgba(248, 250, 252, 0.5)',
           borderRadius: '8px',
-          padding: '12px',
+          padding: '4px',
           display: 'flex',
           alignItems: 'stretch',
           justifyContent: 'center',
@@ -2184,12 +2188,12 @@ const EmbeddingPlot = ({
 
         {/* Anomaly legend moved below */}
 
-  {/* Removed aspect ratio controls - now fully automatic */}
+        {/* Removed aspect ratio controls - now fully automatic */}
 
-        <svg 
-          ref={svgRef} 
-          style={{ 
-            width: '100%', 
+        <svg
+          ref={svgRef}
+          style={{
+            width: '100%',
             height: '100%',
             maxWidth: '100%',
             maxHeight: '100%',
@@ -2217,8 +2221,8 @@ const EmbeddingPlot = ({
 
         <Tooltip title={selectedPoints.length === 0 ? "No points selected" : "Clear Selection"}>
           <span>
-            <IconButton 
-              size="small" 
+            <IconButton
+              size="small"
               aria-label="Clear selection"
               onClick={clearSelection}
               disabled={selectedPoints.length === 0}
@@ -2230,8 +2234,8 @@ const EmbeddingPlot = ({
         </Tooltip>
 
         <Tooltip title="Run Anomaly Detection - Highlights anomalous regions">
-          <IconButton 
-            size="small" 
+          <IconButton
+            size="small"
             aria-label="Run anomaly detection"
             onClick={() => {
               console.log('🔘 Anomaly detection button clicked!');
@@ -2243,10 +2247,10 @@ const EmbeddingPlot = ({
               runAnomalyDetection();
             }}
             disabled={anomalyLoading}
-            sx={{ 
-              bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'rgba(59, 130, 246, 0.1)', 
-              '&:hover': { 
-                bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.4)' : 'rgba(59, 130, 246, 0.2)' 
+            sx={{
+              bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'rgba(59, 130, 246, 0.1)',
+              '&:hover': {
+                bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.4)' : 'rgba(59, 130, 246, 0.2)'
               },
               border: '1px solid',
               borderColor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.5)' : 'rgba(59, 130, 246, 0.3)',
@@ -2266,8 +2270,8 @@ const EmbeddingPlot = ({
 
         {anomalyResults && (
           <Tooltip title="Download Anomaly CSV">
-            <IconButton 
-              size="small" 
+            <IconButton
+              size="small"
               aria-label="Download anomaly CSV"
               onClick={downloadAnomalyCSV}
               sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
@@ -2279,13 +2283,13 @@ const EmbeddingPlot = ({
 
         {anomalyResults && (
           <Tooltip title={showAnomalies ? "Hide Anomaly Grid" : "Show Anomaly Grid"}>
-            <IconButton 
-              size="small" 
+            <IconButton
+              size="small"
               aria-label="Toggle anomaly display"
               onClick={() => setShowAnomalies(!showAnomalies)}
-              sx={{ 
-                bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.2)' : 'white', 
-                '&:hover': { bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'grey.100' } 
+              sx={{
+                bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.2)' : 'white',
+                '&:hover': { bgcolor: showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'grey.100' }
               }}
             >
               <Warning fontSize="small" color={showAnomalies ? "error" : "inherit"} />
@@ -2295,13 +2299,13 @@ const EmbeddingPlot = ({
 
         {showAnomalies && anomalyResults && (
           <Tooltip title="Anomaly Detection Help">
-            <IconButton 
-              size="small" 
+            <IconButton
+              size="small"
               aria-label="Anomaly detection help"
               onClick={() => setShowHelpDialog(true)}
-              sx={{ 
-                bgcolor: 'rgba(59, 130, 246, 0.1)', 
-                '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' } 
+              sx={{
+                bgcolor: 'rgba(59, 130, 246, 0.1)',
+                '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' }
               }}
             >
               <Help fontSize="small" color="primary" />
@@ -2316,7 +2320,7 @@ const EmbeddingPlot = ({
             size="small"
             color="error"
             variant="filled"
-            sx={{ 
+            sx={{
               bgcolor: 'rgba(220, 38, 38, 0.9)',
               fontSize: '11px'
             }}
@@ -2325,10 +2329,10 @@ const EmbeddingPlot = ({
       </Box>
 
       {showAnomalies && anomalyResults && anomalyResults.cell_anomalies && (
-        <Box sx={{ 
+        <Box sx={{
           mt: 1.5,
-          display: 'flex', 
-          flexDirection: 'column', 
+          display: 'flex',
+          flexDirection: 'column',
           gap: 0.5,
           bgcolor: 'rgba(255, 255, 255, 0.6)',
           p: 1.5,
@@ -2374,8 +2378,8 @@ const EmbeddingPlot = ({
       {/* External RightSidebar will be rendered by parent next to this plot */}
 
       {/* Help Dialog */}
-      <Dialog 
-        open={showHelpDialog} 
+      <Dialog
+        open={showHelpDialog}
         onClose={() => setShowHelpDialog(false)}
         maxWidth="md"
         fullWidth
@@ -2389,8 +2393,8 @@ const EmbeddingPlot = ({
               📊 What are the colored cells?
             </Typography>
             <Typography variant="body2" paragraph>
-              • <strong>Red cells</strong> = Real overpopulation (significantly more real data than expected)<br/>
-              • <strong>Blue cells</strong> = Synthetic overpopulation (significantly more synthetic data than expected)<br/>
+              • <strong>Red cells</strong> = Real overpopulation (significantly more real data than expected)<br />
+              • <strong>Blue cells</strong> = Synthetic overpopulation (significantly more synthetic data than expected)<br />
               • <strong>Gray cells</strong> = Normal distribution (no significant difference)
             </Typography>
 
@@ -2398,14 +2402,14 @@ const EmbeddingPlot = ({
               📈 How are anomalies detected?
             </Typography>
             <Typography variant="body2" paragraph>
-              • Creates histogram-based grid cells for optimal data distribution<br/>
-              • Calculates global proportion of real vs synthetic data in the entire dataset<br/>
-              • Performs binomial proportion tests in each cell:<br/>
-              &nbsp;&nbsp;&nbsp;&nbsp;- Compares cell's real data proportion to the global proportion<br/>
-              &nbsp;&nbsp;&nbsp;&nbsp;- Uses binomial distribution to test if the difference is statistically significant<br/>
-              &nbsp;&nbsp;&nbsp;&nbsp;- Tests if cell has significantly more real data than expected (real overpopulation)<br/>
-              &nbsp;&nbsp;&nbsp;&nbsp;- Tests if cell has significantly more synthetic data than expected (synthetic overpopulation)<br/>
-              • Applies False Discovery Rate (FDR) correction to control for multiple testing<br/>
+              • Creates histogram-based grid cells for optimal data distribution<br />
+              • Calculates global proportion of real vs synthetic data in the entire dataset<br />
+              • Performs binomial proportion tests in each cell:<br />
+              &nbsp;&nbsp;&nbsp;&nbsp;- Compares cell's real data proportion to the global proportion<br />
+              &nbsp;&nbsp;&nbsp;&nbsp;- Uses binomial distribution to test if the difference is statistically significant<br />
+              &nbsp;&nbsp;&nbsp;&nbsp;- Tests if cell has significantly more real data than expected (real overpopulation)<br />
+              &nbsp;&nbsp;&nbsp;&nbsp;- Tests if cell has significantly more synthetic data than expected (synthetic overpopulation)<br />
+              • Applies False Discovery Rate (FDR) correction to control for multiple testing<br />
               • Colors cells based on statistical significance (p &lt; 0.05 after FDR correction)
             </Typography>
 
@@ -2413,10 +2417,10 @@ const EmbeddingPlot = ({
               📊 Binomial Distribution & Global Proportion
             </Typography>
             <Typography variant="body2" paragraph>
-              • <strong>Global proportion</strong> = Total real data / Total data across entire dataset<br/>
-              • Each cell is tested against this global baseline<br/>
-              • Binomial test asks: "Is this cell's proportion significantly different from global?"<br/>
-              • If cell has 80% real data but global is 50%, binomial test determines if this is significant<br/>
+              • <strong>Global proportion</strong> = Total real data / Total data across entire dataset<br />
+              • Each cell is tested against this global baseline<br />
+              • Binomial test asks: "Is this cell's proportion significantly different from global?"<br />
+              • If cell has 80% real data but global is 50%, binomial test determines if this is significant<br />
               • <strong>Significance</strong> = Unlikely to occur by random chance alone
             </Typography>
 
@@ -2424,9 +2428,9 @@ const EmbeddingPlot = ({
               📊 Statistical Significance
             </Typography>
             <Typography variant="body2" paragraph>
-              • Significant cells (p &lt; 0.05 after FDR correction) are colored<br/>
-              • Non-significant cells remain transparent/gray<br/>
-              • <strong>Red cells</strong> = Significantly more real data than expected<br/>
+              • Significant cells (p &lt; 0.05 after FDR correction) are colored<br />
+              • Non-significant cells remain transparent/gray<br />
+              • <strong>Red cells</strong> = Significantly more real data than expected<br />
               • <strong>Blue cells</strong> = Significantly more synthetic data than expected
             </Typography>
 
@@ -2434,10 +2438,10 @@ const EmbeddingPlot = ({
               💡 Tips
             </Typography>
             <Typography variant="body2" paragraph>
-              • Hover over colored cells for detailed statistics<br/>
-              • Red cells indicate areas where real data dominates<br/>
-              • Blue cells indicate areas where synthetic data dominates<br/>
-              • Download CSV for comprehensive analysis<br/>
+              • Hover over colored cells for detailed statistics<br />
+              • Red cells indicate areas where real data dominates<br />
+              • Blue cells indicate areas where synthetic data dominates<br />
+              • Download CSV for comprehensive analysis<br />
               • System automatically adapts to your dataset characteristics
             </Typography>
           </Box>
