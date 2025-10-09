@@ -144,6 +144,20 @@ export default function RightSidebar({
     return { total: selectedPoints.length, real, synthetic };
   }, [selectedPoints, metadata]);
 
+  // Dataset totals for summary denominators
+  const datasetTotals = useMemo(() => {
+    const labels = metadata?.labels;
+    if (!Array.isArray(labels) || labels.length === 0) {
+      return { total: 0, real: 0, synthetic: 0 };
+    }
+    let real = 0, synthetic = 0;
+    for (const l of labels) {
+      if (l === 'Real') real++;
+      else if (l === 'Synthetic') synthetic++;
+    }
+    return { total: labels.length, real, synthetic };
+  }, [metadata]);
+
   // Build histogram input from selection
   const generateHistogramData = useCallback(() => {
     if (!originalData || !originalData.headers || originalData.headers.length === 0) return null;
@@ -738,16 +752,17 @@ export default function RightSidebar({
 
 
       {/* Selection Summary */}
-      <Box sx={{ ml: 1, mb: 1 }}>
-        <Typography variant="subtitle2" gutterBottom sx={{ fontSize: 12 }}>
-          Selection Summary
-        </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      <Box sx={{ ml: 1, mb: 1 , mt: 1 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Typography variant="body2" sx={{ fontSize: 12 }}>
-            Total Selected: <strong>{selectionSummary.total}</strong>
+            Selected: <strong>{selectionSummary.total}</strong>/<strong>{datasetTotals.total}</strong>
           </Typography>
-          <Typography variant="body2" sx={{ fontSize: 12 }}>Real: <strong>{selectionSummary.real}</strong></Typography>
-          <Typography variant="body2" sx={{ fontSize: 12 }}>Synthetic: <strong>{selectionSummary.synthetic}</strong></Typography>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Real: <strong>{selectionSummary.real}</strong>/<strong>{datasetTotals.real}</strong>
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Synthetic: <strong>{selectionSummary.synthetic}</strong>/<strong>{datasetTotals.synthetic}</strong>
+          </Typography>
         </Box>
       </Box>
 
