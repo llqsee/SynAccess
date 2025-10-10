@@ -505,6 +505,9 @@ function AppContent() {
                               syntheticData={syntheticData?.data || embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data}
                               realHeaders={realData?.headers || embeddingMetadata?.realData?.headers || originalRealData?.headers}
                               syntheticHeaders={syntheticData?.headers || embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers}
+                              embeddingData={embeddingData}
+                              metadata={embeddingMetadata}
+                              selectedPoints={selectedEmbeddingPoints}
                               defaultDataset="combined"
                               maxColumns={20}
                               sampleSize={2000}

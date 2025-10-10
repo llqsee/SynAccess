@@ -7,6 +7,9 @@ const CorrelationPlot = ({
   syntheticData,
   realHeaders,
   syntheticHeaders,
+  embeddingData,
+  metadata,
+  selectedPoints,
   maxColumns = 20,
   sampleSize = 2000
 }) => {
@@ -20,6 +23,45 @@ const CorrelationPlot = ({
   const synthScatterRef = useRef(null);
 
   const [selectedPair, setSelectedPair] = useState(null); // {i, j, xName, yName}
+
+  // Map embedding indices to original data row indices per class for highlighting
+  const classRanks = useMemo(() => {
+    if (!metadata?.labels || !Array.isArray(embeddingData)) return null;
+    const labels = metadata.labels;
+    if (!Array.isArray(labels) || labels.length !== embeddingData.length) return null;
+    const realRank = new Array(labels.length).fill(0);
+    const synthRank = new Array(labels.length).fill(0);
+    let rc = 0, sc = 0;
+    for (let i = 0; i < labels.length; i++) {
+      const lab = labels[i];
+      if (lab === 'Real') {
+        rc += 1; realRank[i] = rc; synthRank[i] = sc;
+      } else if (lab === 'Synthetic') {
+        sc += 1; synthRank[i] = sc; realRank[i] = rc;
+      } else {
+        realRank[i] = rc; synthRank[i] = sc;
+      }
+    }
+    return { realRank, synthRank };
+  }, [metadata, embeddingData]);
+
+  const selectedRowSets = useMemo(() => {
+    const realSet = new Set();
+    const synthSet = new Set();
+    if (!Array.isArray(selectedPoints) || !classRanks || !metadata?.labels) return { realSet, synthSet };
+    for (const embIdx of selectedPoints) {
+      if (embIdx < 0 || embIdx >= metadata.labels.length) continue;
+      const lab = metadata.labels[embIdx];
+      if (lab === 'Real') {
+        const rank = classRanks.realRank[embIdx] - 1; // 0-based row index
+        if (rank >= 0) realSet.add(rank);
+      } else if (lab === 'Synthetic') {
+        const rank = classRanks.synthRank[embIdx] - 1;
+        if (rank >= 0) synthSet.add(rank);
+      }
+    }
+    return { realSet, synthSet };
+  }, [selectedPoints, classRanks, metadata]);
 
   const hasData = (arr) => Array.isArray(arr) && arr.length > 0 && Array.isArray(arr[0]);
 
@@ -186,12 +228,12 @@ const CorrelationPlot = ({
           } else if (ti === 'categorical' && tj === 'categorical') {
             val = cramersV(rows, indices[i], indices[j]);
           } else {
-            // categorical-numeric (either order)
             const catIdx = ti === 'categorical' ? indices[i] : indices[j];
             const numIdx = ti === 'numeric' ? indices[i] : indices[j];
             const { eta } = correlationRatioEta(rows, catIdx, numIdx);
             val = eta; // in [0,1]
           }
+          // fill both upper and lower triangle
           M[i][j] = val;
           M[j][i] = val;
         }
@@ -203,11 +245,17 @@ const CorrelationPlot = ({
     const sCorr = computeMatrix(synthRows, synthIndices, limitedTypes);
 
     // Difference matrix (synthetic - real)
-    const dCorr = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => {
-      const rv = (rCorr[i] && rCorr[i][j] != null) ? rCorr[i][j] : 0;
-      const sv = (sCorr[i] && sCorr[i][j] != null) ? sCorr[i][j] : 0;
-      return sv - rv;
-    }));
+    const dCorr = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) {
+      dCorr[i][i] = 0;
+      for (let j = i + 1; j < n; j++) {
+        const rv = (rCorr[i] && rCorr[i][j] != null) ? rCorr[i][j] : 0;
+        const sv = (sCorr[i] && sCorr[i][j] != null) ? sCorr[i][j] : 0;
+        const diff = sv - rv;
+        dCorr[i][j] = diff;
+        dCorr[j][i] = diff;
+      }
+    }
 
     const metricAt = (i, j) => {
       const ti = limitedTypes[i];
@@ -218,47 +266,41 @@ const CorrelationPlot = ({
     };
 
     return { cols: limitedHeaders, colTypes: limitedTypes, realCorr: rCorr, synthCorr: sCorr, diffCorr: dCorr, metricAt, realIndices, synthIndices };
-  }, [realData, syntheticData, realHeaders, syntheticHeaders, commonHeaders, maxColumns, sampleSize]);
+  }, [realData, syntheticData, realHeaders, syntheticHeaders, maxColumns, sampleSize, commonHeaders]);
 
-  const drawHeatmap = (container, z, labels, options) => {
+  // Heatmap helper for correlation matrices (lower triangle only)
+  const drawHeatmap = (container, matrix, labels, options) => {
+    if (!container || !Array.isArray(matrix) || matrix.length === 0) return;
     const {
       title = '',
       width = 340,
       height = 340,
       margin = { top: 40, right: 20, bottom: 70, left: 70 },
-      colors = d3.interpolateRdBu,
       zmin = -1,
       zmax = 1,
-      getMetricForPair = null,
+      getMetricForPair = (i, j) => 'Value',
       onCellClick = null,
       selectedPair = null
     } = options || {};
 
-    if (!container) return;
     const sel = d3.select(container);
     sel.selectAll('*').remove();
 
-    const svg = sel.append('svg')
-      .attr('width', width)
-      .attr('height', height);
-
+    const svg = sel.append('svg').attr('width', width).attr('height', height);
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
-
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const n = labels.length;
-    if (!z || n === 0) return;
 
     const x = d3.scaleBand().domain(labels).range([0, innerWidth]).padding(0);
     const y = d3.scaleBand().domain(labels).range([0, innerHeight]).padding(0);
-    const color = d3.scaleSequential(colors).domain([zmax, zmin]); // reversed for RdBu
+    const color = d3.scaleSequential(d3.interpolateRdBu).domain([zmax, zmin]);
 
-    // Cells: render only lower triangle (including diagonal)
+    // Build lower-triangle data
     const data = [];
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < labels.length; i++) {
       for (let j = 0; j <= i; j++) {
-        data.push({ x: labels[j], y: labels[i], v: z[i][j], i, j }); // y=i, x=j
+        const v = (matrix[i] && matrix[i][j] != null) ? matrix[i][j] : (i === j ? 1 : 0);
+        data.push({ i, j, x: labels[j], y: labels[i], v });
       }
     }
 
@@ -271,45 +313,46 @@ const CorrelationPlot = ({
       .attr('y', d => y(d.y))
       .attr('width', x.bandwidth())
       .attr('height', y.bandwidth())
-      .attr('fill', d => color(d.v))
-      .style('cursor', d => (d.i !== d.j && typeof onCellClick === 'function') ? 'pointer' : 'default')
-      .on('click', function(event, d) {
-        if (!onCellClick || d.i === d.j) return;
-        onCellClick(d.i, d.j);
-      })
-      .on('mouseover', function (event, d) {
-        const metric = typeof getMetricForPair === 'function' ? getMetricForPair(d.i, d.j) : 'Value';
-        const tip = d3.select('body').append('div')
-          .attr('class', 'corr-tooltip')
-          .style('position', 'absolute')
-          .style('background', 'rgba(0,0,0,0.85)')
-          .style('color', '#fff')
-          .style('padding', '6px 8px')
-          .style('border-radius', '4px')
-          .style('font-size', '12px')
-          .style('pointer-events', 'none')
-          .style('z-index', '1000')
-          .html(`<b>${d.y}</b> vs <b>${d.x}</b><br/>${metric}: ${d.v.toFixed(3)}`);
-        tip
-          .style('left', `${event.pageX + 10}px`)
-          .style('top', `${event.pageY + 10}px`);
-      })
-      .on('mousemove', function (event) {
-        d3.selectAll('.corr-tooltip')
-          .style('left', `${event.pageX + 10}px`)
-          .style('top', `${event.pageY + 10}px`);
-      })
-      .on('mouseout', function () {
-        d3.selectAll('.corr-tooltip').remove();
-      });
+      .attr('fill', d => color(d.v));
 
-    // Selection highlight overlays (do not capture events)
+    // Interactions
+    cells.on('click', (event, d) => {
+      if (typeof onCellClick === 'function' && d.i !== d.j) onCellClick(d.i, d.j);
+    })
+    .on('mouseover', function (event, d) {
+      const metric = getMetricForPair(d.i, d.j);
+      d3.select(this).attr('stroke', '#111827').attr('stroke-width', 1);
+      // Tooltip
+      const tip = d3.select('body')
+        .append('div')
+        .attr('class', 'corr-tooltip')
+        .style('position', 'absolute')
+        .style('background', 'rgba(0,0,0,0.7)')
+        .style('color', '#fff')
+        .style('padding', '6px 8px')
+        .style('border-radius', '4px')
+        .style('font-size', '12px')
+        .style('pointer-events', 'none')
+        .style('z-index', '1000')
+        .html(`<b>${d.y}</b> vs <b>${d.x}</b><br/>${metric}: ${Number.isFinite(d.v) ? d.v.toFixed(3) : 'NaN'}`);
+      tip.style('left', `${event.pageX + 10}px`).style('top', `${event.pageY + 10}px`);
+    })
+    .on('mousemove', function (event) {
+      d3.selectAll('.corr-tooltip')
+        .style('left', `${event.pageX + 10}px`)
+        .style('top', `${event.pageY + 10}px`);
+    })
+    .on('mouseout', function () {
+      d3.select(this).attr('stroke', 'none');
+      d3.selectAll('.corr-tooltip').remove();
+    });
+
+    // Selection highlight overlay
     if (selectedPair && Number.isInteger(selectedPair.i) && Number.isInteger(selectedPair.j)) {
       const iSel = selectedPair.i;
       const jSel = selectedPair.j;
       const xLabel = labels[jSel];
       const yLabel = labels[iSel];
-
       g.append('rect')
         .attr('x', x(xLabel))
         .attr('y', y(yLabel))
@@ -321,7 +364,7 @@ const CorrelationPlot = ({
         .style('pointer-events', 'none');
     }
 
-    // Axes labels
+    // Axes
     const xAxis = d3.axisBottom(x).tickSize(0);
     const yAxis = d3.axisLeft(y).tickSize(0);
     g.append('g')
@@ -467,7 +510,9 @@ const CorrelationPlot = ({
       color = '#1f77b4',
       pointRadius = 2,
       xLabel = 'x',
-      yLabel = 'y'
+      yLabel = 'y',
+      highlightIndices = new Set(),
+      getRowIndex = (d) => d.rowIndex
     } = options || {};
 
     const sel = d3.select(container);
@@ -503,9 +548,10 @@ const CorrelationPlot = ({
       .style('fill', '#374151')
       .text(yLabel);
 
+    // Base points
     g.append('g')
       .attr('fill', color)
-      .attr('fill-opacity', 0.7)
+      .attr('fill-opacity', 0.5)
       .selectAll('circle')
       .data(points)
       .enter()
@@ -513,6 +559,22 @@ const CorrelationPlot = ({
       .attr('cx', d => x(d.x))
       .attr('cy', d => y(d.y))
       .attr('r', pointRadius);
+
+    // Highlighted points overlay
+    const highlighted = points.filter(d => highlightIndices.has(getRowIndex(d)));
+    if (highlighted.length > 0) {
+      g.append('g')
+        .attr('fill', 'none')
+        .attr('stroke', '#ef4444')
+        .attr('stroke-width', 1.2)
+        .selectAll('circle')
+        .data(highlighted)
+        .enter()
+        .append('circle')
+        .attr('cx', d => x(d.x))
+        .attr('cy', d => y(d.y))
+        .attr('r', Math.max(pointRadius + 1.5, 3));
+    }
 
     svg.append('text')
       .attr('x', margin.left + innerWidth / 2)
@@ -524,8 +586,8 @@ const CorrelationPlot = ({
       .text(title);
   };
 
-  // Violin drawing helper (vertical violins per category)
-  const drawViolin = (container, categories, groups, yDomain, options) => {
+  // Beeswarm drawing helper (jittered points per category)
+  const drawBeeswarm = (container, categories, groups, yDomain, options) => {
     if (!container) return;
     const {
       title = '',
@@ -533,9 +595,10 @@ const CorrelationPlot = ({
       height = 340,
       margin = { top: 36, right: 24, bottom: 60, left: 50 },
       color = '#1f77b4',
-      gridCount = 60,
       xLabel = 'Category',
-      yLabel = 'Value'
+      yLabel = 'Value',
+      selectedGroups = new Map(),
+      pointRadius = 2.5
     } = options || {};
 
     const sel = d3.select(container);
@@ -570,56 +633,69 @@ const CorrelationPlot = ({
       .style('fill', '#374151')
       .text(yLabel);
 
-    // KDE helpers
-    const gaussian = z => Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
-    const kde = (grid, samples, bandwidth) => {
-      if (!samples || samples.length === 0 || bandwidth <= 0) return grid.map(() => 0);
-      return grid.map(yv => {
-        let sum = 0;
-        for (let s = 0; s < samples.length; s++) {
-          sum += gaussian((yv - samples[s]) / bandwidth);
+    // Jitter horizontally within each category to avoid overlap
+    const maxHalfWidth = Math.max(4, (x.bandwidth() / 2) * 0.95);
+    const getJitter = (vals) => {
+      const placed = [];
+      const r = Math.max(pointRadius, 2);
+      const offsets = new Array(vals.length).fill(0);
+      const yPix = vals.map(v => y(v));
+      for (let i = 0; i < vals.length; i++) {
+        let ox = 0;
+        let step = r;
+        let iter = 0;
+        const maxIter = 200;
+        const fits = (testX) => placed.every(p => Math.hypot(p.x - testX, p.y - yPix[i]) >= 2 * r);
+        if (!fits(0)) {
+          while (iter++ < maxIter) {
+            const candidate = ((iter % 2 === 0) ? 1 : -1) * Math.ceil(iter / 2) * step;
+            if (Math.abs(candidate) > maxHalfWidth - r) break;
+            if (fits(candidate)) { ox = candidate; break; }
+          }
         }
-        return sum / (samples.length * bandwidth);
-      });
-    };
-    const bandwidthFor = (vals) => {
-      if (!vals || vals.length < 2) return 1;
-      const n = vals.length;
-      let mean = 0; for (const v of vals) mean += v; mean /= n;
-      let varSum = 0; for (const v of vals) { const d = v - mean; varSum += d * d; }
-      const sigma = Math.sqrt(varSum / (n - 1));
-      const h = 1.06 * sigma * Math.pow(n, -1/5);
-      return h > 0 ? h : (sigma || 1) * 0.3;
+        placed.push({ x: ox, y: yPix[i] });
+        offsets[i] = ox;
+      }
+      return offsets;
     };
 
-    const grid = d3.range(0, gridCount).map(t => yDomain[0] + (yDomain[1] - yDomain[0]) * (t / (gridCount - 1)));
-    // Compute densities per category
-    const densities = categories.map(cat => {
+    categories.forEach(cat => {
       const vals = groups.get(cat) || [];
-      const bw = bandwidthFor(vals);
-      return kde(grid, vals, bw);
-    });
-    const maxDensity = d3.max(densities.flat()) || 1;
-    const halfWidth = Math.max(4, (x.bandwidth() / 2) * 0.95);
-    const wScale = d3.scaleLinear().domain([0, maxDensity]).range([0, halfWidth]);
-
-    const area = d3.area()
-      .x0((d) => -wScale(d.density))
-      .x1((d) => wScale(d.density))
-      .y(d => y(d.y));
-
-    categories.forEach((cat, idx) => {
-      const dens = densities[idx];
-      const data = grid.map((yv, i) => ({ y: yv, density: dens[i] }));
       const gx = x(cat) + x.bandwidth() / 2;
-      const grp = g.append('g').attr('transform', `translate(${gx},0)`);
-      grp.append('path')
-        .datum(data)
-        .attr('d', area)
+      const offsets = getJitter(vals);
+      const selVals = new Set((selectedGroups.get(cat) || []).map(v => +v));
+
+      // Base points
+      g.append('g')
+        .attr('transform', `translate(${gx},0)`)
         .attr('fill', color)
-        .attr('fill-opacity', 0.5)
-        .attr('stroke', color)
-        .attr('stroke-width', 0.8);
+        .attr('fill-opacity', 0.6)
+        .selectAll('circle')
+        .data(vals.map((v, idx) => ({ v, ox: offsets[idx] })))
+        .enter()
+        .append('circle')
+        .attr('cx', d => d.ox)
+        .attr('cy', d => y(d.v))
+        .attr('r', pointRadius);
+
+      // Highlight selected points in this category
+      const highlighted = vals
+        .map((v, idx) => ({ v, ox: offsets[idx] }))
+        .filter(d => selVals.has(+d.v));
+      if (highlighted.length > 0) {
+        g.append('g')
+          .attr('transform', `translate(${gx},0)`)
+          .attr('fill', 'none')
+          .attr('stroke', '#ef4444')
+          .attr('stroke-width', 1.2)
+          .selectAll('circle')
+          .data(highlighted)
+          .enter()
+          .append('circle')
+          .attr('cx', d => d.ox)
+          .attr('cy', d => y(d.v))
+          .attr('r', Math.max(pointRadius + 1.5, 3));
+      }
     });
 
     svg.append('text')
@@ -629,7 +705,7 @@ const CorrelationPlot = ({
       .style('font-size', '12px')
       .style('font-weight', 600)
       .style('fill', '#374151')
-      .text(title);
+    .text(title);
   };
 
   // Category-category heatmap helper
@@ -749,7 +825,7 @@ const CorrelationPlot = ({
         for (let r = 0; r < rows.length; r++) {
           const vx = parseNum(rows[r]?.[xi]);
           const vy = parseNum(rows[r]?.[yi]);
-          if (isFiniteNum(vx) && isFiniteNum(vy)) pts.push({ x: vx, y: vy });
+          if (isFiniteNum(vx) && isFiniteNum(vy)) pts.push({ x: vx, y: vy, rowIndex: r });
         }
         return pts;
       };
@@ -780,13 +856,13 @@ const CorrelationPlot = ({
           realScatterRef.current,
           realPts,
           domains,
-          { title: 'Real', width: perWidth, height: perHeight, color: '#2563eb', xLabel: selectedPair.xName, yLabel: selectedPair.yName }
+          { title: 'Real', width: perWidth, height: perHeight, color: '#2563eb', xLabel: selectedPair.xName, yLabel: selectedPair.yName, highlightIndices: selectedRowSets.realSet }
         );
         drawScatter(
           synthScatterRef.current,
           synthPts,
           domains,
-          { title: 'Synthetic', width: perWidth, height: perHeight, color: '#10b981', xLabel: selectedPair.xName, yLabel: selectedPair.yName }
+          { title: 'Synthetic', width: perWidth, height: perHeight, color: '#10b981', xLabel: selectedPair.xName, yLabel: selectedPair.yName, highlightIndices: selectedRowSets.synthSet }
         );
         return;
       }
@@ -817,9 +893,27 @@ const CorrelationPlot = ({
           }
           return map;
         };
+        const buildSelectedGroups = (rows, catIdx, numIdx, selectedSet) => {
+          const map = new Map();
+          for (let r = 0; r < rows.length; r++) {
+            if (!selectedSet.has(r)) continue;
+            const cRaw = rows[r]?.[catIdx];
+            const yRaw = rows[r]?.[numIdx];
+            if (cRaw === null || cRaw === undefined || cRaw === '') continue;
+            const yv = parseNum(yRaw);
+            if (!isFiniteNum(yv)) continue;
+            const key = String(cRaw);
+            const arr = map.get(key) || [];
+            arr.push(yv);
+            map.set(key, arr);
+          }
+          return map;
+        };
 
         const realGroups = buildGroups(realRows, catIdxReal, numIdxReal);
         const synthGroups = buildGroups(synthRows, catIdxSynth, numIdxSynth);
+        const realSelGroups = buildSelectedGroups(realRows, catIdxReal, numIdxReal, selectedRowSets.realSet);
+        const synthSelGroups = buildSelectedGroups(synthRows, catIdxSynth, numIdxSynth, selectedRowSets.synthSet);
         const allCats = Array.from(new Set([...
           Array.from(realGroups.keys()), ...Array.from(synthGroups.keys())
         ])).sort();
@@ -844,19 +938,19 @@ const CorrelationPlot = ({
         // Draw two violins using same categories and yDomain
         const xLab = catIsRow ? selectedPair.yName : selectedPair.xName;
         const yLab = catIsRow ? selectedPair.xName : selectedPair.yName;
-        drawViolin(
+        drawBeeswarm(
           realScatterRef.current,
           allCats,
           realGroups,
           yDomain,
-          { title: 'Real', width: perWidth, height: perHeight, color: '#2563eb', xLabel: xLab, yLabel: yLab }
+          { title: 'Real', width: perWidth, height: perHeight, color: '#2563eb', xLabel: xLab, yLabel: yLab, selectedGroups: realSelGroups, pointRadius: 2.5 }
         );
-        drawViolin(
+        drawBeeswarm(
           synthScatterRef.current,
           allCats,
           synthGroups,
           yDomain,
-          { title: 'Synthetic', width: perWidth, height: perHeight, color: '#10b981', xLabel: xLab, yLabel: yLab }
+          { title: 'Synthetic', width: perWidth, height: perHeight, color: '#10b981', xLabel: xLab, yLabel: yLab, selectedGroups: synthSelGroups, pointRadius: 2.5 }
         );
         return;
       }
@@ -920,7 +1014,7 @@ const CorrelationPlot = ({
     render();
     window.addEventListener('resize', render);
     return () => window.removeEventListener('resize', render);
-  }, [selectedPair, cols, colTypes, realData, syntheticData, realIndices, synthIndices]);
+  }, [selectedPair, cols, colTypes, realData, syntheticData, realIndices, synthIndices, selectedRowSets]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
