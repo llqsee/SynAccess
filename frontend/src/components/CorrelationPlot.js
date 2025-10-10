@@ -371,13 +371,13 @@ const CorrelationPlot = ({
       .attr('transform', `translate(0, ${innerHeight})`)
       .call(xAxis)
       .selectAll('text')
-      .style('font-size', '10px')
+      .style('font-size', '9px')
       .style('text-anchor', 'end')
       .attr('transform', 'rotate(-45)');
     g.append('g')
       .call(yAxis)
       .selectAll('text')
-      .style('font-size', '10px');
+      .style('font-size', '9px');
     g.selectAll('.domain').remove();
     g.selectAll('.tick line').remove();
 
@@ -445,7 +445,7 @@ const CorrelationPlot = ({
       .attr('text-anchor', 'middle')
       .style('font-size', '11px')
       .style('fill', '#374151')
-      .text('Association');
+      .text('Legend');
   };
 
   useEffect(() => {
@@ -720,7 +720,10 @@ const CorrelationPlot = ({
       zmin = 0,
       zmax = 1,
       xLabel = 'X',
-      yLabel = 'Y'
+      yLabel = 'Y',
+      selectedTable = null,
+      labelColor = '#ef4444',
+      showZeroSelected = false
     } = options || {};
 
     const sel = d3.select(container);
@@ -738,7 +741,9 @@ const CorrelationPlot = ({
     const data = [];
     for (let i = 0; i < rowCats.length; i++) {
       for (let j = 0; j < colCats.length; j++) {
-        data.push({ x: colCats[j], y: rowCats[i], v: table[i][j] || 0 });
+        const v = table?.[i]?.[j] || 0;
+        const sel = selectedTable?.[i]?.[j] || 0;
+        data.push({ i, j, x: colCats[j], y: rowCats[i], v, sel });
       }
     }
     g.selectAll('rect.cell')
@@ -751,6 +756,23 @@ const CorrelationPlot = ({
       .attr('width', x.bandwidth())
       .attr('height', y.bandwidth())
       .attr('fill', d => color(d.v));
+
+    // Numeric labels in each cell (show number of selected points)
+    const labelData = data.filter(d => showZeroSelected ? true : d.sel > 0);
+    g.selectAll('text.cell-label')
+      .data(labelData)
+      .enter()
+      .append('text')
+      .attr('class', 'cell-label')
+      .attr('x', d => x(d.x) + x.bandwidth() / 2)
+      .attr('y', d => y(d.y) + y.bandwidth() / 2)
+      .attr('text-anchor', 'middle')
+      .attr('dy', '0.35em')
+      .style('font-size', '14px')
+      .style('font-weight', 600)
+      .style('pointer-events', 'none')
+      .style('fill', labelColor)
+      .text(d => `${d.sel}`);
 
     const xAxis = d3.axisBottom(x).tickSize(0);
     const yAxis = d3.axisLeft(y).tickSize(0);
@@ -987,9 +1009,27 @@ const CorrelationPlot = ({
         }
         return table;
       };
+      const buildSelectedTable = (rows, yIdx, xIdx, rCats, cCats, selectedSet) => {
+        const rMap = new Map(rCats.map((c, k) => [c, k]));
+        const cMap = new Map(cCats.map((c, k) => [c, k]));
+        const table = Array.from({ length: rCats.length }, () => new Array(cCats.length).fill(0));
+        for (let r = 0; r < rows.length; r++) {
+          if (!selectedSet.has(r)) continue;
+          const ry = rows[r]?.[yIdx];
+          const rx = rows[r]?.[xIdx];
+          if (ry === null || ry === undefined || ry === '' || rx === null || rx === undefined || rx === '') continue;
+          const yi = rMap.get(String(ry));
+          const xi = cMap.get(String(rx));
+          if (yi === undefined || xi === undefined) continue;
+          table[yi][xi] += 1;
+        }
+        return table;
+      };
 
-      const realTable = buildTable(realRows, yIdxReal, xIdxReal, rowCats, colCats);
-      const synthTable = buildTable(synthRows, yIdxSynth, xIdxSynth, rowCats, colCats);
+  const realTable = buildTable(realRows, yIdxReal, xIdxReal, rowCats, colCats);
+  const synthTable = buildTable(synthRows, yIdxSynth, xIdxSynth, rowCats, colCats);
+  const realSelTable = buildSelectedTable(realRows, yIdxReal, xIdxReal, rowCats, colCats, selectedRowSets.realSet);
+  const synthSelTable = buildSelectedTable(synthRows, yIdxSynth, xIdxSynth, rowCats, colCats, selectedRowSets.synthSet);
       const zmax = Math.max(
         d3.max(realTable.flat()) || 0,
         d3.max(synthTable.flat()) || 0,
@@ -1000,14 +1040,14 @@ const CorrelationPlot = ({
         rowCats,
         colCats,
         realTable,
-        { title: 'Real', width: perWidth, height: perHeight, zmin: 0, zmax, xLabel: selectedPair.xName, yLabel: selectedPair.yName }
+        { title: 'Real', width: perWidth, height: perHeight, zmin: 0, zmax, xLabel: selectedPair.xName, yLabel: selectedPair.yName, selectedTable: realSelTable, labelColor: '#ef4444' }
       );
       drawCatHeatmap(
         synthScatterRef.current,
         rowCats,
         colCats,
         synthTable,
-        { title: 'Synthetic', width: perWidth, height: perHeight, zmin: 0, zmax, xLabel: selectedPair.xName, yLabel: selectedPair.yName }
+        { title: 'Synthetic', width: perWidth, height: perHeight, zmin: 0, zmax, xLabel: selectedPair.xName, yLabel: selectedPair.yName, selectedTable: synthSelTable, labelColor: '#ef4444' }
       );
     };
 
