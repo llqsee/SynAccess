@@ -417,8 +417,11 @@ const EmbeddingPlot = ({
     // Get device pixel ratio for high-DPI displays
     const devicePixelRatio = window.devicePixelRatio || 1;
 
-    // Apply intelligent sampling for large datasets (now includes validation)
-    const { sampledData, sampledLabels, indexMap } = sampleData(data, metadata.labels, 8000);
+  // Apply intelligent sampling for large datasets (now includes validation)
+  // If the total points are <= 10,000, show all points to avoid 50/50 downsampling artifacts
+  const totalPoints = data.length;
+  const samplingCap = totalPoints <= 10000 ? totalPoints : 10000;
+  const { sampledData, sampledLabels, indexMap } = sampleData(data, metadata.labels, samplingCap);
 
 
 
