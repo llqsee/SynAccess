@@ -408,11 +408,7 @@ const EmbeddingPlot = ({
     // Calculate responsive plot area based on sidebar state
     const { plotWidth, plotHeight } = calculatePlotDimensions(containerWidth, containerHeight, true);
 
-    // Early return if dimensions are too small
-    if (plotWidth < 350 || plotHeight < 280) {
-      console.warn('Container too small for embedding plot');
-      return;
-    }
+    // Allow rendering at smaller sizes too; inner dimension check below ensures valid rendering area
 
     // Get device pixel ratio for high-DPI displays
     const devicePixelRatio = window.devicePixelRatio || 1;
@@ -445,12 +441,12 @@ const EmbeddingPlot = ({
     const effectivePlotHeight = plotHeight * devicePixelRatio;
 
     // Advanced point sizing based on dataset size and density (no need to multiply by devicePixelRatio since we're scaling the group)
-    const basePointSize = plotWidth < 600 ? 0.8 : 1.2;
+  const basePointSize = plotWidth < 400 ? 0.7 : plotWidth < 800 ? 0.9 : 1.2;
     const densityFactor = Math.max(0.3, Math.min(1.5, 1000 / Math.sqrt(numPoints)));
     const adjustedPointSize = basePointSize * densityFactor;
 
     // Adaptive opacity based on point density
-    const baseOpacity = 0.5;
+  const baseOpacity = plotWidth < 400 ? 0.45 : 0.5;
     const opacityFactor = Math.max(0.4, Math.min(0.9, 800 / Math.sqrt(numPoints)));
     const adjustedOpacity = baseOpacity * opacityFactor;
 
@@ -473,19 +469,12 @@ const EmbeddingPlot = ({
     const scaledPlotWidth = plotWidth * devicePixelRatio;
     const scaledPlotHeight = plotHeight * devicePixelRatio;
 
-    // Optimized margins to maximize plot area while preventing overshooting
+    // Minimal margins so the scatter uses nearly the full div
     const baseMargin = {
-      top: Math.max(30, Math.min(50, plotHeight * 0.06)), // Increased top margin for y-axis
-      // Right margin for legend - optimized for sidebar state
-      right: shouldShowSidebar ?
-        Math.max(100, Math.min(140, plotWidth * 0.15)) :
-        Math.max(140, Math.min(180, plotWidth * 0.20)),
-      // Aggressive bottom margin to prevent x-axis overshooting
-      bottom: Math.max(80, Math.min(100, plotHeight * 0.15)), // Slightly reduced bottom margin
-      // Left margin for y-axis labels - increased for visibility when sidebar is present
-      left: shouldShowSidebar ?
-        Math.max(50, Math.min(80, plotWidth * 0.12)) :
-        Math.max(60, Math.min(80, plotWidth * 0.12))
+      top: 8,
+      right: 8,
+      bottom: 8,
+      left: 8
     };
 
     const margin = {
@@ -499,9 +488,19 @@ const EmbeddingPlot = ({
     const innerWidth = plotWidth - (margin.left / devicePixelRatio) - (margin.right / devicePixelRatio);
     const innerHeight = plotHeight - (margin.top / devicePixelRatio) - (margin.bottom / devicePixelRatio);
 
-    // Ensure we have positive dimensions
+    // Ensure we have positive dimensions; retry once using client sizes as fallback
     if (innerWidth <= 0 || innerHeight <= 0) {
-      return;
+      const c = containerRef.current;
+      if (c) {
+        const w = c.clientWidth || plotWidth;
+        const h = c.clientHeight || plotHeight;
+        if (w > 0 && h > 0) {
+          svg.attr("viewBox", `0 0 ${w * devicePixelRatio} ${h * devicePixelRatio}`)
+             .style("width", `${w}px`)
+             .style("height", `${h}px`);
+        }
+      }
+      if (innerWidth <= 0 || innerHeight <= 0) return;
     }
 
     // Apply scale transform on the main group to account for devicePixelRatio
@@ -516,28 +515,15 @@ const EmbeddingPlot = ({
     const x = sampledData.map(d => d[0]);
     const y = sampledData.map(d => d[1]);
 
-    // Add aggressive padding to scales to ensure points stay well within bounds
-    const xExtent = d3.extent(x);
-    const yExtent = d3.extent(y);
+  // Compute exact data extents (no padding) for consistent scales pre/post anomaly detection
+  const xExtent = d3.extent(x);
+  const yExtent = d3.extent(y);
 
-    // Calculate the actual data range
-    const xRange = xExtent[1] - xExtent[0];
-    const yRange = yExtent[1] - yExtent[0];
-
-    // Add substantial padding to ensure points stay within bounds
-    const xPadding = xRange * 0.20; // Increased to 20% padding
-    const yPadding = yRange * 0.20; // Increased to 20% padding
-
-    // Ensure we have a minimum padding even for small ranges
-    const minPadding = 1.0; // Increased minimum padding in data units
-    const finalXPadding = Math.max(xPadding, minPadding);
-    const finalYPadding = Math.max(yPadding, minPadding);
-
-    // Align plot domains with backend grid bounds when anomalies are shown
-    let xDomainMin = xExtent[0] - finalXPadding;
-    let xDomainMax = xExtent[1] + finalXPadding;
-    let yDomainMin = yExtent[0] - finalYPadding;
-    let yDomainMax = yExtent[1] + finalYPadding;
+  // Default to exact extents
+  let xDomainMin = xExtent[0];
+  let xDomainMax = xExtent[1];
+  let yDomainMin = yExtent[0];
+  let yDomainMax = yExtent[1];
 
     if (anomalyResults?.grid_info?.bounds) {
       const gb = anomalyResults.grid_info.bounds;
@@ -556,121 +542,14 @@ const EmbeddingPlot = ({
       .domain([yDomainMin, yDomainMax])
       .range([innerHeight, 0]);
 
-    // Only "nice" when NOT using backend grid bounds
-    if (!(anomalyResults?.grid_info?.bounds)) {
-      xScale.nice();
-      yScale.nice();
-    }
-
-    // Validate that all data points fall within the scale domains
-    // When using backend grid bounds, avoid auto-adjusting domains
-    if (!(anomalyResults?.grid_info?.bounds)) {
-      const xDomain = xScale.domain();
-      const yDomain = yScale.domain();
-      const minX = Math.min(...x);
-      const maxX = Math.max(...x);
-      const minY = Math.min(...y);
-      const maxY = Math.max(...y);
-      if (minX < xDomain[0] || maxX > xDomain[1]) {
-        console.warn('X-axis data points outside domain, adjusting scale');
-        xScale.domain([minX - finalXPadding, maxX + finalXPadding]);
-      }
-      if (minY < yDomain[0] || maxY > yDomain[1]) {
-        console.warn('Y-axis data points outside domain, adjusting scale');
-        yScale.domain([minY - finalYPadding, maxY + finalYPadding]);
-      }
-    }
+    // Do not apply nice() or auto-adjustments to keep consistent scales
 
     // Enhanced color scheme
     const colorScale = d3.scaleOrdinal()
       .domain(["Real", "Synthetic"])
       .range(["#2563eb", "#dc2626"]);
 
-    // Calculate responsive font sizes and spacing
-    const baseFontSize = Math.max(10, Math.min(14, plotWidth / 60));
-    const labelFontSize = Math.max(12, Math.min(16, plotWidth / 50));
-    const axisSpacing = Math.max(30, Math.min(50, plotHeight / 15));
-
-    // Add axes with proper tick formatting
-    const xAxis = g.append("g")
-      .attr("transform", `translate(0,${innerHeight})`)
-      .attr("class", "axis x-axis")
-      .style("shape-rendering", "crispEdges")
-      .call(d3.axisBottom(xScale)
-        .ticks(Math.max(4, Math.min(8, Math.floor(plotWidth / 100))))
-        .tickFormat(d3.format(".2f")));
-
-    // X-axis label with better positioning
-    xAxis.append("text")
-      .attr("x", innerWidth / 2)
-      .attr("y", axisSpacing + 5) // Increased spacing from axis
-      .attr("text-anchor", "middle")
-      .attr("fill", "#1f2937")
-      .attr("font-weight", "600")
-      .style("font-size", `${labelFontSize}px`)
-      .style("font-family", "system-ui, -apple-system, BlinkMacSystemFont, sans-serif")
-      .style("text-rendering", "optimizeLegibility")
-      .text(`${(metadata?.method || 'Embedding').toUpperCase()} Component 1`);
-
-    const yAxis = g.append("g")
-      .attr("class", "axis y-axis")
-      .style("shape-rendering", "crispEdges")
-      .call(d3.axisLeft(yScale)
-        .ticks(Math.max(4, Math.min(8, Math.floor(plotHeight / 80))))
-        .tickFormat(d3.format(".2f")));
-
-    // Y-axis label with better positioning
-    yAxis.append("text")
-      .attr("transform", `rotate(-90)`)
-      .attr("y", shouldShowSidebar ? -axisSpacing - 5 : -axisSpacing - 10)
-      .attr("x", -innerHeight / 2)
-      .attr("text-anchor", "middle")
-      .attr("fill", "#1f2937")
-      .attr("font-weight", "600")
-      .style("font-size", `${labelFontSize}px`)
-      .style("font-family", "system-ui, -apple-system, BlinkMacSystemFont, sans-serif")
-      .style("text-rendering", "optimizeLegibility")
-      .text(`${(metadata?.method || 'Embedding').toUpperCase()} Component 2`);
-
-    // Style axes with better visibility
-    svg.selectAll(".axis line, .axis path")
-      .style("stroke", "#d1d5db")
-      .style("stroke-width", "1px")
-      .style("shape-rendering", "crispEdges");
-
-    // Style axis tick labels
-    svg.selectAll(".axis text")
-      .style("font-size", `${baseFontSize}px`)
-      .style("font-family", "system-ui, -apple-system, BlinkMacSystemFont, sans-serif")
-      .style("fill", "#6b7280")
-      .style("text-rendering", "optimizeLegibility");
-
-    // Add subtle grid lines for better readability
-    g.selectAll(".grid-line-x")
-      .data(xScale.ticks(Math.max(4, Math.min(8, Math.floor(plotWidth / 100)))))
-      .enter()
-      .append("line")
-      .attr("class", "grid-line-x")
-      .attr("x1", d => xScale(d))
-      .attr("x2", d => xScale(d))
-      .attr("y1", 0)
-      .attr("y2", innerHeight)
-      .style("stroke", "#f3f4f6")
-      .style("stroke-width", "1px")
-      .style("opacity", 0.5);
-
-    g.selectAll(".grid-line-y")
-      .data(yScale.ticks(Math.max(4, Math.min(8, Math.floor(plotHeight / 80)))))
-      .enter()
-      .append("line")
-      .attr("class", "grid-line-y")
-      .attr("x1", 0)
-      .attr("x2", innerWidth)
-      .attr("y1", d => yScale(d))
-      .attr("y2", d => yScale(d))
-      .style("stroke", "#f3f4f6")
-      .style("stroke-width", "1px")
-      .style("opacity", 0.5);
+    // Remove axes and grid lines to maximize plotting area (no ticks/labels)
 
     // Add anomaly region circles (blue transparent circles over anomalous grid cells)
     // Draw grid overlay for anomaly detection
@@ -1639,17 +1518,22 @@ const EmbeddingPlot = ({
         }
       });
 
-    // Responsive legend positioning - ensure it fits properly
+    // Responsive legend positioning - float inside plot area (top-right) without consuming margins
     const showAnomalyLegend = showAnomalies && anomalyResults && anomalyResults.synthetic_data;
 
-    // Place legend just to the right of the inner plotting area to avoid covering points
-    const legendX = margin.left + (innerWidth * devicePixelRatio) + 10;
-    const legendY = margin.top + 10;
+    // Create legend group inside the scaled plotting group so coordinates are in innerWidth/innerHeight
+    const legend = g.append("g")
+      .attr("class", "floating-legend")
+      .style("pointer-events", "none"); // don't block plot interactions
 
-
-
-    const legend = svg.append("g")
-      .attr("transform", `translate(${legendX}, ${legendY})`);
+    // Background for readability (added first; sized after content via bbox)
+    const legendBg = legend.append("rect")
+      .attr("x", 0)
+      .attr("y", 0)
+      .attr("rx", 4)
+      .attr("ry", 4)
+      .attr("fill", "none")
+      .attr("stroke", "none");
 
 
     // Removed count-based legend details for a minimal legend
@@ -1673,7 +1557,7 @@ const EmbeddingPlot = ({
         .attr("x", 20)
         .attr("y", 4)
         .text(`Real`)
-        .style("font-size", "9px")
+        .style("font-size", "11px")
         .style("font-weight", "500")
         .style("font-family", "system-ui, -apple-system, sans-serif")
         .style("fill", "#374151");
@@ -1695,7 +1579,7 @@ const EmbeddingPlot = ({
         .attr("x", 20)
         .attr("y", 4)
         .text(`Synthetic`)
-        .style("font-size", "9px")
+        .style("font-size", "11px")
         .style("font-weight", "500")
         .style("font-family", "system-ui, -apple-system, sans-serif")
         .style("fill", "#374151");
@@ -1720,11 +1604,55 @@ const EmbeddingPlot = ({
           .attr("x", 20)
           .attr("y", 4)
           .text(`${label}`)
-          .style("font-size", "9px")
+          .style("font-size", "11px")
           .style("font-weight", "500")
           .style("font-family", "system-ui, -apple-system, sans-serif")
           .style("fill", "#374151");
       });
+    }
+
+  // Position legend automatically in the least-dense corner
+  const padding = { x: 0, y: 0 };
+    const legendNode = legend.node();
+    if (legendNode) {
+      const bbox = legendNode.getBBox();
+      const legendWidth = bbox.width + padding.x * 2;
+      const legendHeight = bbox.height + padding.y * 2;
+
+      // Move content by padding
+      legend.selectAll("g").attr("transform", function () {
+        const t = d3.select(this).attr("transform") || "translate(0,0)";
+        const match = /translate\(([^,]+),\s*([^\)]+)\)/.exec(t);
+        const x = match ? parseFloat(match[1]) + padding.x : padding.x;
+        const y = match ? parseFloat(match[2]) + padding.y : padding.y;
+        return `translate(${x}, ${y})`;
+      });
+      legendBg.attr("width", legendWidth).attr("height", legendHeight);
+
+      // Helper to count points in a given rectangle
+      const countPointsInRect = (x0, y0, w, h) => {
+        let count = 0;
+        for (let i = 0; i < sampledData.length; i++) {
+          const sx = Math.max(0, Math.min(innerWidth, xScale(sampledData[i][0])));
+          const sy = Math.max(0, Math.min(innerHeight, yScale(sampledData[i][1])));
+          if (sx >= x0 && sx <= x0 + w && sy >= y0 && sy <= y0 + h) count++;
+        }
+        return count;
+      };
+
+      const offset = 8;
+      const candidates = [
+        { name: 'tl', x: offset, y: offset },
+        { name: 'tr', x: Math.max(0, innerWidth - legendWidth - offset), y: offset },
+        { name: 'bl', x: offset, y: Math.max(0, innerHeight - legendHeight - offset) },
+        { name: 'br', x: Math.max(0, innerWidth - legendWidth - offset), y: Math.max(0, innerHeight - legendHeight - offset) },
+      ];
+
+      // Compute counts and choose the corner with fewest points; break ties preferring top-right
+      const counts = candidates.map(c => ({ ...c, count: countPointsInRect(c.x, c.y, legendWidth, legendHeight) }));
+      counts.sort((a, b) => a.count - b.count || (a.name === 'tr' ? -1 : b.name === 'tr' ? 1 : 0));
+      const best = counts[0];
+      legend.attr("transform", `translate(${best.x}, ${best.y})`);
     }
 
     // Omit downsampling footnote in compact legend to keep it short
@@ -2162,9 +2090,9 @@ const EmbeddingPlot = ({
       }
     }}>
       {/* Title */}
-      <Typography variant="h6" sx={{ fontSize: '1.05rem', fontWeight: 500, mb: 0.5, ml: 1 }}>
-        Overall Analysis
-      </Typography>
+      <Box sx={{ p: 1, borderBottom: '0.1px solid', borderColor: 'divider' }}>
+        <Typography variant="subtitle2">Overall Analysis</Typography>
+      </Box>
       {/* Main Plot Area */}
       <Box
         ref={containerRef}

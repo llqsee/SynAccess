@@ -480,7 +480,7 @@ function AppContent() {
                     </Paper>
                   ) : embeddingGenerated ? (
                     <Grid container spacing={1} sx={{ height: '100%' }}>
-                      <Grid item xs={12} md={3.8} lg={3.8} sx={{ height: '100%' }}>
+                      <Grid item xs={12} md={2.8} lg={2.8} sx={{ height: '100%' }}>
                         <Box sx={{ 
                           height: '100%', 
                           border: '1px solid', 
@@ -496,8 +496,8 @@ function AppContent() {
                         </Box>
                       </Grid>
                       {/* Correlation Plot in the middle column */}
-                      <Grid item xs={12} md={5.5} lg={5.5} sx={{ height: '100%' }}>
-                        <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', p: 1 }}>
+                      <Grid item xs={12} md={6.5} lg={6.5} sx={{ height: '100%' }}>
+                        <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
                           {/* Correlation heatmap between EmbeddingPlot and RightSidebar */}
                           {embeddingGenerated && (
                             <CorrelationPlot

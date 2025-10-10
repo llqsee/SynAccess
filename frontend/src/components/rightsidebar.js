@@ -325,8 +325,8 @@ export default function RightSidebar({
     const dataTypeFilter = dataObj.data_type_filter || 'mixed';
     const xAxisTitle = originalData?.headers?.[histogramColumn] || '';
     // Determine y-axis label and normalization for histograms based on selected scale
-  const getYAxisTitle = () => (yScale === 'density' ? 'Density' : 'Count');
-  const getHistnorm = () => (yScale === 'density' ? 'probability density' : undefined);
+    const getYAxisTitle = () => (yScale === 'density' ? 'Density' : 'Count');
+    const getHistnorm = () => (yScale === 'density' ? 'probability density' : undefined);
 
     const getPlotTitle = () => {
       const columnName = dataObj.column_name || `Column ${histogramColumn + 1}`;
@@ -579,10 +579,10 @@ export default function RightSidebar({
       case 'bar': {
         const realTotal = dataObj.real_counts.reduce((s, c) => s + c, 0) || 1;
         const synthTotal = dataObj.synthetic_counts.reduce((s, c) => s + c, 0) || 1;
-  const useDensity = yScale === 'density';
-  const realValues = useDensity ? dataObj.real_counts.map(c => (c / realTotal)) : dataObj.real_counts;
-  const synthValues = useDensity ? dataObj.synthetic_counts.map(c => (c / synthTotal)) : dataObj.synthetic_counts;
-  const yAxisTitle = useDensity ? 'Density' : 'Count';
+        const useDensity = yScale === 'density';
+        const realValues = useDensity ? dataObj.real_counts.map(c => (c / realTotal)) : dataObj.real_counts;
+        const synthValues = useDensity ? dataObj.synthetic_counts.map(c => (c / synthTotal)) : dataObj.synthetic_counts;
+        const yAxisTitle = useDensity ? 'Density' : 'Count';
 
         if (dataTypeFilter === 'real-only') {
           return (
@@ -759,7 +759,7 @@ export default function RightSidebar({
 
 
       {/* Selection Summary */}
-      <Box sx={{ ml: 1, mb: 1 , mt: 1 }}>
+      <Box sx={{ ml: 1, mb: 1, mt: 1 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Typography variant="body2" sx={{ fontSize: 12 }}>
             Selected: <strong>{selectionSummary.total}</strong>/<strong>{datasetTotals.total}</strong>

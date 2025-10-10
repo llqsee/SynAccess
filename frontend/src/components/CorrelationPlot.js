@@ -19,6 +19,7 @@ const CorrelationPlot = ({
   const synthRef = useRef(null);
   const diffRef = useRef(null);
   const legendRef = useRef(null);
+  const diffLegendRef = useRef(null);
   const realScatterRef = useRef(null);
   const synthScatterRef = useRef(null);
 
@@ -364,20 +365,26 @@ const CorrelationPlot = ({
         .style('pointer-events', 'none');
     }
 
-    // Axes
+    // Axes with dynamic label sizing/visibility based on variable count
+    const nVars = labels.length;
     const xAxis = d3.axisBottom(x).tickSize(0);
     const yAxis = d3.axisLeft(y).tickSize(0);
-    g.append('g')
-      .attr('transform', `translate(0, ${innerHeight})`)
-      .call(xAxis)
-      .selectAll('text')
-      .style('font-size', '9px')
-      .style('text-anchor', 'end')
-      .attr('transform', 'rotate(-45)');
-    g.append('g')
-      .call(yAxis)
-      .selectAll('text')
-      .style('font-size', '9px');
+    const gxAxis = g.append('g').attr('transform', `translate(0, ${innerHeight})`).call(xAxis);
+    const gyAxis = g.append('g').call(yAxis);
+
+    if (nVars > 10) {
+      // Hide tick labels when too many variables
+      gxAxis.selectAll('text').remove();
+      gyAxis.selectAll('text').remove();
+    } else {
+      const fontSize = nVars < 5 ? '12px' : '9px';
+      gxAxis.selectAll('text')
+        .style('font-size', fontSize)
+        .style('text-anchor', 'end')
+        .attr('transform', 'rotate(-45)');
+      gyAxis.selectAll('text')
+        .style('font-size', fontSize);
+    }
     g.selectAll('.domain').remove();
     g.selectAll('.tick line').remove();
 
@@ -392,60 +399,91 @@ const CorrelationPlot = ({
       .text(title);
   };
 
-  const drawLegend = (container, zmin, zmax, height) => {
+  const drawLegend = (container, zmin, zmax, width, height, title = 'Legend', orientation = 'horizontal') => {
     if (!container) return;
-    const width = 70;
-    const margin = { top: 40, right: 10, bottom: 70, left: 20 };
-    const innerHeight = height - margin.top - margin.bottom;
     const sel = d3.select(container);
     sel.selectAll('*').remove();
+
+    const margin = orientation === 'horizontal'
+      ? { top: 18, right: 14, bottom: 20, left: 14 }
+      : { top: 40, right: 10, bottom: 70, left: 20 };
+    const innerWidth = Math.max(10, width - margin.left - margin.right);
+    const innerHeight = Math.max(10, height - margin.top - margin.bottom);
+
     const svg = sel.append('svg')
       .attr('width', width)
       .attr('height', height);
+
+    // Title
+    svg.append('text')
+      .attr('x', margin.left)
+      .attr('y', 12)
+      .attr('text-anchor', 'start')
+      .style('font-size', '11px')
+      .style('fill', '#374151')
+      .text(title);
 
     const g = svg.append('g').attr('transform', `translate(${margin.left}, ${margin.top})`);
 
     const colors = d3.interpolateRdBu;
     const color = d3.scaleSequential(colors).domain([zmax, zmin]);
 
-    const gradId = `legend-grad-shared-${Math.random().toString(36).slice(2)}`;
+    const gradId = `legend-grad-${Math.random().toString(36).slice(2)}`;
     const defs = svg.append('defs');
     const gradient = defs.append('linearGradient')
-      .attr('id', gradId)
-      .attr('x1', '0%').attr('y1', '0%')
-      .attr('x2', '0%').attr('y2', '100%');
+      .attr('id', gradId);
+
+    if (orientation === 'horizontal') {
+      gradient.attr('x1', '0%').attr('y1', '0%')
+              .attr('x2', '100%').attr('y2', '0%');
+    } else {
+      gradient.attr('x1', '0%').attr('y1', '0%')
+              .attr('x2', '0%').attr('y2', '100%');
+    }
+
     const stops = d3.range(0, 1.001, 0.1);
     stops.forEach(t => {
-      const val = zmax + (zmin - zmax) * t;
+      const val = zmin + (zmax - zmin) * t;
       gradient.append('stop')
         .attr('offset', `${t * 100}%`)
         .attr('stop-color', color(val));
     });
 
-    const barWidth = 12;
-    g.append('rect')
-      .attr('x', 0)
-      .attr('y', 0)
-      .attr('width', barWidth)
-      .attr('height', innerHeight)
-      .attr('fill', `url(#${gradId})`)
-      .attr('rx', 2);
+    if (orientation === 'horizontal') {
+      const barHeight = 10;
+      g.append('rect')
+        .attr('x', 0)
+        .attr('y', 6)
+        .attr('width', innerWidth)
+        .attr('height', barHeight)
+        .attr('fill', `url(#${gradId})`)
+        .attr('rx', 2);
 
-    const legendScale = d3.scaleLinear().domain([zmax, zmin]).range([0, innerHeight]);
-    const legendAxis = d3.axisRight(legendScale).ticks(4).tickFormat(d3.format('.2f'));
-    g.append('g')
-      .attr('transform', `translate(${barWidth}, 0)`) 
-      .call(legendAxis)
-      .selectAll('text')
-      .style('font-size', '10px');
+      const legendScale = d3.scaleLinear().domain([zmin, zmax]).range([0, innerWidth]);
+      const legendAxis = d3.axisBottom(legendScale).ticks(4).tickFormat(d3.format('.2f'));
+      g.append('g')
+        .attr('transform', `translate(0, ${6 + barHeight})`)
+        .call(legendAxis)
+        .selectAll('text')
+        .style('font-size', '10px');
+    } else {
+      const barWidth = 12;
+      g.append('rect')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', barWidth)
+        .attr('height', innerHeight)
+        .attr('fill', `url(#${gradId})`)
+        .attr('rx', 2);
 
-    svg.append('text')
-      .attr('x', width / 2)
-      .attr('y', 18)
-      .attr('text-anchor', 'middle')
-      .style('font-size', '11px')
-      .style('fill', '#374151')
-      .text('Legend');
+      const legendScale = d3.scaleLinear().domain([zmax, zmin]).range([0, innerHeight]);
+      const legendAxis = d3.axisRight(legendScale).ticks(4).tickFormat(d3.format('.2f'));
+      g.append('g')
+        .attr('transform', `translate(${barWidth}, 0)`) 
+        .call(legendAxis)
+        .selectAll('text')
+        .style('font-size', '10px');
+    }
   };
 
   useEffect(() => {
@@ -455,21 +493,25 @@ const CorrelationPlot = ({
           if (ref.current) d3.select(ref.current).selectAll('*').remove();
         });
         if (legendRef.current) d3.select(legendRef.current).selectAll('*').remove();
+        if (diffLegendRef.current) d3.select(diffLegendRef.current).selectAll('*').remove();
         return;
       }
       const container = rowRef.current;
       const gapPx = 8; // MUI gap: 1 ~ 8px
       const totalWidth = container ? container.getBoundingClientRect().width : 1020;
-      // Reserve 70px for shared legend area plus one gap
-      const legendReserve = 78; // approx legend width + gap
-      const usable = Math.max(300, totalWidth - legendReserve - 2 * gapPx);
-      const perWidth = Math.max(220, Math.floor(usable / 3));
+      // Inline layout: Real | Synthetic | Legend(R/S) | Difference | Legend(Diff)
+      // There are 5 items -> 4 gaps. Legends are narrow fixed width.
+      const legendWidth = 80; // px, vertical legend width
+      const nGaps = 4;
+      const legendsTotal = 2 * legendWidth;
+      const usableForHeatmaps = Math.max(300, totalWidth - (nGaps * gapPx) - legendsTotal);
+      const perWidth = Math.max(200, Math.floor(usableForHeatmaps / 3));
       const perHeight = perWidth; // square
       const commonOpts = { width: perWidth, height: perHeight, margin: { top: 40, right: 20, bottom: 70, left: 70 } };
 
-      // Shared legend range across all three matrices: fix to [-1,1] for mixed metrics
-      const zmin = -1;
-      const zmax = 1;
+  // Shared legend range for Real/Synthetic: fix to [-1,1] for mixed metrics
+  const zmin = -1;
+  const zmax = 1;
 
       const getMetric = (i, j) => metricAt(i, j);
 
@@ -488,10 +530,39 @@ const CorrelationPlot = ({
 
       drawHeatmap(realRef.current, realCorr, cols, { ...commonOpts, title: 'Real', zmin, zmax, getMetricForPair: getMetric, onCellClick, selectedPair });
       drawHeatmap(synthRef.current, synthCorr, cols, { ...commonOpts, title: 'Synthetic', zmin, zmax, getMetricForPair: getMetric, onCellClick, selectedPair });
-      drawHeatmap(diffRef.current, diffCorr, cols, { ...commonOpts, title: 'Difference (Synthetic - Real)', zmin, zmax, getMetricForPair: (i,j) => `Δ ${metricAt(i,j)}` , onCellClick, selectedPair});
+      // Compute symmetric legend range for Difference matrix based on actual values
+      let diffAbsMax = 0;
+      if (Array.isArray(diffCorr) && diffCorr.length > 0) {
+        for (let i = 0; i < diffCorr.length; i++) {
+          for (let j = 0; j < diffCorr[i].length; j++) {
+            if (i === j) continue;
+            const v = diffCorr[i][j];
+            if (Number.isFinite(v)) diffAbsMax = Math.max(diffAbsMax, Math.abs(v));
+          }
+        }
+      }
+      const dz = Math.max(0.01, diffAbsMax);
 
-      // Draw shared legend
-      drawLegend(legendRef.current, zmin, zmax, perHeight);
+      // Draw Difference heatmap with its own symmetric color scale
+      drawHeatmap(
+        diffRef.current,
+        diffCorr,
+        cols,
+        {
+          ...commonOpts,
+          title: 'Difference (Synthetic - Real)',
+          zmin: -dz,
+          zmax: dz,
+          getMetricForPair: (i, j) => `Δ ${metricAt(i, j)}`,
+          onCellClick,
+          selectedPair
+        }
+      );
+
+      // Draw inline legends (vertical), matching heatmap height and fixed narrow width
+      const legendHeight = perHeight;
+      drawLegend(legendRef.current, zmin, zmax, legendWidth, legendHeight, 'Real/Synth', 'vertical');
+      drawLegend(diffLegendRef.current, -dz, dz, legendWidth, legendHeight, 'Difference', 'vertical');
     };
 
     drawAll();
@@ -1058,9 +1129,9 @@ const CorrelationPlot = ({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
-      <Typography variant="h6" sx={{ fontSize: '1.05rem', fontWeight: 500 }}>
-        Correlation Matrices
-      </Typography>
+      <Box sx={{ p: 1, borderBottom: '0.1px solid', borderColor: 'divider', width: '100%', boxSizing: 'border-box' }}>
+        <Typography variant="subtitle2">Correlation Matrices</Typography>
+      </Box>
       {(!cols || cols.length === 0) ? (
         <Box sx={{ p: 2 }}>
           <Typography variant="body2" color="text.secondary">
@@ -1072,8 +1143,9 @@ const CorrelationPlot = ({
           <Box ref={rowRef} sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'flex-start' }}>
             <Box ref={realRef} sx={{ flex: '0 0 auto' }} />
             <Box ref={synthRef} sx={{ flex: '0 0 auto' }} />
-            <Box ref={diffRef} sx={{ flex: '0 0 auto' }} />
             <Box ref={legendRef} sx={{ flex: '0 0 auto' }} />
+            <Box ref={diffRef} sx={{ flex: '0 0 auto' }} />
+            <Box ref={diffLegendRef} sx={{ flex: '0 0 auto' }} />
           </Box>
           <Box sx={{ mt: 1 }}>
             {!selectedPair ? (
