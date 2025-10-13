@@ -25,6 +25,41 @@ const CorrelationPlot = ({
 
   const [selectedPair, setSelectedPair] = useState(null); // {i, j, xName, yName}
 
+  // Determine embedded datasets and headers to use throughout (prefer exact metadata datasets)
+  const embeddedSource = useMemo(() => {
+    // Prefer exact embedded data from metadata if present
+    let embRealRows = Array.isArray(metadata?.realData?.data) ? metadata.realData.data : null;
+    let embSynthRows = Array.isArray(metadata?.syntheticData?.data) ? metadata.syntheticData.data : null;
+    let embRealHeaders = Array.isArray(metadata?.realData?.headers) ? metadata.realData.headers : realHeaders;
+    let embSynthHeaders = Array.isArray(metadata?.syntheticData?.headers) ? metadata.syntheticData.headers : syntheticHeaders;
+
+    // If not available, infer sizes from labels and slice the provided arrays
+    if (!embRealRows || !embSynthRows) {
+      let realCount = 0, synthCount = 0;
+      if (Array.isArray(metadata?.labels)) {
+        for (const l of metadata.labels) {
+          if (l === 'Real') realCount++;
+          else if (l === 'Synthetic') synthCount++;
+        }
+      }
+      embRealRows = Array.isArray(realData) ? realData.slice(0, realCount > 0 ? Math.min(realCount, realData.length) : 0) : [];
+      embSynthRows = Array.isArray(syntheticData) ? syntheticData.slice(0, synthCount > 0 ? Math.min(synthCount, syntheticData.length) : 0) : [];
+      embRealHeaders = realHeaders;
+      embSynthHeaders = syntheticHeaders;
+    }
+
+    // Final fallback to avoid empty UI before embeddings exist
+    if ((!embRealRows || embRealRows.length === 0) && Array.isArray(realData)) embRealRows = realData;
+    if ((!embSynthRows || embSynthRows.length === 0) && Array.isArray(syntheticData)) embSynthRows = syntheticData;
+
+    return {
+      embRealRows: Array.isArray(embRealRows) ? embRealRows : [],
+      embSynthRows: Array.isArray(embSynthRows) ? embSynthRows : [],
+      embRealHeaders: Array.isArray(embRealHeaders) ? embRealHeaders : [],
+      embSynthHeaders: Array.isArray(embSynthHeaders) ? embSynthHeaders : [],
+    };
+  }, [metadata, realData, syntheticData, realHeaders, syntheticHeaders]);
+
   // Map embedding indices to original data row indices per class for highlighting
   const classRanks = useMemo(() => {
     if (!metadata?.labels || !Array.isArray(embeddingData)) return null;
@@ -64,14 +99,42 @@ const CorrelationPlot = ({
     return { realSet, synthSet };
   }, [selectedPoints, classRanks, metadata]);
 
+  // Selection summary (matches RightSidebar semantics)
+  const selectionSummary = useMemo(() => {
+    if (!Array.isArray(selectedPoints) || !metadata?.labels) {
+      return { total: 0, real: 0, synthetic: 0 };
+    }
+    let real = 0, synthetic = 0;
+    for (const idx of selectedPoints) {
+      if (metadata.labels[idx] === 'Real') real++;
+      else if (metadata.labels[idx] === 'Synthetic') synthetic++;
+    }
+    return { total: selectedPoints.length, real, synthetic };
+  }, [selectedPoints, metadata]);
+
+  // Dataset totals based on embedding labels (filtered DR subset)
+  const datasetTotals = useMemo(() => {
+    const labels = metadata?.labels;
+    if (!Array.isArray(labels) || labels.length === 0) {
+      return { total: 0, real: 0, synthetic: 0 };
+    }
+    let real = 0, synthetic = 0;
+    for (const l of labels) {
+      if (l === 'Real') real++;
+      else if (l === 'Synthetic') synthetic++;
+    }
+    return { total: labels.length, real, synthetic };
+  }, [metadata]);
+
   const hasData = (arr) => Array.isArray(arr) && arr.length > 0 && Array.isArray(arr[0]);
 
   // Choose a common set of headers to compare (intersection)
   const commonHeaders = useMemo(() => {
-    if (!Array.isArray(realHeaders) || !Array.isArray(syntheticHeaders)) return [];
-    const set = new Set(syntheticHeaders);
-    return realHeaders.filter(h => set.has(h));
-  }, [realHeaders, syntheticHeaders]);
+    const { embRealHeaders, embSynthHeaders } = embeddedSource;
+    if (!Array.isArray(embRealHeaders) || !Array.isArray(embSynthHeaders)) return [];
+    const set = new Set(embSynthHeaders);
+    return embRealHeaders.filter(h => set.has(h));
+  }, [embeddedSource]);
 
   const sampleRows = (rows) => {
     if (!hasData(rows)) return [];
@@ -187,15 +250,16 @@ const CorrelationPlot = ({
 
   // Build aligned mixed-type matrices for real and synthetic
   const { cols, colTypes, realCorr, synthCorr, diffCorr, metricAt, realIndices, synthIndices } = useMemo(() => {
-    const realRows = sampleRows(realData);
-    const synthRows = sampleRows(syntheticData);
+    const { embRealRows, embSynthRows, embRealHeaders, embSynthHeaders } = embeddedSource;
+    const realRows = sampleRows(embRealRows);
+    const synthRows = sampleRows(embSynthRows);
     if (!hasData(realRows) || !hasData(synthRows) || !Array.isArray(commonHeaders) || commonHeaders.length === 0) {
       return { cols: [], colTypes: [], realCorr: [], synthCorr: [], diffCorr: [], metricAt: () => 'Value', realIndices: [], synthIndices: [] };
     }
 
     // Column indices for each in the common headers order
-    const realIdxAll = commonHeaders.map(h => realHeaders?.indexOf(h)).filter(i => i >= 0);
-    const synthIdxAll = commonHeaders.map(h => syntheticHeaders?.indexOf(h)).filter(i => i >= 0);
+    const realIdxAll = commonHeaders.map(h => embRealHeaders?.indexOf(h)).filter(i => i >= 0);
+    const synthIdxAll = commonHeaders.map(h => embSynthHeaders?.indexOf(h)).filter(i => i >= 0);
 
     // Determine a consistent type per header across datasets: numeric only if numeric in BOTH
     const typesAll = commonHeaders.map((h, idx) => {
@@ -209,8 +273,8 @@ const CorrelationPlot = ({
     // Limit columns
     const limitedHeaders = commonHeaders.slice(0, Math.max(1, maxColumns));
     const limitedTypes = typesAll.slice(0, Math.max(1, maxColumns));
-  const realIndices = limitedHeaders.map(h => realHeaders.indexOf(h));
-  const synthIndices = limitedHeaders.map(h => syntheticHeaders.indexOf(h));
+  const realIndices = limitedHeaders.map(h => embRealHeaders.indexOf(h));
+  const synthIndices = limitedHeaders.map(h => embSynthHeaders.indexOf(h));
 
     const n = limitedHeaders.length;
     if (n === 0) {
@@ -267,7 +331,7 @@ const CorrelationPlot = ({
     };
 
     return { cols: limitedHeaders, colTypes: limitedTypes, realCorr: rCorr, synthCorr: sCorr, diffCorr: dCorr, metricAt, realIndices, synthIndices };
-  }, [realData, syntheticData, realHeaders, syntheticHeaders, maxColumns, sampleSize, commonHeaders]);
+  }, [embeddedSource, maxColumns, sampleSize, commonHeaders]);
 
   // Heatmap helper for correlation matrices (lower triangle only)
   const drawHeatmap = (container, matrix, labels, options) => {
@@ -903,8 +967,9 @@ const CorrelationPlot = ({
       const perWidth = Math.max(220, Math.floor((totalWidth - gapPx) / 2));
       const perHeight = perWidth; // square
 
-      const realRows = sampleRows(realData);
-      const synthRows = sampleRows(syntheticData);
+  const { embRealRows, embSynthRows } = embeddedSource;
+  const realRows = sampleRows(embRealRows);
+  const synthRows = sampleRows(embSynthRows);
       const ti = colTypes[i];
       const tj = colTypes[j];
 
@@ -1125,12 +1190,29 @@ const CorrelationPlot = ({
     render();
     window.addEventListener('resize', render);
     return () => window.removeEventListener('resize', render);
-  }, [selectedPair, cols, colTypes, realData, syntheticData, realIndices, synthIndices, selectedRowSets]);
+  }, [selectedPair, cols, colTypes, embeddedSource, realIndices, synthIndices, selectedRowSets]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
       <Box sx={{ p: 1, borderBottom: '0.1px solid', borderColor: 'divider', width: '100%', boxSizing: 'border-box' }}>
         <Typography variant="subtitle2">Correlation Matrices</Typography>
+      </Box>
+      {/* Selection summary and variable count */}
+      <Box sx={{ ml: 1, mb: 1, mt: 1 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Selected: <strong>{selectionSummary.total}</strong>/<strong>{datasetTotals.total}</strong>
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Real: <strong>{selectionSummary.real}</strong>/<strong>{datasetTotals.real}</strong>
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Synthetic: <strong>{selectionSummary.synthetic}</strong>/<strong>{datasetTotals.synthetic}</strong>
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Variables: <strong>{Array.isArray(cols) ? cols.length : 0}</strong>
+          </Typography>
+        </Box>
       </Box>
       {(!cols || cols.length === 0) ? (
         <Box sx={{ p: 2 }}>

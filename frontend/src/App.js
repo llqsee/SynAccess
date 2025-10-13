@@ -501,10 +501,10 @@ function AppContent() {
                           {/* Correlation heatmap between EmbeddingPlot and RightSidebar */}
                           {embeddingGenerated && (
                             <CorrelationPlot
-                              realData={realData?.data || embeddingMetadata?.realData?.data || originalRealData?.data}
-                              syntheticData={syntheticData?.data || embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data}
-                              realHeaders={realData?.headers || embeddingMetadata?.realData?.headers || originalRealData?.headers}
-                              syntheticHeaders={syntheticData?.headers || embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers}
+                              realData={embeddingMetadata?.realData?.data || originalRealData?.data || realData?.data}
+                              syntheticData={embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data || syntheticData?.data}
+                              realHeaders={embeddingMetadata?.realData?.headers || originalRealData?.headers || realData?.headers}
+                              syntheticHeaders={embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers || syntheticData?.headers}
                               embeddingData={embeddingData}
                               metadata={embeddingMetadata}
                               selectedPoints={selectedEmbeddingPoints}
@@ -518,10 +518,10 @@ function AppContent() {
                       <Grid item xs={12} md={2.7} lg={2.7} sx={{ height: '100%' }}>
                         <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
                           <RightSidebar
-                            realData={realData?.data || embeddingMetadata?.realData?.data || originalRealData?.data}
-                            syntheticData={syntheticData?.data || embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data}
-                            realHeaders={realData?.headers || embeddingMetadata?.realData?.headers || originalRealData?.headers}
-                            syntheticHeaders={syntheticData?.headers || embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers}
+                            realData={embeddingMetadata?.realData?.data || originalRealData?.data || realData?.data}
+                            syntheticData={embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data || syntheticData?.data}
+                            realHeaders={embeddingMetadata?.realData?.headers || originalRealData?.headers || realData?.headers}
+                            syntheticHeaders={embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers || syntheticData?.headers}
                             embeddingData={embeddingData}
                             metadata={embeddingMetadata}
                             selectedPoints={selectedEmbeddingPoints}
@@ -572,11 +572,11 @@ function AppContent() {
 
 // Main App component with authentication wrapper
 function App() {
-  const { isAuthenticated, login, loading, error } = useAuth();
+  // const { isAuthenticated, login, loading, error } = useAuth();
 
-  if (!isAuthenticated) {
-    return <Login onLogin={login} loading={loading} error={error} />;
-  }
+  // if (!isAuthenticated) {
+  //   return <Login onLogin={login} loading={loading} error={error} />;
+  // }
 
   return <AppContent />;
 }

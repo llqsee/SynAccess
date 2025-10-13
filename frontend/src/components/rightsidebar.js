@@ -638,7 +638,7 @@ export default function RightSidebar({
   // Backward-compatible renderer for selected plot
   const renderPlot = () => renderPlotFor(plotData);
 
-  // Generate overall (global) distribution using full datasets
+  // Generate overall (global) distribution using embedded subset (based on labels)
   const generateGlobalPlotData = useCallback(async () => {
     if (!originalData || !originalData.headers || originalData.headers.length === 0) return;
     // Abort previous
@@ -646,8 +646,38 @@ export default function RightSidebar({
     const abortController = new AbortController();
     globalAbortControllerRef.current = abortController;
 
-    const allReal = Array.isArray(realData) ? realData : [];
-    const allSynthetic = Array.isArray(syntheticData) ? syntheticData : [];
+    // Prefer exact embedded datasets if provided in metadata (fresh embeddings attach these)
+    let allReal = Array.isArray(metadata?.realData?.data) ? metadata.realData.data : null;
+    let allSynthetic = Array.isArray(metadata?.syntheticData?.data) ? metadata.syntheticData.data : null;
+
+    if (!allReal || !allSynthetic) {
+      // Fall back to estimating embedded subset sizes from labels and slicing props
+      let embeddedRealCount = 0;
+      let embeddedSynthCount = 0;
+      if (Array.isArray(metadata?.labels)) {
+        for (const l of metadata.labels) {
+          if (l === 'Real') embeddedRealCount++;
+          else if (l === 'Synthetic') embeddedSynthCount++;
+        }
+      }
+
+      allReal = Array.isArray(realData)
+        ? realData.slice(0, embeddedRealCount > 0 ? Math.min(embeddedRealCount, realData.length) : 0)
+        : [];
+      allSynthetic = Array.isArray(syntheticData)
+        ? syntheticData.slice(0, embeddedSynthCount > 0 ? Math.min(embeddedSynthCount, syntheticData.length) : 0)
+        : [];
+    }
+    // If we still have no data (e.g., before embeddings), fall back to original arrays to avoid empty UI
+    if (allReal.length === 0 && allSynthetic.length === 0 && (Array.isArray(realData) || Array.isArray(syntheticData))) {
+      const fallbackReal = Array.isArray(realData) ? realData : [];
+      const fallbackSynth = Array.isArray(syntheticData) ? syntheticData : [];
+      if (fallbackReal.length || fallbackSynth.length) {
+        allReal = fallbackReal;
+        allSynthetic = fallbackSynth;
+      }
+    }
+
     if (allReal.length === 0 && allSynthetic.length === 0) {
       setGlobalPlotData(null);
       setGlobalPlotError('No data available to plot');
