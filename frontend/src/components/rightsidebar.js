@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Paper, Typography, Chip, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button } from '@mui/material';
+import { Box, Paper, Typography, Chip, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button, Tooltip } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
@@ -101,6 +101,25 @@ export default function RightSidebar({
       alignedSyntheticData: alignedSynth,
     };
   }, [realHeaders, syntheticHeaders, realData, syntheticData]);
+
+  // Compute how many columns were excluded due to header mismatches (intersection logic)
+  const headerMismatchInfo = useMemo(() => {
+    const norm = (h) => (typeof h === 'string' ? h.trim() : h);
+    const r = Array.isArray(realHeaders) ? realHeaders.map(norm).filter(Boolean) : [];
+    const s = Array.isArray(syntheticHeaders) ? syntheticHeaders.map(norm).filter(Boolean) : [];
+    if (!r.length && !s.length) {
+      return { excludedCount: 0, realOnly: [], synthOnly: [], totalReal: 0, totalSynth: 0, commonCount: 0 };
+    }
+    const rSet = new Set(r);
+    const sSet = new Set(s);
+    const realOnly = r.filter((h) => !sSet.has(h));
+    const synthOnly = s.filter((h) => !rSet.has(h));
+    const commonCount = Array.isArray(commonHeaders) ? commonHeaders.length : 0;
+    const excludedCount = realOnly.length + synthOnly.length;
+    return { excludedCount, realOnly, synthOnly, totalReal: r.length, totalSynth: s.length, commonCount };
+  }, [realHeaders, syntheticHeaders, commonHeaders]);
+
+  // (Removed duplicate classRanks/mapEmbeddingIndexToOriginal/originalData block)
 
   // Precompute class-wise ranks for each embedding index to map back to original rows
   const classRanks = useMemo(() => {
@@ -386,20 +405,13 @@ export default function RightSidebar({
     const getYAxisTitle = () => (yScale === 'density' ? 'Density' : 'Count');
     const getHistnorm = () => (yScale === 'density' ? 'probability density' : undefined);
 
-    const getPlotTitle = () => {
-      const columnName = dataObj.column_name || `Column ${histogramColumn + 1}`;
-      switch (dataTypeFilter) {
-        case 'real-only': return `Real Data Distribution - ${columnName}`;
-        case 'synthetic-only': return `Synthetic Data Distribution - ${columnName}`;
-        default: return `Data Distribution Comparison - ${columnName}`;
-      }
-    };
+    // No plot titles per user request
 
     switch (dataObj.plot_type) {
       case 'histogram': {
         const isDiscrete = originalData ? isDiscreteVariable(histogramColumn, originalData) : false;
         if (isDiscrete) {
-          // Convert counts to percentages for discrete values
+          // Convert counts to percentages or counts for discrete values and render a single grouped chart
           const realCounts = {};
           const synthCounts = {};
           dataObj.real_values.forEach(v => realCounts[v] = (realCounts[v] || 0) + 1);
@@ -408,72 +420,31 @@ export default function RightSidebar({
           const synthTotal = dataObj.synthetic_values.length || 1;
           const realX = Object.keys(realCounts);
           const synthX = Object.keys(synthCounts);
-          const getY = (countsObj, xs, total) => (
-            yScale === 'density' ? xs.map(x => (countsObj[x] / total)) : xs.map(x => countsObj[x])
+          // Union of categories preserving order (real first, then new from synthetic)
+          const unionCats = [...new Set([...realX, ...synthX])];
+          const getY = (countsObj, cats, total) => (
+            yScale === 'density' ? cats.map(x => ((countsObj[x] || 0) / total)) : cats.map(x => (countsObj[x] || 0))
           );
-          const realY = getY(realCounts, realX, realTotal);
-          const synthY = getY(synthCounts, synthX, synthTotal);
-          const discreteYAxisTitle = getYAxisTitle(false);
+          const realY = getY(realCounts, unionCats, realTotal);
+          const synthY = getY(synthCounts, unionCats, synthTotal);
+          const discreteYAxisTitle = getYAxisTitle();
 
-          if (dataTypeFilter === 'real-only') {
-            return (
-              <Box sx={{ height: '190px' }}>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb', fontSize: 14 }}>
-                  {getPlotTitle()}
-                </Typography>
-                <Plot
-                  data={[{ x: realX, y: realY, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
-                  layout={plotLayout({ margin: { l: 40, r: 20, t: 40, b: 40 }, showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
-                  style={{ width: '100%', height: '130px' }}
-                  config={{ displayModeBar: false, doubleClick: 'reset' }}
-                  key={plotKey}
-                />
-              </Box>
-            );
-          } else if (dataTypeFilter === 'synthetic-only') {
-            return (
-              <Box sx={{ height: '190px' }}>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626', fontSize: 14 }}>
-                  {getPlotTitle()}
-                </Typography>
-                <Plot
-                  data={[{ x: synthX, y: synthY, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
-                  layout={plotLayout({ margin: { l: 40, r: 20, t: 40, b: 40 }, showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
-                  style={{ width: '100%', height: '130px' }}
-                  config={{ displayModeBar: false, doubleClick: 'reset' }}
-                  key={plotKey}
-                />
-              </Box>
-            );
+          const traces = [];
+          if (dataTypeFilter !== 'synthetic-only') {
+            traces.push({ x: unionCats, y: realY, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 });
+          }
+          if (dataTypeFilter !== 'real-only') {
+            traces.push({ x: unionCats, y: synthY, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 });
           }
 
           return (
-            <Box sx={{ display: 'flex', gap: 1, height: '190px' }}>
-              <Box sx={{ flex: 1, minHeight: '190px', backgroundColor: 'rgba(37, 99, 235, 0.1)' }}>
-                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#2563eb', mb: 1 }}>
-                  Real Data
-                </Typography>
-                <Plot
-                  data={[{ x: realX, y: realY, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
-                  layout={plotLayout({ margin: { l: 40, r: 20, t: 20, b: 40 }, showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
-                  style={{ width: '100%', height: '130px' }}
-                  config={{ displayModeBar: false, doubleClick: 'reset' }}
-                  key={`${plotKey}-real`}
-                />
-              </Box>
-              <Box sx={{ flex: 1, minHeight: '190px', backgroundColor: 'rgba(220, 38, 38, 0.1)' }}>
-                <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#dc2626', mb: 1 }}>
-                  Synthetic Data
-                </Typography>
-                <Plot
-                  data={[{ x: synthX, y: synthY, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
-                  layout={plotLayout({ margin: { l: 40, r: 20, t: 20, b: 40 }, showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
-                  style={{ width: '100%', height: '130px' }}
-                  config={{ displayModeBar: false, doubleClick: 'reset' }}
-                  key={`${plotKey}-synthetic`}
-                />
-              </Box>
-            </Box>
+            <Plot
+              data={traces}
+              layout={plotLayout({ margin: { l: 40, r: 20, t: 20, b: 40 }, barmode: 'group', showlegend: false, xaxis: { title: xAxisTitle, type: 'category' }, yaxis: { title: discreteYAxisTitle }, bargap: 0.1 })}
+              style={{ width: '100%', height: '160px' }}
+              config={{ displayModeBar: false, doubleClick: 'reset' }}
+              key={plotKey}
+            />
           );
         }
 
@@ -493,33 +464,23 @@ export default function RightSidebar({
           const sharedXBins = { start: singleValue - 0.5, end: singleValue + 0.5, size: 1 };
           if (dataTypeFilter === 'real-only') {
             return (
-              <Box>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb', fontSize: 14 }}>
-                  {getPlotTitle()}
-                </Typography>
-                <Plot
-                  data={[{ x: dataObj.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
-                  layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
-                  style={{ width: '100%', height: '200px' }}
-                  config={{ displayModeBar: false, doubleClick: 'reset' }}
-                  key={plotKey}
-                />
-              </Box>
+              <Plot
+                data={[{ x: dataObj.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
+              />
             );
           } else if (dataTypeFilter === 'synthetic-only') {
             return (
-              <Box>
-                <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626', fontSize: 14 }}>
-                  {getPlotTitle()}
-                </Typography>
-                <Plot
-                  data={[{ x: dataObj.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
-                  layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
-                  style={{ width: '100%', height: '200px' }}
-                  config={{ displayModeBar: false, doubleClick: 'reset' }}
-                  key={plotKey}
-                />
-              </Box>
+              <Plot
+                data={[{ x: dataObj.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
+                layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+                style={{ width: '100%', height: '160px' }}
+                config={{ displayModeBar: false, doubleClick: 'reset' }}
+                key={plotKey}
+              />
             );
           } else {
             return (
@@ -543,33 +504,23 @@ export default function RightSidebar({
 
         if (dataTypeFilter === 'real-only') {
           return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb', fontSize: 14 }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[{ x: dataObj.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
-                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
-                style={{ width: '100%', height: '160px' }}
-                config={{ displayModeBar: false, doubleClick: 'reset' }}
-                key={plotKey}
-              />
-            </Box>
+            <Plot
+              data={[{ x: dataObj.real_values, type: 'histogram', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
+              layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+              style={{ width: '100%', height: '160px' }}
+              config={{ displayModeBar: false, doubleClick: 'reset' }}
+              key={plotKey}
+            />
           );
         } else if (dataTypeFilter === 'synthetic-only') {
           return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626', fontSize: 14 }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[{ x: dataObj.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
-                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
-                style={{ width: '100%', height: '160px' }}
-                config={{ displayModeBar: false, doubleClick: 'reset' }}
-                key={plotKey}
-              />
-            </Box>
+            <Plot
+              data={[{ x: dataObj.synthetic_values, type: 'histogram', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, histnorm, xbins: sharedXBins }]}
+              layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+              style={{ width: '100%', height: '160px' }}
+              config={{ displayModeBar: false, doubleClick: 'reset' }}
+              key={plotKey}
+            />
           );
         }
 
@@ -590,33 +541,23 @@ export default function RightSidebar({
       case 'violin': {
         if (dataTypeFilter === 'real-only') {
           return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb', fontSize: 14 }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[{ y: dataObj.real_values, type: 'violin', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
-                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
-                style={{ width: '100%', height: '160px' }}
-                config={{ displayModeBar: false, doubleClick: 'reset' }}
-                key={plotKey}
-              />
-            </Box>
+            <Plot
+              data={[{ y: dataObj.real_values, type: 'violin', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
+              layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
+              style={{ width: '100%', height: '160px' }}
+              config={{ displayModeBar: false, doubleClick: 'reset' }}
+              key={plotKey}
+            />
           );
         } else if (dataTypeFilter === 'synthetic-only') {
           return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626', fontSize: 14 }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[{ y: dataObj.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
-                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
-                style={{ width: '100%', height: '160px' }}
-                config={{ displayModeBar: false, doubleClick: 'reset' }}
-                key={plotKey}
-              />
-            </Box>
+            <Plot
+              data={[{ y: dataObj.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
+              layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
+              style={{ width: '100%', height: '160px' }}
+              config={{ displayModeBar: false, doubleClick: 'reset' }}
+              key={plotKey}
+            />
           );
         }
 
@@ -644,33 +585,23 @@ export default function RightSidebar({
 
         if (dataTypeFilter === 'real-only') {
           return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#2563eb' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[{ x: dataObj.categories, y: realValues, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
-                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
-                style={{ width: '100%', height: '160px' }}
-                config={{ displayModeBar: false, doubleClick: 'reset' }}
-                key={plotKey}
-              />
-            </Box>
+            <Plot
+              data={[{ x: dataObj.categories, y: realValues, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
+              layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+              style={{ width: '100%', height: '160px' }}
+              config={{ displayModeBar: false, doubleClick: 'reset' }}
+              key={plotKey}
+            />
           );
         } else if (dataTypeFilter === 'synthetic-only') {
           return (
-            <Box>
-              <Typography variant="h6" sx={{ textAlign: 'center', mb: 1, color: '#dc2626' }}>
-                {getPlotTitle()}
-              </Typography>
-              <Plot
-                data={[{ x: dataObj.categories, y: synthValues, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
-                layout={plotLayout({ margin: { l: 60, r: 20, t: 40, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
-                style={{ width: '100%', height: '160px' }}
-                config={{ displayModeBar: false, doubleClick: 'reset' }}
-                key={plotKey}
-              />
-            </Box>
+            <Plot
+              data={[{ x: dataObj.categories, y: synthValues, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
+              layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle }, yaxis: { title: yAxisTitle }, showlegend: false })}
+              style={{ width: '100%', height: '160px' }}
+              config={{ displayModeBar: false, doubleClick: 'reset' }}
+              key={plotKey}
+            />
           );
         }
 
@@ -850,6 +781,38 @@ export default function RightSidebar({
         {/* Controls (apply to both Overall and Selected plots) */}
         {originalData && originalData.headers && originalData.headers.length > 0 && (
           <Box>
+            {headerMismatchInfo.excludedCount > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+                <Tooltip
+                  arrow
+                  placement="left"
+                  title={
+                    <Box>
+                      <Typography variant="caption" sx={{ display: 'block' }}>
+                        Using intersection of headers for analysis
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block' }}>
+                        Common: {headerMismatchInfo.commonCount}
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block' }}>
+                        Real-only: {headerMismatchInfo.realOnly.length}
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block' }}>
+                        Synthetic-only: {headerMismatchInfo.synthOnly.length}
+                      </Typography>
+                    </Box>
+                  }
+                >
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color="warning"
+                    label={`Excluded ${headerMismatchInfo.excludedCount} cols`}
+                    sx={{ fontSize: '0.7rem', height: 22 }}
+                  />
+                </Tooltip>
+              </Box>
+            )}
             <FormControl fullWidth size="small" sx={{ mb: 1 }}>
               <InputLabel sx={{ fontSize: 12, '&.MuiInputLabel-shrink': { fontSize: 12 } }}>Column for Analysis</InputLabel>
               <Select value={histogramColumn} label="Column for Analysis" onChange={(e) => setHistogramColumn(e.target.value)} sx={{ '& .MuiSelect-select': { fontSize: 12, py: 0.5 } }}>

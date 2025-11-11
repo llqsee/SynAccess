@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -20,6 +20,7 @@ import {
   ListItemIcon,
   ListItemText
 } from '@mui/material';
+import { Tooltip } from '@mui/material';
 import {
   Assessment,
   CheckCircle,
@@ -54,6 +55,23 @@ const SummaryTab = ({
 
   const dataUploaded = realData && syntheticData;
   const embeddingGenerated = embeddingData && embeddingMetadata;
+
+  // Compute header mismatch info to surface excluded columns badge
+  const headerMismatchInfo = useMemo(() => {
+    const norm = (h) => (typeof h === 'string' ? h.trim() : h);
+    const r = realData?.headers ? realData.headers.map(norm).filter(Boolean) : [];
+    const s = syntheticData?.headers ? syntheticData.headers.map(norm).filter(Boolean) : [];
+    if (!r.length && !s.length) {
+      return { excludedCount: 0, realOnly: [], synthOnly: [], totalReal: 0, totalSynth: 0, commonCount: 0 };
+    }
+    const rSet = new Set(r);
+    const sSet = new Set(s);
+    const realOnly = r.filter((h) => !sSet.has(h));
+    const synthOnly = s.filter((h) => !rSet.has(h));
+    const commonCount = r.filter((h) => sSet.has(h)).length;
+    const excludedCount = realOnly.length + synthOnly.length;
+    return { excludedCount, realOnly, synthOnly, totalReal: r.length, totalSynth: s.length, commonCount };
+  }, [realData?.headers, syntheticData?.headers]);
 
   const exportRawValidationResults = () => {
     const dataStr = JSON.stringify(validationResults, null, 2);
@@ -348,9 +366,41 @@ const SummaryTab = ({
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Paper sx={{ p: 2, minHeight: '70vh' }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Data Statistics
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle1" gutterBottom sx={{ mb: 0 }}>
+                  Data Statistics
+                </Typography>
+                {headerMismatchInfo.excludedCount > 0 && (
+                  <Tooltip
+                    arrow
+                    placement="left"
+                    title={
+                      <Box>
+                        <Typography variant="caption" sx={{ display: 'block' }}>
+                          Using intersection of headers for analysis
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block' }}>
+                          Common: {headerMismatchInfo.commonCount}
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block' }}>
+                          Real-only: {headerMismatchInfo.realOnly.length}
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block' }}>
+                          Synthetic-only: {headerMismatchInfo.synthOnly.length}
+                        </Typography>
+                      </Box>
+                    }
+                  >
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      label={`Excluded ${headerMismatchInfo.excludedCount} cols`}
+                      sx={{ fontSize: '0.7rem', height: 22 }}
+                    />
+                  </Tooltip>
+                )}
+              </Box>
               <Box sx={{ height: '100%', overflow: 'auto' }}>
                 <ResultsPane
                   realData={realData?.data}
@@ -383,9 +433,9 @@ const SummaryTab = ({
                   <Box sx={{ mt: 2, p: 2, bgcolor: 'primary.50', borderRadius: 1 }}>
                     <Typography variant="body2">
                       <strong>Dataset Info:</strong><br />
-                      Real data: {realData.data?.length || 0} rows<br />
-                      Synthetic data: {syntheticData.data?.length || 0} rows<br />
-                      Variables: {realData.headers?.length || 0}
+                      Real data: {realData.data?.length || 0} rows, {realData.headers?.length || 0} variables<br />
+                      Synthetic data: {syntheticData.data?.length || 0} rows, {syntheticData.headers?.length || 0} variables<br />
+                      Common variables used in analysis: {headerMismatchInfo.commonCount}
                     </Typography>
                   </Box>
                 )}

@@ -44,57 +44,40 @@ export const isDiscreteVariable = (columnIndex, originalData, columnName = null,
   // Convert to numbers
   const realNumeric = realValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
   const syntheticNumeric = syntheticValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
-  
-  // Must be mostly numeric
-  const realNumericRatio = realValues.length > 0 ? realNumeric.length / realValues.length : 0;
-  const syntheticNumericRatio = syntheticValues.length > 0 ? syntheticNumeric.length / syntheticValues.length : 0;
-  
-  if (realNumericRatio <= 0.5 || syntheticNumericRatio <= 0.5) {
+
+  const hasRealData = realValues.length > 0;
+  const hasSyntheticData = syntheticValues.length > 0;
+
+  if (!hasRealData && !hasSyntheticData) {
     return false;
   }
-  
-  // Check each dataset separately - if EITHER passes the discrete test, consider it discrete
-  
-  // Test real data
-  const realAllIntegers = realNumeric.every(val => Number.isInteger(val));
-  const realIsDiscrete = (() => {
-    if (realAllIntegers) {
-      // For integers, check unique count
-      const realUniqueValues = new Set(realNumeric);
-      return realUniqueValues.size <= maxUnique;
+
+  const realNumericRatio = hasRealData ? realNumeric.length / realValues.length : 0;
+  const syntheticNumericRatio = hasSyntheticData ? syntheticNumeric.length / syntheticValues.length : 0;
+
+  const checkDiscrete = (numericValues) => {
+    if (numericValues.length === 0) return false;
+    const allIntegers = numericValues.every(val => Number.isInteger(val));
+    if (allIntegers) {
+      return new Set(numericValues).size <= maxUnique;
     }
-    
-    // For floats, check if all are whole numbers
-    const realAllWholeNumbers = realNumeric.every(val => val % 1 === 0);
-    if (realAllWholeNumbers) {
-      const realUniqueValues = new Set(realNumeric);
-      return realUniqueValues.size <= maxUnique;
+    const allWholeNumbers = numericValues.every(val => val % 1 === 0);
+    if (allWholeNumbers) {
+      return new Set(numericValues).size <= maxUnique;
     }
-    
     return false;
-  })();
-  
-  // Test synthetic data
-  const syntheticAllIntegers = syntheticNumeric.every(val => Number.isInteger(val));
-  const syntheticIsDiscrete = (() => {
-    if (syntheticAllIntegers) {
-      // For integers, check unique count
-      const syntheticUniqueValues = new Set(syntheticNumeric);
-      return syntheticUniqueValues.size <= maxUnique;
-    }
-    
-    // For floats, check if all are whole numbers
-    const syntheticAllWholeNumbers = syntheticNumeric.every(val => val % 1 === 0);
-    if (syntheticAllWholeNumbers) {
-      const syntheticUniqueValues = new Set(syntheticNumeric);
-      return syntheticUniqueValues.size <= maxUnique;
-    }
-    
-    return false;
-  })();
-  
-  // Return true if EITHER real OR synthetic data is discrete
-  return realIsDiscrete || syntheticIsDiscrete;
+  };
+
+  const realIsDiscrete = hasRealData && realNumericRatio > 0.5 ? checkDiscrete(realNumeric) : false;
+  const syntheticIsDiscrete = hasSyntheticData && syntheticNumericRatio > 0.5 ? checkDiscrete(syntheticNumeric) : false;
+
+  if (hasRealData && hasSyntheticData) {
+    return realIsDiscrete && syntheticIsDiscrete;
+  }
+  if (hasRealData) {
+    return realIsDiscrete;
+  }
+  return syntheticIsDiscrete;
 };
 
 // Shared function to classify column data type (extracted from duplicate code in DistributionPlot.js and EmbeddingPlot.js)
