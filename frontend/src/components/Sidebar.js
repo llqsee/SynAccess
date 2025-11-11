@@ -89,6 +89,31 @@ const Sidebar = ({
   const [loadingModels, setLoadingModels] = useState(false);
   const [useGpu, setUseGpu] = useState(false);
 
+  // Compute dynamic slider limits based on dataset sizes
+  const realMax = (realData?.data?.length) || 5000;
+  const synthMax = (syntheticData?.data?.length) || 5000;
+  const realMin = realMax < 100 ? 1 : 100;
+  const synthMin = synthMax < 100 ? 1 : 100;
+  const realStep = realMax < 100 ? 1 : 100;
+  const synthStep = synthMax < 100 ? 1 : 100;
+
+  // Ensure selected sample counts stay within [min, max] when data changes
+  useEffect(() => {
+    // Clamp real samples
+    setNRealSamples(prev => {
+      const clamped = Math.max(realMin, Math.min(prev || realMin, realMax));
+      return clamped;
+    });
+  }, [realMax, realMin]);
+
+  useEffect(() => {
+    // Clamp synthetic samples
+    setNSynthSamples(prev => {
+      const clamped = Math.max(synthMin, Math.min(prev || synthMin, synthMax));
+      return clamped;
+    });
+  }, [synthMax, synthMin]);
+
   // Load pretrained models when user switches to that option
   useEffect(() => {
     if (method === 'pretrained') {
@@ -679,14 +704,14 @@ const Sidebar = ({
 
                     <Box>
                       <Typography variant="body2" gutterBottom>
-                        Real Samples: {nRealSamples}
+                        Real Samples: {nRealSamples} {realData?.data?.length ? `(max ${realMax})` : ''}
                       </Typography>
                       <Slider
                         value={nRealSamples}
                         onChange={handleSliderChange(setNRealSamples)}
-                        min={100}
-                        max={5000}
-                        step={100}
+                        min={realMin}
+                        max={realMax}
+                        step={realStep}
                         size="small"
                         disabled={!syntheticDataLoaded}
                       />
@@ -694,14 +719,14 @@ const Sidebar = ({
 
                     <Box>
                       <Typography variant="body2" gutterBottom>
-                        Synthetic Samples: {nSynthSamples}
+                        Synthetic Samples: {nSynthSamples} {syntheticData?.data?.length ? `(max ${synthMax})` : ''}
                       </Typography>
                       <Slider
                         value={nSynthSamples}
                         onChange={handleSliderChange(setNSynthSamples)}
-                        min={100}
-                        max={5000}
-                        step={100}
+                        min={synthMin}
+                        max={synthMax}
+                        step={synthStep}
                         size="small"
                         disabled={!syntheticDataLoaded}
                       />
