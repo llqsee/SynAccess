@@ -45,58 +45,60 @@ export default function RightSidebar({
   const globalAbortControllerRef = useRef(null);
 
   // Build aligned datasets using intersection of headers to avoid column count mismatches
-  const { commonHeaders, alignedRealData, alignedSyntheticData } = useMemo(() => {
+  const { availableHeaders, alignedRealData, alignedSyntheticData } = useMemo(() => {
     const hasRealHeaders = Array.isArray(realHeaders) && realHeaders.length > 0;
     const hasSynthHeaders = Array.isArray(syntheticHeaders) && syntheticHeaders.length > 0;
 
     const norm = (h) => (typeof h === 'string' ? h.trim() : h);
 
-    let common = [];
-    let realIdx = [];
-    let synthIdx = [];
-
-    if (hasRealHeaders && hasSynthHeaders) {
-      const realMap = new Map();
+    const realMap = new Map();
+    if (hasRealHeaders) {
       realHeaders.forEach((h, i) => {
         const k = norm(h);
-        if (k) realMap.set(k, i);
+        if (k && !realMap.has(k)) realMap.set(k, i);
       });
-      const synthMap = new Map();
+    }
+
+    const synthMap = new Map();
+    if (hasSynthHeaders) {
       syntheticHeaders.forEach((h, i) => {
         const k = norm(h);
-        if (k) synthMap.set(k, i);
+        if (k && !synthMap.has(k)) synthMap.set(k, i);
       });
-      // Intersection preserving realHeaders order
-      for (const h of realHeaders) {
-        const k = norm(h);
-        if (!k) continue;
-        if (synthMap.has(k)) {
-          common.push(k);
-        }
-      }
-      realIdx = common.map((h) => realMap.get(h));
-      synthIdx = common.map((h) => synthMap.get(h));
-    } else if (hasRealHeaders) {
-      common = realHeaders.map(norm).filter(Boolean);
-      realIdx = common.map((_, i) => i);
-      synthIdx = [];
-    } else if (hasSynthHeaders) {
-      common = syntheticHeaders.map(norm).filter(Boolean);
-      realIdx = [];
-      synthIdx = common.map((_, i) => i);
+    }
+
+    const headers = [];
+    const realIdx = [];
+    const synthIdx = [];
+    const seen = new Set();
+
+    const addHeader = (header) => {
+      const key = norm(header);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      headers.push(key);
+      realIdx.push(realMap.has(key) ? realMap.get(key) : -1);
+      synthIdx.push(synthMap.has(key) ? synthMap.get(key) : -1);
+    };
+
+    if (hasRealHeaders) {
+      realHeaders.forEach(addHeader);
+    }
+    if (hasSynthHeaders) {
+      syntheticHeaders.forEach(addHeader);
     }
 
     const alignRows = (rows, idxs) => {
       if (!Array.isArray(rows) || rows.length === 0) return [];
-      if (!Array.isArray(idxs) || idxs.length === 0) return [];
-      return rows.map((row) => idxs.map((i) => row?.[i]));
+      if (!Array.isArray(idxs) || idxs.length === 0) return rows.map(() => []);
+      return rows.map((row) => idxs.map((i) => (i !== undefined && i >= 0 ? row?.[i] : undefined)));
     };
 
-    const alignedReal = realIdx.length ? alignRows(realData, realIdx) : [];
-    const alignedSynth = synthIdx.length ? alignRows(syntheticData, synthIdx) : [];
+    const alignedReal = headers.length && hasRealHeaders ? alignRows(realData, realIdx) : [];
+    const alignedSynth = headers.length && hasSynthHeaders ? alignRows(syntheticData, synthIdx) : [];
 
     return {
-      commonHeaders: common,
+      availableHeaders: headers,
       alignedRealData: alignedReal,
       alignedSyntheticData: alignedSynth,
     };
@@ -153,7 +155,7 @@ export default function RightSidebar({
 
   // Combine aligned data for plotting
   const originalData = useMemo(() => {
-    const headers = Array.isArray(commonHeaders) ? commonHeaders : [];
+    const headers = Array.isArray(availableHeaders) ? availableHeaders : [];
     const data = [];
     const labels = [];
     if (Array.isArray(alignedRealData) && alignedRealData.length) {
@@ -169,7 +171,7 @@ export default function RightSidebar({
       }
     }
     return { data, headers, labels };
-  }, [alignedRealData, alignedSyntheticData, commonHeaders]);
+  }, [alignedRealData, alignedSyntheticData, availableHeaders]);
 
   // Headers available for selection (exclude unnamed headers)
   const displayHeaders = useMemo(() => {

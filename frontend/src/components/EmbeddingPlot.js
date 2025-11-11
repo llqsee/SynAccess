@@ -293,15 +293,62 @@ const EmbeddingPlot = ({
     };
 
     const original = getOriginalData();
-  const fallbackHeaders = original?.headers || [];
-  const canUseOriginal = original && Array.isArray(original.data) && Array.isArray(original.labels);
-  const fallbackRealRows = canUseOriginal ? original.data.filter((_, idx) => original.labels[idx] === 'Real') : [];
-  const fallbackSyntheticRows = canUseOriginal ? original.data.filter((_, idx) => original.labels[idx] === 'Synthetic') : [];
+    const canUseOriginal = original && Array.isArray(original.data) && Array.isArray(original.labels);
+    const fallbackRealRows = canUseOriginal ? original.data.filter((_, idx) => original.labels[idx] === 'Real') : [];
+    const fallbackSyntheticRows = canUseOriginal ? original.data.filter((_, idx) => original.labels[idx] === 'Synthetic') : [];
 
-    const realDataset = normalizeDataset(metadata?.realData, { headers: fallbackHeaders, rows: fallbackRealRows });
-    const syntheticDataset = normalizeDataset(metadata?.syntheticData, { headers: fallbackHeaders, rows: fallbackSyntheticRows });
+    // Try to retrieve per-dataset headers from metadata or session storage
+    let sessionRealHeaders = [];
+    let sessionSyntheticHeaders = [];
+    try {
+      const sessionReal = window?.sessionStorage?.getItem('realData');
+      const sessionSynth = window?.sessionStorage?.getItem('syntheticData');
+      if (sessionReal) {
+        const parsed = JSON.parse(sessionReal);
+        if (Array.isArray(parsed?.headers)) sessionRealHeaders = parsed.headers;
+      }
+      if (sessionSynth) {
+        const parsed = JSON.parse(sessionSynth);
+        if (Array.isArray(parsed?.headers)) sessionSyntheticHeaders = parsed.headers;
+      }
+    } catch (e) {
+      // Ignore session access errors
+    }
 
-    const headerUnion = Array.from(new Set([...(realDataset.headers || []), ...(syntheticDataset.headers || [])]));
+    const fallbackRealHeaders = Array.isArray(metadata?.realData?.headers)
+      ? metadata.realData.headers
+      : (sessionRealHeaders.length ? sessionRealHeaders : (original?.headers || []));
+
+    const fallbackSyntheticHeaders = Array.isArray(metadata?.syntheticData?.headers)
+      ? metadata.syntheticData.headers
+      : (sessionSyntheticHeaders.length ? sessionSyntheticHeaders : (original?.headers || []));
+
+    const realDataset = normalizeDataset(metadata?.realData, { headers: fallbackRealHeaders, rows: fallbackRealRows });
+    const syntheticDataset = normalizeDataset(metadata?.syntheticData, { headers: fallbackSyntheticHeaders, rows: fallbackSyntheticRows });
+
+    const normalizeHeader = (header) => (typeof header === 'string' ? header.trim() : header);
+
+    const buildHeaderMap = (headers) => {
+      const map = new Map();
+      if (!Array.isArray(headers)) return map;
+      headers.forEach((rawHeader, index) => {
+        const key = normalizeHeader(rawHeader);
+        if (!key) return;
+        if (!map.has(key)) {
+          map.set(key, { index, original: rawHeader });
+        }
+      });
+      return map;
+    };
+
+    const realHeaderMap = buildHeaderMap(realDataset.headers);
+    const syntheticHeaderMap = buildHeaderMap(syntheticDataset.headers);
+
+    const headerUnion = Array.from(new Set([
+      ...realHeaderMap.keys(),
+      ...syntheticHeaderMap.keys()
+    ]));
+
     if (headerUnion.length === 0) return [];
 
     const formatType = (type) => {
@@ -321,26 +368,25 @@ const EmbeddingPlot = ({
         return { icon: '⚠️', label: 'Missing column' };
       }
       if (numericTypes.has(realType) && numericTypes.has(synthType)) {
-        if (realType === 'integer' && synthType === 'float') {
-          return { icon: '❌', label: 'Synthetic includes fractional values' };
+        if (realType === synthType) {
+          return { icon: '✅', label: 'Numeric types match' };
         }
-        if (realType === 'float' && synthType === 'integer') {
-          return { icon: '⚠️', label: 'Synthetic truncated numeric' };
-        }
-        return { icon: '⚠️', label: 'Numeric mismatch' };
+        return { icon: '⚠️', label: 'Numeric (int vs float)' };
       }
       return { icon: '❌', label: 'Type mismatch' };
     };
 
     return headerUnion
       .map((header) => {
-        const realIndex = realDataset.headers.indexOf(header);
-        const synthIndex = syntheticDataset.headers.indexOf(header);
+        const realMeta = realHeaderMap.get(header) || null;
+        const synthMeta = syntheticHeaderMap.get(header) || null;
+        const realIndex = realMeta ? realMeta.index : -1;
+        const synthIndex = synthMeta ? synthMeta.index : -1;
         const realType = inferColumnType(realDataset.rows, realIndex);
         const syntheticType = inferColumnType(syntheticDataset.rows, synthIndex);
         const match = evaluateMatch(realType, syntheticType);
         return {
-          variable: header,
+          variable: (realMeta?.original ?? synthMeta?.original ?? header) || '—',
           realType: formatType(realType),
           syntheticType: formatType(syntheticType),
           match
@@ -509,11 +555,11 @@ const EmbeddingPlot = ({
     // Get device pixel ratio for high-DPI displays
     const devicePixelRatio = window.devicePixelRatio || 1;
 
-  // Apply intelligent sampling for large datasets (now includes validation)
-  // If the total points are <= 10,000, show all points to avoid 50/50 downsampling artifacts
-  const totalPoints = data.length;
-  const samplingCap = totalPoints <= 10000 ? totalPoints : 10000;
-  const { sampledData, sampledLabels, indexMap } = sampleData(data, metadata.labels, samplingCap);
+    // Apply intelligent sampling for large datasets (now includes validation)
+    // If the total points are <= 10,000, show all points to avoid 50/50 downsampling artifacts
+    const totalPoints = data.length;
+    const samplingCap = totalPoints <= 10000 ? totalPoints : 10000;
+    const { sampledData, sampledLabels, indexMap } = sampleData(data, metadata.labels, samplingCap);
 
 
 
@@ -537,12 +583,12 @@ const EmbeddingPlot = ({
     const effectivePlotHeight = plotHeight * devicePixelRatio;
 
     // Advanced point sizing based on dataset size and density (no need to multiply by devicePixelRatio since we're scaling the group)
-  const basePointSize = plotWidth < 400 ? 0.7 : plotWidth < 800 ? 0.9 : 1.2;
+    const basePointSize = plotWidth < 400 ? 0.7 : plotWidth < 800 ? 0.9 : 1.2;
     const densityFactor = Math.max(0.3, Math.min(1.5, 1000 / Math.sqrt(numPoints)));
     const adjustedPointSize = basePointSize * densityFactor;
 
     // Adaptive opacity based on point density
-  const baseOpacity = plotWidth < 400 ? 0.45 : 0.5;
+    const baseOpacity = plotWidth < 400 ? 0.45 : 0.5;
     const opacityFactor = Math.max(0.4, Math.min(0.9, 800 / Math.sqrt(numPoints)));
     const adjustedOpacity = baseOpacity * opacityFactor;
 
@@ -592,8 +638,8 @@ const EmbeddingPlot = ({
         const h = c.clientHeight || plotHeight;
         if (w > 0 && h > 0) {
           svg.attr("viewBox", `0 0 ${w * devicePixelRatio} ${h * devicePixelRatio}`)
-             .style("width", `${w}px`)
-             .style("height", `${h}px`);
+            .style("width", `${w}px`)
+            .style("height", `${h}px`);
         }
       }
       if (innerWidth <= 0 || innerHeight <= 0) return;
@@ -611,15 +657,15 @@ const EmbeddingPlot = ({
     const x = sampledData.map(d => d[0]);
     const y = sampledData.map(d => d[1]);
 
-  // Compute exact data extents (no padding) for consistent scales pre/post anomaly detection
-  const xExtent = d3.extent(x);
-  const yExtent = d3.extent(y);
+    // Compute exact data extents (no padding) for consistent scales pre/post anomaly detection
+    const xExtent = d3.extent(x);
+    const yExtent = d3.extent(y);
 
-  // Default to exact extents
-  let xDomainMin = xExtent[0];
-  let xDomainMax = xExtent[1];
-  let yDomainMin = yExtent[0];
-  let yDomainMax = yExtent[1];
+    // Default to exact extents
+    let xDomainMin = xExtent[0];
+    let xDomainMax = xExtent[1];
+    let yDomainMin = yExtent[0];
+    let yDomainMax = yExtent[1];
 
     if (anomalyResults?.grid_info?.bounds) {
       const gb = anomalyResults.grid_info.bounds;
@@ -1707,8 +1753,8 @@ const EmbeddingPlot = ({
       });
     }
 
-  // Position legend automatically in the least-dense corner
-  const padding = { x: 0, y: 0 };
+    // Position legend automatically in the least-dense corner
+    const padding = { x: 0, y: 0 };
     const legendNode = legend.node();
     if (legendNode) {
       const bbox = legendNode.getBBox();
