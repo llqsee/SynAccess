@@ -44,6 +44,64 @@ export default function RightSidebar({
   const lastRequestParamsRef = useRef(null);
   const globalAbortControllerRef = useRef(null);
 
+  // Build aligned datasets using intersection of headers to avoid column count mismatches
+  const { commonHeaders, alignedRealData, alignedSyntheticData } = useMemo(() => {
+    const hasRealHeaders = Array.isArray(realHeaders) && realHeaders.length > 0;
+    const hasSynthHeaders = Array.isArray(syntheticHeaders) && syntheticHeaders.length > 0;
+
+    const norm = (h) => (typeof h === 'string' ? h.trim() : h);
+
+    let common = [];
+    let realIdx = [];
+    let synthIdx = [];
+
+    if (hasRealHeaders && hasSynthHeaders) {
+      const realMap = new Map();
+      realHeaders.forEach((h, i) => {
+        const k = norm(h);
+        if (k) realMap.set(k, i);
+      });
+      const synthMap = new Map();
+      syntheticHeaders.forEach((h, i) => {
+        const k = norm(h);
+        if (k) synthMap.set(k, i);
+      });
+      // Intersection preserving realHeaders order
+      for (const h of realHeaders) {
+        const k = norm(h);
+        if (!k) continue;
+        if (synthMap.has(k)) {
+          common.push(k);
+        }
+      }
+      realIdx = common.map((h) => realMap.get(h));
+      synthIdx = common.map((h) => synthMap.get(h));
+    } else if (hasRealHeaders) {
+      common = realHeaders.map(norm).filter(Boolean);
+      realIdx = common.map((_, i) => i);
+      synthIdx = [];
+    } else if (hasSynthHeaders) {
+      common = syntheticHeaders.map(norm).filter(Boolean);
+      realIdx = [];
+      synthIdx = common.map((_, i) => i);
+    }
+
+    const alignRows = (rows, idxs) => {
+      if (!Array.isArray(rows) || rows.length === 0) return [];
+      if (!Array.isArray(idxs) || idxs.length === 0) return [];
+      return rows.map((row) => idxs.map((i) => row?.[i]));
+    };
+
+    const alignedReal = realIdx.length ? alignRows(realData, realIdx) : [];
+    const alignedSynth = synthIdx.length ? alignRows(syntheticData, synthIdx) : [];
+
+    return {
+      commonHeaders: common,
+      alignedRealData: alignedReal,
+      alignedSyntheticData: alignedSynth,
+    };
+  }, [realHeaders, syntheticHeaders, realData, syntheticData]);
+
   // Precompute class-wise ranks for each embedding index to map back to original rows
   const classRanks = useMemo(() => {
     const labels = metadata?.labels;
@@ -79,37 +137,37 @@ export default function RightSidebar({
     const label = metadata.labels[embeddingIndex];
     if (label === 'Real') {
       const rank = classRanks.realRank[embeddingIndex] - 1; // 0-based
-      if (rank >= 0 && Array.isArray(realData) && rank < realData.length) {
-        return { label, row: realData[rank], rank };
+      if (rank >= 0 && Array.isArray(alignedRealData) && rank < alignedRealData.length) {
+        return { label, row: alignedRealData[rank], rank };
       }
     } else if (label === 'Synthetic') {
       const rank = classRanks.synthRank[embeddingIndex] - 1; // 0-based
-      if (rank >= 0 && Array.isArray(syntheticData) && rank < syntheticData.length) {
-        return { label, row: syntheticData[rank], rank };
+      if (rank >= 0 && Array.isArray(alignedSyntheticData) && rank < alignedSyntheticData.length) {
+        return { label, row: alignedSyntheticData[rank], rank };
       }
     }
     return null;
-  }, [metadata, classRanks, embeddingData, realData, syntheticData]);
+  }, [metadata, classRanks, embeddingData, alignedRealData, alignedSyntheticData]);
 
-  // Combine original data
+  // Combine aligned data for plotting
   const originalData = useMemo(() => {
-    const headers = realHeaders && realHeaders.length ? realHeaders : (syntheticHeaders || []);
+    const headers = Array.isArray(commonHeaders) ? commonHeaders : [];
     const data = [];
     const labels = [];
-    if (Array.isArray(realData)) {
-      for (const row of realData) {
+    if (Array.isArray(alignedRealData) && alignedRealData.length) {
+      for (const row of alignedRealData) {
         data.push(row);
         labels.push('Real');
       }
     }
-    if (Array.isArray(syntheticData)) {
-      for (const row of syntheticData) {
+    if (Array.isArray(alignedSyntheticData) && alignedSyntheticData.length) {
+      for (const row of alignedSyntheticData) {
         data.push(row);
         labels.push('Synthetic');
       }
     }
     return { data, headers, labels };
-  }, [realData, syntheticData, realHeaders, syntheticHeaders]);
+  }, [alignedRealData, alignedSyntheticData, commonHeaders]);
 
   // Headers available for selection (exclude unnamed headers)
   const displayHeaders = useMemo(() => {
@@ -646,37 +704,22 @@ export default function RightSidebar({
     const abortController = new AbortController();
     globalAbortControllerRef.current = abortController;
 
-    // Prefer exact embedded datasets if provided in metadata (fresh embeddings attach these)
-    let allReal = Array.isArray(metadata?.realData?.data) ? metadata.realData.data : null;
-    let allSynthetic = Array.isArray(metadata?.syntheticData?.data) ? metadata.syntheticData.data : null;
-
-    if (!allReal || !allSynthetic) {
-      // Fall back to estimating embedded subset sizes from labels and slicing props
-      let embeddedRealCount = 0;
-      let embeddedSynthCount = 0;
-      if (Array.isArray(metadata?.labels)) {
-        for (const l of metadata.labels) {
-          if (l === 'Real') embeddedRealCount++;
-          else if (l === 'Synthetic') embeddedSynthCount++;
-        }
-      }
-
-      allReal = Array.isArray(realData)
-        ? realData.slice(0, embeddedRealCount > 0 ? Math.min(embeddedRealCount, realData.length) : 0)
-        : [];
-      allSynthetic = Array.isArray(syntheticData)
-        ? syntheticData.slice(0, embeddedSynthCount > 0 ? Math.min(embeddedSynthCount, syntheticData.length) : 0)
-        : [];
-    }
-    // If we still have no data (e.g., before embeddings), fall back to original arrays to avoid empty UI
-    if (allReal.length === 0 && allSynthetic.length === 0 && (Array.isArray(realData) || Array.isArray(syntheticData))) {
-      const fallbackReal = Array.isArray(realData) ? realData : [];
-      const fallbackSynth = Array.isArray(syntheticData) ? syntheticData : [];
-      if (fallbackReal.length || fallbackSynth.length) {
-        allReal = fallbackReal;
-        allSynthetic = fallbackSynth;
+    // Determine embedded subset sizes (if labels available) and slice aligned arrays accordingly
+    let embeddedRealCount = 0;
+    let embeddedSynthCount = 0;
+    if (Array.isArray(metadata?.labels)) {
+      for (const l of metadata.labels) {
+        if (l === 'Real') embeddedRealCount++;
+        else if (l === 'Synthetic') embeddedSynthCount++;
       }
     }
+
+    let allReal = Array.isArray(alignedRealData)
+      ? (embeddedRealCount > 0 ? alignedRealData.slice(0, Math.min(embeddedRealCount, alignedRealData.length)) : alignedRealData)
+      : [];
+    let allSynthetic = Array.isArray(alignedSyntheticData)
+      ? (embeddedSynthCount > 0 ? alignedSyntheticData.slice(0, Math.min(embeddedSynthCount, alignedSyntheticData.length)) : alignedSyntheticData)
+      : [];
 
     if (allReal.length === 0 && allSynthetic.length === 0) {
       setGlobalPlotData(null);
@@ -708,7 +751,7 @@ export default function RightSidebar({
     } finally {
       if (!abortController.signal.aborted) setGlobalPlotLoading(false);
     }
-  }, [originalData, histogramColumn, histogramPlotType, realData, syntheticData]);
+  }, [originalData, histogramColumn, histogramPlotType, alignedRealData, alignedSyntheticData, metadata]);
 
   // Trigger overall distribution when inputs change
   useEffect(() => {
