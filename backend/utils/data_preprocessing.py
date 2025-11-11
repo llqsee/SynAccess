@@ -2,12 +2,19 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
-from typing import Tuple, List, Any, Union
+from typing import Tuple, List, Any, Union, Dict, Optional
 
 def preprocess_data(real_data: Union[List[List[Any]], np.ndarray, pd.DataFrame], 
                    synthetic_data: Union[List[List[Any]], np.ndarray, pd.DataFrame],
                    transformer: ColumnTransformer = None,
-                   return_transformer: bool = False) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, ColumnTransformer]]:
+                   return_transformer: bool = False,
+                   real_headers: Optional[List[str]] = None,
+                   synthetic_headers: Optional[List[str]] = None,
+                   alignment_strategy: str = "intersect") -> Union[
+                       Tuple[np.ndarray, np.ndarray],
+                       Tuple[np.ndarray, np.ndarray, ColumnTransformer],
+                       Tuple[np.ndarray, np.ndarray, ColumnTransformer, Dict[str, Any]]
+                   ]:
     """
     Clean and prepare your data for analysis.
     
@@ -43,11 +50,64 @@ def preprocess_data(real_data: Union[List[List[Any]], np.ndarray, pd.DataFrame],
     else:
         raise ValueError(f"Unsupported synthetic_data type: {type(synthetic_data)}")
     
-    # Ensure both DataFrames have the same columns
-    if len(real_df.columns) != len(synthetic_df.columns):
-        # If column counts don't match, use numeric indices
-        real_df.columns = range(len(real_df.columns))
-        synthetic_df.columns = range(len(synthetic_df.columns))
+    # Establish original headers if provided; fallback to indices
+    if real_headers and len(real_headers) == real_df.shape[1]:
+        real_df.columns = real_headers
+    else:
+        real_df.columns = [f"col_{i}" for i in range(real_df.shape[1])]
+
+    if synthetic_headers and len(synthetic_headers) == synthetic_df.shape[1]:
+        synthetic_df.columns = synthetic_headers
+    else:
+        synthetic_df.columns = [f"col_{i}" for i in range(synthetic_df.shape[1])]
+
+    alignment_info: Dict[str, Any] = {
+        "strategy": alignment_strategy,
+        "real_columns_original": list(real_df.columns),
+        "synthetic_columns_original": list(synthetic_df.columns)
+    }
+
+    # Align columns according to strategy when counts differ or names differ
+    if alignment_strategy == "intersect":
+        common_cols = [c for c in real_df.columns if c in synthetic_df.columns]
+        if not common_cols:
+            # Fallback: positional min length
+            min_len = min(real_df.shape[1], synthetic_df.shape[1])
+            real_df = real_df.iloc[:, :min_len]
+            synthetic_df = synthetic_df.iloc[:, :min_len]
+            new_cols = [f"col_{i}" for i in range(min_len)]
+            real_df.columns = new_cols
+            synthetic_df.columns = new_cols
+            alignment_info["mode"] = "positional_truncate"
+        else:
+            real_df = real_df[common_cols]
+            synthetic_df = synthetic_df[common_cols]
+            alignment_info["mode"] = "intersection"
+            alignment_info["aligned_columns"] = common_cols
+    elif alignment_strategy == "union":
+        # Build union and add missing columns filled with NaN
+        union_cols = list(dict.fromkeys(list(real_df.columns) + list(synthetic_df.columns)))
+        for c in union_cols:
+            if c not in real_df.columns:
+                real_df[c] = np.nan
+            if c not in synthetic_df.columns:
+                synthetic_df[c] = np.nan
+        real_df = real_df[union_cols]
+        synthetic_df = synthetic_df[union_cols]
+        alignment_info["mode"] = "union"
+        alignment_info["aligned_columns"] = union_cols
+    elif alignment_strategy == "positional":
+        # Truncate to min length by position, renaming to col_i
+        min_len = min(real_df.shape[1], synthetic_df.shape[1])
+        real_df = real_df.iloc[:, :min_len]
+        synthetic_df = synthetic_df.iloc[:, :min_len]
+        new_cols = [f"col_{i}" for i in range(min_len)]
+        real_df.columns = new_cols
+        synthetic_df.columns = new_cols
+        alignment_info["mode"] = "positional_truncate"
+        alignment_info["aligned_columns"] = new_cols
+    else:
+        alignment_info["mode"] = "none"  # No special alignment
     
     # If transformer is provided (pretrained model), use it directly
     if transformer is not None:
@@ -98,7 +158,7 @@ def preprocess_data(real_data: Union[List[List[Any]], np.ndarray, pd.DataFrame],
     synthetic_processed = synthetic_processed.astype(np.float32)
     
     if return_transformer:
-        return real_processed, synthetic_processed, transformer
+        return real_processed, synthetic_processed, transformer, alignment_info
     else:
         return real_processed, synthetic_processed
 

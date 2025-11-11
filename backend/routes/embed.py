@@ -26,6 +26,7 @@ class EmbeddingRequest(BaseModel):
     synthetic_headers: Optional[List[str]] = Field(None, description="Synthetic data headers")
     real_dataset_name: Optional[str] = Field(None, description="Name of the real dataset (filename)")
     synthetic_dataset_name: Optional[str] = Field(None, description="Name of the synthetic dataset (filename)")
+    alignment_strategy: Optional[str] = Field('intersect', description="Column alignment strategy when schemas differ: intersect | positional | union")
 
 class PreTrainedModelRequest(BaseModel):
     real_data: List[List[Any]] = Field(..., description="Real dataset")
@@ -67,6 +68,10 @@ async def compute_embedding(request: EmbeddingRequest):
             dataset_description = f"{request.method.upper()} Embedding"
         
         # Set up the job record
+        # Inject alignment_strategy into params if not explicitly provided
+        if request.alignment_strategy and 'alignment_strategy' not in request.params:
+            request.params['alignment_strategy'] = request.alignment_strategy
+
         JobService.create_job(
             job_id=job_id,
             method=request.method,

@@ -47,9 +47,8 @@ def validate_data_format(real_data: List[List[Any]], synthetic_data: List[List[A
         if len(row) != synthetic_cols:
             raise ValueError(f"All rows in synthetic_data must have the same number of columns. Row {i} has {len(row)} columns, expected {synthetic_cols}")
     
-    # Check that both datasets have the same number of columns
-    if real_cols != synthetic_cols:
-        raise ValueError(f"Real and synthetic data must have the same number of columns. Real: {real_cols}, Synthetic: {synthetic_cols}")
+    # Allow differing numbers of columns; preprocessing will align by headers or intersection
+    # If they differ, we simply proceed and log a warning at higher layers if needed.
 
 def validate_embedding_params(method: str, params: Dict[str, Any]) -> None:
     """

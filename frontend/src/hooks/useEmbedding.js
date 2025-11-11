@@ -142,14 +142,23 @@ export const useEmbedding = () => {
               await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
             }
           }
-        case 'failed':
-        case 'cancelled':
-          setError(status.error_message || status.status === 'cancelled' ? 'Job was cancelled' : 'Embedding computation failed');
+        case 'failed': {
+          const msg = status.error_message || 'Embedding computation failed';
+          setError(msg);
           setCanCancel(false);
           clearPolling();
           setLoading(false);
           resetState();
           return;
+        }
+        case 'cancelled': {
+          setError('Job was cancelled');
+          setCanCancel(false);
+          clearPolling();
+          setLoading(false);
+          resetState();
+          return;
+        }
         default:
           setProcessingStatus(`Status: ${status.status}`);
           break;

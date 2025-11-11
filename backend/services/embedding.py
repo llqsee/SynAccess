@@ -127,12 +127,18 @@ class EmbeddingService:
         
         try:
             # Preprocess data using simplified preprocessing and save transformer
-            real_processed, synth_processed, data_transformer = preprocess_data(
-                real_data, synthetic_data, return_transformer=True
+            real_processed, synth_processed, data_transformer, alignment_info = preprocess_data(
+                real_data,
+                synthetic_data,
+                return_transformer=True,
+                real_headers=real_headers,
+                synthetic_headers=synthetic_headers,
+                alignment_strategy=params.get('alignment_strategy', 'intersect')
             )
             preprocessing_metadata = {
                 'preprocessing': 'simplified_categorical_encoding',
-                'has_transformer': data_transformer is not None
+                'has_transformer': data_transformer is not None,
+                'alignment': alignment_info
             }
             
             # Report preprocessing completion
@@ -189,7 +195,7 @@ class EmbeddingService:
             non_embedding_params = [
                 'pretrained_model', 'model_job_id', 'job_id', 'fine_tune',
                 'real_headers', 'synthetic_headers', 'progress_callback',
-                'n_real_samples', 'n_synth_samples'
+                'n_real_samples', 'n_synth_samples', 'alignment_strategy'
             ]
             
             for param in non_embedding_params:
@@ -483,19 +489,39 @@ class EmbeddingService:
             if data_transformer is not None:
                 logger.info("Using saved data transformer (FAST PATH for pretrained model)")
                 # Use the saved transformer - this is much faster!
-                real_processed, synth_processed = preprocess_data(
-                    real_data, synthetic_data, transformer=data_transformer
+                real_processed, synth_processed, _, alignment_info = preprocess_data(
+                    real_data,
+                    synthetic_data,
+                    transformer=data_transformer,
+                    return_transformer=True,
+                    real_headers=real_headers,
+                    synthetic_headers=synthetic_headers,
+                    alignment_strategy='intersect'
                 )
                 preprocessing_metadata = {'preprocessing': 'reused_saved_transformer'}
             else:
                 logger.info("No transformer in model package, falling back to full preprocessing")
-                real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
+                real_processed, synth_processed, _, alignment_info = preprocess_data(
+                    real_data,
+                    synthetic_data,
+                    return_transformer=True,
+                    real_headers=real_headers,
+                    synthetic_headers=synthetic_headers,
+                    alignment_strategy='intersect'
+                )
                 preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding'}
         else:
             # Old format: just the model (backward compatibility)
             logger.info("Old model format detected, using full preprocessing (SLOW PATH)")
             embedding_model = pretrained_model
-            real_processed, synth_processed = preprocess_data(real_data, synthetic_data)
+            real_processed, synth_processed, _, alignment_info = preprocess_data(
+                real_data,
+                synthetic_data,
+                return_transformer=True,
+                real_headers=real_headers,
+                synthetic_headers=synthetic_headers,
+                alignment_strategy='intersect'
+            )
             preprocessing_metadata = {'preprocessing': 'simplified_categorical_encoding_legacy'}
         
         # Update pretrained_model reference to point to the actual embedding model
@@ -566,7 +592,8 @@ class EmbeddingService:
             "model_type": type(pretrained_model).__name__,
             "fine_tuned": False,  # Always False now
             "direct_transformation": True,  # Indicates direct transform was used
-            **preprocessing_metadata
+            **preprocessing_metadata,
+            "alignment": alignment_info
         }
         
         # Store the original pre-trained model
