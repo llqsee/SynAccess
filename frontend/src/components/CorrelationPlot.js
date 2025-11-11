@@ -1,6 +1,110 @@
-import React, { useMemo, useRef, useEffect, useState } from 'react';
+import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import { Box, Typography } from '@mui/material';
+
+const parseNum = (value) => (typeof value === 'number' ? value : parseFloat(value));
+
+const isFiniteNum = (value) => Number.isFinite(value) && !Number.isNaN(value);
+
+const pearsonForPair = (rows, i, j) => {
+  let n = 0;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXX = 0;
+  let sumYY = 0;
+  let sumXY = 0;
+  for (let r = 0; r < rows.length; r++) {
+    const vx = parseNum(rows[r]?.[i]);
+    const vy = parseNum(rows[r]?.[j]);
+    if (!isFiniteNum(vx) || !isFiniteNum(vy)) continue;
+    n++;
+    sumX += vx;
+    sumY += vy;
+    sumXX += vx * vx;
+    sumYY += vy * vy;
+    sumXY += vx * vy;
+  }
+  if (n <= 1) return 0;
+  const cov = sumXY - (sumX * sumY) / n;
+  const varX = sumXX - (sumX * sumX) / n;
+  const varY = sumYY - (sumY * sumY) / n;
+  const denom = Math.sqrt(varX * varY);
+  return denom > 1e-12 ? (cov / denom) : 0;
+};
+
+const cramersV = (rows, i, j) => {
+  const aMap = new Map();
+  const bMap = new Map();
+  let aCount = 0;
+  let bCount = 0;
+  const pairs = [];
+  for (let r = 0; r < rows.length; r++) {
+    const aRaw = rows[r]?.[i];
+    const bRaw = rows[r]?.[j];
+    if (aRaw === null || aRaw === undefined || aRaw === '' || bRaw === null || bRaw === undefined || bRaw === '') continue;
+    const a = String(aRaw);
+    const b = String(bRaw);
+    if (!aMap.has(a)) aMap.set(a, aCount++);
+    if (!bMap.has(b)) bMap.set(b, bCount++);
+    pairs.push([aMap.get(a), bMap.get(b)]);
+  }
+  const rDim = aCount;
+  const cDim = bCount;
+  const n = pairs.length;
+  if (n === 0 || rDim === 0 || cDim === 0) return 0;
+  const table = Array.from({ length: rDim }, () => new Array(cDim).fill(0));
+  for (const [ri, ci] of pairs) table[ri][ci] += 1;
+  const rowSum = table.map(row => row.reduce((a, b) => a + b, 0));
+  const colSum = Array.from({ length: cDim }, (_, j2) => table.reduce((acc, row) => acc + row[j2], 0));
+  let chi2 = 0;
+  for (let r2 = 0; r2 < rDim; r2++) {
+    for (let c2 = 0; c2 < cDim; c2++) {
+      const expected = (rowSum[r2] * colSum[c2]) / n;
+      if (expected > 0) {
+        const diff = table[r2][c2] - expected;
+        chi2 += (diff * diff) / expected;
+      }
+    }
+  }
+  const k = Math.min(rDim - 1, cDim - 1);
+  if (k <= 0) return 0;
+  const v = Math.sqrt(chi2 / (n * k));
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+};
+
+const correlationRatioEta = (rows, catIdx, numIdx) => {
+  const groups = new Map();
+  let N = 0;
+  let sumY = 0;
+  let sumYY = 0;
+  for (let r = 0; r < rows.length; r++) {
+    const cRaw = rows[r]?.[catIdx];
+    const yRaw = rows[r]?.[numIdx];
+    if (cRaw === null || cRaw === undefined || cRaw === '') continue;
+    const y = parseNum(yRaw);
+    if (!isFiniteNum(y)) continue;
+    const c = String(cRaw);
+    const g = groups.get(c) || { n: 0, sum: 0 };
+    g.n += 1;
+    g.sum += y;
+    groups.set(c, g);
+    N += 1;
+    sumY += y;
+    sumYY += y * y;
+  }
+  if (N <= 1 || groups.size <= 1) return { eta: 0, eta2: 0 };
+  const mu = sumY / N;
+  const SST = sumYY - N * mu * mu;
+  if (SST <= 1e-12) return { eta: 0, eta2: 0 };
+  let SSB = 0;
+  for (const { n, sum } of groups.values()) {
+    const muK = sum / n;
+    SSB += n * (muK - mu) * (muK - mu);
+  }
+  const eta2 = Math.max(0, Math.min(1, SSB / SST));
+  const eta = Math.sqrt(eta2);
+  return { eta, eta2 };
+};
 
 const CorrelationPlot = ({
   realData,
@@ -10,7 +114,6 @@ const CorrelationPlot = ({
   embeddingData,
   metadata,
   selectedPoints,
-  maxColumns = 20,
   sampleSize = 2000
 }) => {
   const rowRef = useRef(null);
@@ -23,7 +126,7 @@ const CorrelationPlot = ({
   const realScatterRef = useRef(null);
   const synthScatterRef = useRef(null);
 
-  const [selectedPair, setSelectedPair] = useState(null); // {i, j, xName, yName}
+  const [selectedPair, setSelectedPair] = useState(null); // { xName, yName }
 
   // Determine embedded datasets and headers to use throughout (prefer exact metadata datasets)
   const embeddedSource = useMemo(() => {
@@ -128,18 +231,10 @@ const CorrelationPlot = ({
 
   const hasData = (arr) => Array.isArray(arr) && arr.length > 0 && Array.isArray(arr[0]);
 
-  // Choose a common set of headers to compare (intersection)
-  const commonHeaders = useMemo(() => {
-    const { embRealHeaders, embSynthHeaders } = embeddedSource;
-    if (!Array.isArray(embRealHeaders) || !Array.isArray(embSynthHeaders)) return [];
-    const set = new Set(embSynthHeaders);
-    return embRealHeaders.filter(h => set.has(h));
-  }, [embeddedSource]);
-
-  const sampleRows = (rows) => {
+  const sampleRows = useCallback((rows) => {
     if (!hasData(rows)) return [];
     return rows.slice(0, sampleSize);
-  };
+  }, [sampleSize]);
   // Helpers: numeric detection and parsing
   const isNumericColumn = (rows, colIdx) => {
     if (!rows || rows.length === 0) return false;
@@ -156,137 +251,61 @@ const CorrelationPlot = ({
     return (numericCount / checked) >= 0.8;
   };
 
-  const parseNum = (v) => (typeof v === 'number' ? v : parseFloat(v));
-  const isFiniteNum = (v) => Number.isFinite(v) && !Number.isNaN(v);
-
-  // Metrics
-  const pearsonForPair = (rows, i, j) => {
-    let n = 0;
-    let sumX = 0, sumY = 0, sumXX = 0, sumYY = 0, sumXY = 0;
-    for (let r = 0; r < rows.length; r++) {
-      const vx = parseNum(rows[r]?.[i]);
-      const vy = parseNum(rows[r]?.[j]);
-      if (!isFiniteNum(vx) || !isFiniteNum(vy)) continue;
-      n++;
-      sumX += vx; sumY += vy;
-      sumXX += vx * vx; sumYY += vy * vy; sumXY += vx * vy;
-    }
-    if (n <= 1) return 0;
-    const cov = sumXY - (sumX * sumY) / n;
-    const varX = sumXX - (sumX * sumX) / n;
-    const varY = sumYY - (sumY * sumY) / n;
-    const denom = Math.sqrt(varX * varY);
-    return denom > 1e-12 ? (cov / denom) : 0;
-  };
-
-  const cramersV = (rows, i, j) => {
-    // Build contingency table
-    const aMap = new Map(); // category -> row index
-    const bMap = new Map(); // category -> col index
-    let aCount = 0, bCount = 0;
-    const pairs = [];
-    for (let r = 0; r < rows.length; r++) {
-      const aRaw = rows[r]?.[i];
-      const bRaw = rows[r]?.[j];
-      if (aRaw === null || aRaw === undefined || aRaw === '' || bRaw === null || bRaw === undefined || bRaw === '') continue;
-      const a = String(aRaw);
-      const b = String(bRaw);
-      if (!aMap.has(a)) aMap.set(a, aCount++);
-      if (!bMap.has(b)) bMap.set(b, bCount++);
-      pairs.push([aMap.get(a), bMap.get(b)]);
-    }
-    const rDim = aCount, cDim = bCount;
-    const n = pairs.length;
-    if (n === 0 || rDim === 0 || cDim === 0) return 0;
-    const table = Array.from({ length: rDim }, () => new Array(cDim).fill(0));
-    for (const [ri, ci] of pairs) table[ri][ci] += 1;
-    const rowSum = table.map(row => row.reduce((a, b) => a + b, 0));
-    const colSum = Array.from({ length: cDim }, (_, j2) => table.reduce((acc, row) => acc + row[j2], 0));
-    let chi2 = 0;
-    for (let r2 = 0; r2 < rDim; r2++) {
-      for (let c2 = 0; c2 < cDim; c2++) {
-        const expected = (rowSum[r2] * colSum[c2]) / n;
-        if (expected > 0) {
-          const diff = table[r2][c2] - expected;
-          chi2 += (diff * diff) / expected;
-        }
-      }
-    }
-    const k = Math.min(rDim - 1, cDim - 1);
-    if (k <= 0) return 0;
-    const v = Math.sqrt(chi2 / (n * k));
-    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
-  };
-
-  const correlationRatioEta = (rows, catIdx, numIdx) => {
-    const groups = new Map(); // cat -> {n, sum}
-    let N = 0;
-    let sumY = 0, sumYY = 0;
-    for (let r = 0; r < rows.length; r++) {
-      const cRaw = rows[r]?.[catIdx];
-      const yRaw = rows[r]?.[numIdx];
-      if (cRaw === null || cRaw === undefined || cRaw === '' ) continue;
-      const y = parseNum(yRaw);
-      if (!isFiniteNum(y)) continue;
-      const c = String(cRaw);
-      const g = groups.get(c) || { n: 0, sum: 0 };
-      g.n += 1; g.sum += y;
-      groups.set(c, g);
-      N += 1; sumY += y; sumYY += y * y;
-    }
-    if (N <= 1 || groups.size <= 1) return { eta: 0, eta2: 0 };
-    const mu = sumY / N;
-    const SST = sumYY - N * mu * mu;
-    if (SST <= 1e-12) return { eta: 0, eta2: 0 };
-    let SSB = 0;
-    for (const { n, sum } of groups.values()) {
-      const muK = sum / n;
-      SSB += n * (muK - mu) * (muK - mu);
-    }
-    const eta2 = Math.max(0, Math.min(1, SSB / SST));
-    const eta = Math.sqrt(eta2);
-    return { eta, eta2 };
-  };
 
   // Build aligned mixed-type matrices for real and synthetic
-  const { cols, colTypes, realCorr, synthCorr, diffCorr, metricAt, realIndices, synthIndices } = useMemo(() => {
+  const { realMatrix, synthMatrix, diffMatrix } = useMemo(() => {
+    const emptyReal = {
+      cols: [],
+      types: [],
+      matrix: [],
+      metricAt: () => 'Value',
+      indices: []
+    };
+    const emptySynth = {
+      cols: [],
+      types: [],
+      matrix: [],
+      metricAt: () => 'Value',
+      indices: []
+    };
+    const emptyDiff = {
+      cols: [],
+      types: [],
+      matrix: [],
+      metricAt: () => 'Value',
+      realIndices: [],
+      synthIndices: []
+    };
+
     const { embRealRows, embSynthRows, embRealHeaders, embSynthHeaders } = embeddedSource;
     const realRows = sampleRows(embRealRows);
     const synthRows = sampleRows(embSynthRows);
-    if (!hasData(realRows) || !hasData(synthRows) || !Array.isArray(commonHeaders) || commonHeaders.length === 0) {
-      return { cols: [], colTypes: [], realCorr: [], synthCorr: [], diffCorr: [], metricAt: () => 'Value', realIndices: [], synthIndices: [] };
-    }
 
-    // Column indices for each in the common headers order
-    const realIdxAll = commonHeaders.map(h => embRealHeaders?.indexOf(h)).filter(i => i >= 0);
-    const synthIdxAll = commonHeaders.map(h => embSynthHeaders?.indexOf(h)).filter(i => i >= 0);
+    const hasReal = hasData(realRows) && Array.isArray(embRealHeaders) && embRealHeaders.length > 0;
+    const hasSynth = hasData(synthRows) && Array.isArray(embSynthHeaders) && embSynthHeaders.length > 0;
 
-    // Determine a consistent type per header across datasets: numeric only if numeric in BOTH
-    const typesAll = commonHeaders.map((h, idx) => {
-      const ri = realIdxAll[idx];
-      const si = synthIdxAll[idx];
-      const realNum = isNumericColumn(realRows, ri);
-      const synthNum = isNumericColumn(synthRows, si);
-      return realNum && synthNum ? 'numeric' : 'categorical';
-    });
+    const metricLabel = (types, i, j) => {
+      const ti = types[i];
+      const tj = types[j];
+      if (ti === 'numeric' && tj === 'numeric') return 'Pearson r';
+      if (ti === 'categorical' && tj === 'categorical') return "Cramér's V";
+      return 'Correlation ratio η';
+    };
 
-    // Limit columns
-    const limitedHeaders = commonHeaders.slice(0, Math.max(1, maxColumns));
-    const limitedTypes = typesAll.slice(0, Math.max(1, maxColumns));
-  const realIndices = limitedHeaders.map(h => embRealHeaders.indexOf(h));
-  const synthIndices = limitedHeaders.map(h => embSynthHeaders.indexOf(h));
-
-    const n = limitedHeaders.length;
-    if (n === 0) {
-      return { cols: [], colTypes: [], realCorr: [], synthCorr: [], diffCorr: [], metricAt: () => 'Value', realIndices: [], synthIndices: [] };
-    }
+    const buildMetricAt = (types, prefix = '') => (i, j) => {
+      const base = metricLabel(types, i, j);
+      return prefix ? `${prefix}${base}` : base;
+    };
 
     const computeMatrix = (rows, indices, types) => {
+      const n = Math.min(indices.length, types.length);
+      if (!rows || rows.length === 0 || n === 0) return [];
       const M = Array.from({ length: n }, () => new Array(n).fill(0));
       for (let i = 0; i < n; i++) {
         M[i][i] = 1;
         for (let j = i + 1; j < n; j++) {
-          const ti = types[i], tj = types[j];
+          const ti = types[i];
+          const tj = types[j];
           let val = 0;
           if (ti === 'numeric' && tj === 'numeric') {
             val = pearsonForPair(rows, indices[i], indices[j]);
@@ -296,9 +315,8 @@ const CorrelationPlot = ({
             const catIdx = ti === 'categorical' ? indices[i] : indices[j];
             const numIdx = ti === 'numeric' ? indices[i] : indices[j];
             const { eta } = correlationRatioEta(rows, catIdx, numIdx);
-            val = eta; // in [0,1]
+            val = eta;
           }
-          // fill both upper and lower triangle
           M[i][j] = val;
           M[j][i] = val;
         }
@@ -306,32 +324,89 @@ const CorrelationPlot = ({
       return M;
     };
 
-    const rCorr = computeMatrix(realRows, realIndices, limitedTypes);
-    const sCorr = computeMatrix(synthRows, synthIndices, limitedTypes);
-
-    // Difference matrix (synthetic - real)
-    const dCorr = Array.from({ length: n }, () => new Array(n).fill(0));
-    for (let i = 0; i < n; i++) {
-      dCorr[i][i] = 0;
-      for (let j = i + 1; j < n; j++) {
-        const rv = (rCorr[i] && rCorr[i][j] != null) ? rCorr[i][j] : 0;
-        const sv = (sCorr[i] && sCorr[i][j] != null) ? sCorr[i][j] : 0;
-        const diff = sv - rv;
-        dCorr[i][j] = diff;
-        dCorr[j][i] = diff;
-      }
+    let realMatrix = emptyReal;
+    if (hasReal) {
+      const sourceHeaders = Array.isArray(embRealHeaders) ? embRealHeaders : [];
+      const realPairs = sourceHeaders
+        .map(header => ({ header, index: embRealHeaders.indexOf(header) }))
+        .filter(pair => pair.index >= 0);
+      const cols = realPairs.map(pair => pair.header);
+      const indices = realPairs.map(pair => pair.index);
+      const types = realPairs.map(pair => (isNumericColumn(realRows, pair.index) ? 'numeric' : 'categorical'));
+      const matrix = computeMatrix(realRows, indices, types);
+      realMatrix = {
+        cols,
+        types,
+        matrix,
+        metricAt: buildMetricAt(types),
+        indices
+      };
     }
 
-    const metricAt = (i, j) => {
-      const ti = limitedTypes[i];
-      const tj = limitedTypes[j];
-      if (ti === 'numeric' && tj === 'numeric') return 'Pearson r';
-      if (ti === 'categorical' && tj === 'categorical') return "Cramér's V";
-      return 'Correlation ratio η';
-    };
+    let synthMatrix = emptySynth;
+    if (hasSynth) {
+      const sourceHeaders = Array.isArray(embSynthHeaders) ? embSynthHeaders : [];
+      const synthPairs = sourceHeaders
+        .map(header => ({ header, index: embSynthHeaders.indexOf(header) }))
+        .filter(pair => pair.index >= 0);
+      const cols = synthPairs.map(pair => pair.header);
+      const indices = synthPairs.map(pair => pair.index);
+      const types = synthPairs.map(pair => (isNumericColumn(synthRows, pair.index) ? 'numeric' : 'categorical'));
+      const matrix = computeMatrix(synthRows, indices, types);
+      synthMatrix = {
+        cols,
+        types,
+        matrix,
+        metricAt: buildMetricAt(types),
+        indices
+      };
+    }
 
-    return { cols: limitedHeaders, colTypes: limitedTypes, realCorr: rCorr, synthCorr: sCorr, diffCorr: dCorr, metricAt, realIndices, synthIndices };
-  }, [embeddedSource, maxColumns, sampleSize, commonHeaders]);
+    let diffMatrix = emptyDiff;
+    if (hasReal && hasSynth) {
+      const synthSet = new Set(embSynthHeaders);
+      const intersection = embRealHeaders.filter(h => synthSet.has(h));
+      const diffPairs = intersection
+        .map(header => ({
+          header,
+          realIndex: embRealHeaders.indexOf(header),
+          synthIndex: embSynthHeaders.indexOf(header)
+        }))
+        .filter(pair => pair.realIndex >= 0 && pair.synthIndex >= 0);
+      const cols = diffPairs.map(pair => pair.header);
+      const realIndices = diffPairs.map(pair => pair.realIndex);
+      const synthIndices = diffPairs.map(pair => pair.synthIndex);
+      const types = diffPairs.map(pair => {
+        const realNum = isNumericColumn(realRows, pair.realIndex);
+        const synthNum = isNumericColumn(synthRows, pair.synthIndex);
+        return realNum && synthNum ? 'numeric' : 'categorical';
+      });
+      const realCorr = computeMatrix(realRows, realIndices, types);
+      const synthCorr = computeMatrix(synthRows, synthIndices, types);
+      const n = cols.length;
+      const matrix = Array.from({ length: n }, () => new Array(n).fill(0));
+      for (let i = 0; i < n; i++) {
+        matrix[i][i] = 0;
+        for (let j = i + 1; j < n; j++) {
+          const rv = (realCorr[i] && realCorr[i][j] != null) ? realCorr[i][j] : 0;
+          const sv = (synthCorr[i] && synthCorr[i][j] != null) ? synthCorr[i][j] : 0;
+          const diff = sv - rv;
+          matrix[i][j] = diff;
+          matrix[j][i] = diff;
+        }
+      }
+      diffMatrix = {
+        cols,
+        types,
+        matrix,
+        metricAt: buildMetricAt(types, 'Δ '),
+        realIndices,
+        synthIndices
+      };
+    }
+
+    return { realMatrix, synthMatrix, diffMatrix };
+  }, [embeddedSource, sampleRows]);
 
   // Heatmap helper for correlation matrices (lower triangle only)
   const drawHeatmap = (container, matrix, labels, options) => {
@@ -551,88 +626,160 @@ const CorrelationPlot = ({
   };
 
   useEffect(() => {
+    if (!selectedPair) return;
+    const { xName, yName } = selectedPair;
+    if (!diffMatrix.cols.includes(xName) || !diffMatrix.cols.includes(yName)) {
+      setSelectedPair(null);
+    }
+  }, [selectedPair, diffMatrix]);
+
+  const hasRealMatrix = Array.isArray(realMatrix.cols) && realMatrix.cols.length > 0 && Array.isArray(realMatrix.matrix) && realMatrix.matrix.length > 0;
+  const hasSynthMatrix = Array.isArray(synthMatrix.cols) && synthMatrix.cols.length > 0 && Array.isArray(synthMatrix.matrix) && synthMatrix.matrix.length > 0;
+  const hasDiffMatrix = Array.isArray(diffMatrix.cols) && diffMatrix.cols.length > 0 && Array.isArray(diffMatrix.matrix) && diffMatrix.matrix.length > 0;
+  const hasAnyMatrix = hasRealMatrix || hasSynthMatrix || hasDiffMatrix;
+
+  useEffect(() => {
     const drawAll = () => {
-      if (!cols || cols.length === 0) {
-        [realRef, synthRef, diffRef].forEach(ref => {
-          if (ref.current) d3.select(ref.current).selectAll('*').remove();
-        });
+      const realContainer = realRef.current;
+      const synthContainer = synthRef.current;
+      const diffContainer = diffRef.current;
+
+      if (!hasRealMatrix && realContainer) d3.select(realContainer).selectAll('*').remove();
+      if (!hasSynthMatrix && synthContainer) d3.select(synthContainer).selectAll('*').remove();
+      if (!hasDiffMatrix && diffContainer) d3.select(diffContainer).selectAll('*').remove();
+
+      if (!hasRealMatrix && !hasSynthMatrix && !hasDiffMatrix) {
         if (legendRef.current) d3.select(legendRef.current).selectAll('*').remove();
         if (diffLegendRef.current) d3.select(diffLegendRef.current).selectAll('*').remove();
         return;
       }
+
       const container = rowRef.current;
-      const gapPx = 8; // MUI gap: 1 ~ 8px
+      const gapPx = 8;
       const totalWidth = container ? container.getBoundingClientRect().width : 1020;
-      // Inline layout: Real | Synthetic | Legend(R/S) | Difference | Legend(Diff)
-      // There are 5 items -> 4 gaps. Legends are narrow fixed width.
-      const legendWidth = 80; // px, vertical legend width
-      const nGaps = 4;
-      const legendsTotal = 2 * legendWidth;
-      const usableForHeatmaps = Math.max(300, totalWidth - (nGaps * gapPx) - legendsTotal);
-      const perWidth = Math.max(200, Math.floor(usableForHeatmaps / 3));
-      const perHeight = perWidth; // square
+      const legendWidth = 80;
+      const legendCount = (hasRealMatrix || hasSynthMatrix ? 1 : 0) + (hasDiffMatrix ? 1 : 0);
+      const heatmapCount = (hasRealMatrix ? 1 : 0) + (hasSynthMatrix ? 1 : 0) + (hasDiffMatrix ? 1 : 0);
+      const itemCount = heatmapCount + legendCount;
+      const nGaps = Math.max(0, itemCount - 1);
+      const legendsTotal = legendCount * legendWidth;
+      const usableForHeatmaps = Math.max(200, totalWidth - (nGaps * gapPx) - legendsTotal);
+      const perWidth = Math.max(200, Math.floor(usableForHeatmaps / Math.max(1, heatmapCount)));
+      const perHeight = perWidth;
       const commonOpts = { width: perWidth, height: perHeight, margin: { top: 40, right: 20, bottom: 70, left: 70 } };
+      const zmin = -1;
+      const zmax = 1;
 
-  // Shared legend range for Real/Synthetic: fix to [-1,1] for mixed metrics
-  const zmin = -1;
-  const zmax = 1;
+      const selectedForLabels = (labels) => {
+        if (!selectedPair) return null;
+        const i = labels.indexOf(selectedPair.yName);
+        const j = labels.indexOf(selectedPair.xName);
+        if (i === -1 || j === -1) return null;
+        return { i, j };
+      };
 
-      const getMetric = (i, j) => metricAt(i, j);
-
-      const onCellClick = (i, j) => {
-        // Toggle selection if same pair (order-insensitive)
+      const handlePairClick = (xName, yName) => {
+        if (!xName || !yName) return;
+        if (!diffMatrix.cols.includes(xName) || !diffMatrix.cols.includes(yName)) return;
         setSelectedPair(prev => {
           if (prev) {
-            const same = (prev.i === i && prev.j === j) || (prev.i === j && prev.j === i);
+            const same = (prev.xName === xName && prev.yName === yName) || (prev.xName === yName && prev.yName === xName);
             if (same) return null;
           }
-          const xName = cols[j];
-          const yName = cols[i];
-          return { i, j, xName, yName };
+          return { xName, yName };
         });
       };
 
-      drawHeatmap(realRef.current, realCorr, cols, { ...commonOpts, title: 'Real', zmin, zmax, getMetricForPair: getMetric, onCellClick, selectedPair });
-      drawHeatmap(synthRef.current, synthCorr, cols, { ...commonOpts, title: 'Synthetic', zmin, zmax, getMetricForPair: getMetric, onCellClick, selectedPair });
-      // Compute symmetric legend range for Difference matrix based on actual values
-      let diffAbsMax = 0;
-      if (Array.isArray(diffCorr) && diffCorr.length > 0) {
-        for (let i = 0; i < diffCorr.length; i++) {
-          for (let j = 0; j < diffCorr[i].length; j++) {
+      if (hasRealMatrix && realContainer) {
+        drawHeatmap(
+          realContainer,
+          realMatrix.matrix,
+          realMatrix.cols,
+          {
+            ...commonOpts,
+            title: 'Real',
+            zmin,
+            zmax,
+            getMetricForPair: realMatrix.metricAt,
+            onCellClick: (i, j) => {
+              const xName = realMatrix.cols[j];
+              const yName = realMatrix.cols[i];
+              handlePairClick(xName, yName);
+            },
+            selectedPair: selectedForLabels(realMatrix.cols)
+          }
+        );
+      }
+
+      if (hasSynthMatrix && synthContainer) {
+        drawHeatmap(
+          synthContainer,
+          synthMatrix.matrix,
+          synthMatrix.cols,
+          {
+            ...commonOpts,
+            title: 'Synthetic',
+            zmin,
+            zmax,
+            getMetricForPair: synthMatrix.metricAt,
+            onCellClick: (i, j) => {
+              const xName = synthMatrix.cols[j];
+              const yName = synthMatrix.cols[i];
+              handlePairClick(xName, yName);
+            },
+            selectedPair: selectedForLabels(synthMatrix.cols)
+          }
+        );
+      }
+
+      if (hasDiffMatrix && diffContainer) {
+        let diffAbsMax = 0;
+        for (let i = 0; i < diffMatrix.matrix.length; i++) {
+          for (let j = 0; j < diffMatrix.matrix[i].length; j++) {
             if (i === j) continue;
-            const v = diffCorr[i][j];
+            const v = diffMatrix.matrix[i][j];
             if (Number.isFinite(v)) diffAbsMax = Math.max(diffAbsMax, Math.abs(v));
           }
         }
-      }
-      const dz = Math.max(0.01, diffAbsMax);
+        const dz = Math.max(0.01, diffAbsMax);
 
-      // Draw Difference heatmap with its own symmetric color scale
-      drawHeatmap(
-        diffRef.current,
-        diffCorr,
-        cols,
-        {
-          ...commonOpts,
-          title: 'Difference (Synthetic - Real)',
-          zmin: -dz,
-          zmax: dz,
-          getMetricForPair: (i, j) => `Δ ${metricAt(i, j)}`,
-          onCellClick,
-          selectedPair
+        drawHeatmap(
+          diffContainer,
+          diffMatrix.matrix,
+          diffMatrix.cols,
+          {
+            ...commonOpts,
+            title: 'Difference (Synthetic - Real)',
+            zmin: -dz,
+            zmax: dz,
+            getMetricForPair: diffMatrix.metricAt,
+            onCellClick: (i, j) => {
+              const xName = diffMatrix.cols[j];
+              const yName = diffMatrix.cols[i];
+              handlePairClick(xName, yName);
+            },
+            selectedPair: selectedForLabels(diffMatrix.cols)
+          }
+        );
+
+        if (diffLegendRef.current) {
+          drawLegend(diffLegendRef.current, -dz, dz, legendWidth, perHeight, 'Difference', 'vertical');
         }
-      );
+      } else if (diffLegendRef.current) {
+        d3.select(diffLegendRef.current).selectAll('*').remove();
+      }
 
-      // Draw inline legends (vertical), matching heatmap height and fixed narrow width
-      const legendHeight = perHeight;
-      drawLegend(legendRef.current, zmin, zmax, legendWidth, legendHeight, 'Real/Synth', 'vertical');
-      drawLegend(diffLegendRef.current, -dz, dz, legendWidth, legendHeight, 'Difference', 'vertical');
+      if ((hasRealMatrix || hasSynthMatrix) && legendRef.current) {
+        drawLegend(legendRef.current, zmin, zmax, legendWidth, perHeight, 'Real/Synth', 'vertical');
+      } else if (legendRef.current) {
+        d3.select(legendRef.current).selectAll('*').remove();
+      }
     };
 
     drawAll();
     window.addEventListener('resize', drawAll);
     return () => window.removeEventListener('resize', drawAll);
-  }, [cols, realCorr, synthCorr, diffCorr, metricAt, selectedPair]);
+  }, [hasRealMatrix, hasSynthMatrix, hasDiffMatrix, realMatrix, synthMatrix, diffMatrix, selectedPair]);
 
   // Scatter drawing helper
   const drawScatter = (container, points, domains, options) => {
@@ -953,30 +1100,35 @@ const CorrelationPlot = ({
   // Render pairwise plots when a pair is selected
   useEffect(() => {
     const render = () => {
-      // Clear if nothing selected or insufficient info
-      if (!selectedPair || !cols || cols.length === 0) {
+      if (!selectedPair || !hasDiffMatrix) {
         [realScatterRef, synthScatterRef].forEach(ref => { if (ref.current) d3.select(ref.current).selectAll('*').remove(); });
         return;
       }
-      const { i, j } = selectedPair;
-      if (!Number.isInteger(i) || !Number.isInteger(j)) return;
+
+      const { xName, yName } = selectedPair;
+      const i = diffMatrix.cols.indexOf(yName);
+      const j = diffMatrix.cols.indexOf(xName);
+      if (i === -1 || j === -1) {
+        [realScatterRef, synthScatterRef].forEach(ref => { if (ref.current) d3.select(ref.current).selectAll('*').remove(); });
+        return;
+      }
 
       const container = scatterRowRef.current;
       const totalWidth = container ? container.getBoundingClientRect().width : 1020;
       const gapPx = 8;
       const perWidth = Math.max(220, Math.floor((totalWidth - gapPx) / 2));
-      const perHeight = perWidth; // square
+      const perHeight = perWidth;
 
-  const { embRealRows, embSynthRows } = embeddedSource;
-  const realRows = sampleRows(embRealRows);
-  const synthRows = sampleRows(embSynthRows);
-      const ti = colTypes[i];
-      const tj = colTypes[j];
+      const { embRealRows, embSynthRows } = embeddedSource;
+      const realRows = sampleRows(embRealRows);
+      const synthRows = sampleRows(embSynthRows);
+      const ti = diffMatrix.types[i];
+      const tj = diffMatrix.types[j];
 
-      const xIdxReal = realIndices[j]; // x corresponds to column j
-      const yIdxReal = realIndices[i]; // y corresponds to row i
-      const xIdxSynth = synthIndices[j];
-      const yIdxSynth = synthIndices[i];
+      const xIdxReal = diffMatrix.realIndices[j];
+      const yIdxReal = diffMatrix.realIndices[i];
+      const xIdxSynth = diffMatrix.synthIndices[j];
+      const yIdxSynth = diffMatrix.synthIndices[i];
 
       const toPoints = (rows, xi, yi) => {
         const pts = [];
@@ -1072,8 +1224,9 @@ const CorrelationPlot = ({
         const synthGroups = buildGroups(synthRows, catIdxSynth, numIdxSynth);
         const realSelGroups = buildSelectedGroups(realRows, catIdxReal, numIdxReal, selectedRowSets.realSet);
         const synthSelGroups = buildSelectedGroups(synthRows, catIdxSynth, numIdxSynth, selectedRowSets.synthSet);
-        const allCats = Array.from(new Set([...
-          Array.from(realGroups.keys()), ...Array.from(synthGroups.keys())
+        const allCats = Array.from(new Set([
+          ...Array.from(realGroups.keys()),
+          ...Array.from(synthGroups.keys())
         ])).sort();
 
         const allVals = [];
@@ -1123,11 +1276,13 @@ const CorrelationPlot = ({
         }
         return Array.from(set);
       };
-      const rowCats = Array.from(new Set([...
-        buildCats(realRows, yIdxReal), ...buildCats(synthRows, yIdxSynth)
+      const rowCats = Array.from(new Set([
+        ...buildCats(realRows, yIdxReal),
+        ...buildCats(synthRows, yIdxSynth)
       ])).sort();
-      const colCats = Array.from(new Set([...
-        buildCats(realRows, xIdxReal), ...buildCats(synthRows, xIdxSynth)
+      const colCats = Array.from(new Set([
+        ...buildCats(realRows, xIdxReal),
+        ...buildCats(synthRows, xIdxSynth)
       ])).sort();
 
       const buildTable = (rows, yIdx, xIdx, rCats, cCats) => {
@@ -1190,7 +1345,7 @@ const CorrelationPlot = ({
     render();
     window.addEventListener('resize', render);
     return () => window.removeEventListener('resize', render);
-  }, [selectedPair, cols, colTypes, embeddedSource, realIndices, synthIndices, selectedRowSets]);
+  }, [selectedPair, diffMatrix, embeddedSource, selectedRowSets, hasDiffMatrix, sampleRows]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
@@ -1210,29 +1365,35 @@ const CorrelationPlot = ({
             Synthetic: <strong>{selectionSummary.synthetic}</strong>/<strong>{datasetTotals.synthetic}</strong>
           </Typography>
           <Typography variant="body2" sx={{ fontSize: 12 }}>
-            Variables: <strong>{Array.isArray(cols) ? cols.length : 0}</strong>
+            Real vars: <strong>{realMatrix.cols.length}</strong>
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Synthetic vars: <strong>{synthMatrix.cols.length}</strong>
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: 12 }}>
+            Intersection vars: <strong>{diffMatrix.cols.length}</strong>
           </Typography>
         </Box>
       </Box>
-      {(!cols || cols.length === 0) ? (
+      {!hasAnyMatrix ? (
         <Box sx={{ p: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            No common columns found to compute mixed correlations.
+            No correlation matrices available for the current datasets.
           </Typography>
         </Box>
       ) : (
         <>
           <Box ref={rowRef} sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'flex-start' }}>
-            <Box ref={realRef} sx={{ flex: '0 0 auto' }} />
-            <Box ref={synthRef} sx={{ flex: '0 0 auto' }} />
-            <Box ref={legendRef} sx={{ flex: '0 0 auto' }} />
-            <Box ref={diffRef} sx={{ flex: '0 0 auto' }} />
-            <Box ref={diffLegendRef} sx={{ flex: '0 0 auto' }} />
+            {hasRealMatrix ? <Box ref={realRef} sx={{ flex: '0 0 auto' }} /> : null}
+            {hasSynthMatrix ? <Box ref={synthRef} sx={{ flex: '0 0 auto' }} /> : null}
+            {(hasRealMatrix || hasSynthMatrix) ? <Box ref={legendRef} sx={{ flex: '0 0 auto' }} /> : null}
+            {hasDiffMatrix ? <Box ref={diffRef} sx={{ flex: '0 0 auto' }} /> : null}
+            {hasDiffMatrix ? <Box ref={diffLegendRef} sx={{ flex: '0 0 auto' }} /> : null}
           </Box>
           <Box sx={{ mt: 1 }}>
             {!selectedPair ? (
               <Typography variant="body2" color="text.secondary" sx={{ px: 1, py: 0.5 }}>
-                Tip: click a matrix cell to view scatterplots for that pair.
+                {hasDiffMatrix ? 'Tip: click a matrix cell to view scatterplots for that pair.' : 'No shared variables between datasets to compare pairwise plots.'}
               </Typography>
             ) : null}
             <Box ref={scatterRowRef} sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'flex-start' }}>

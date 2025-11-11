@@ -509,7 +509,6 @@ function AppContent() {
                               metadata={embeddingMetadata}
                               selectedPoints={selectedEmbeddingPoints}
                               defaultDataset="combined"
-                              maxColumns={20}
                               sampleSize={2000}
                             />
                           )}
