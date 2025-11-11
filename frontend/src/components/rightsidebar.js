@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Paper, Typography, Chip, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button, Tooltip } from '@mui/material';
+import { Box, Paper, Typography, Chip, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
@@ -101,23 +101,6 @@ export default function RightSidebar({
       alignedSyntheticData: alignedSynth,
     };
   }, [realHeaders, syntheticHeaders, realData, syntheticData]);
-
-  // Compute how many columns were excluded due to header mismatches (intersection logic)
-  const headerMismatchInfo = useMemo(() => {
-    const norm = (h) => (typeof h === 'string' ? h.trim() : h);
-    const r = Array.isArray(realHeaders) ? realHeaders.map(norm).filter(Boolean) : [];
-    const s = Array.isArray(syntheticHeaders) ? syntheticHeaders.map(norm).filter(Boolean) : [];
-    if (!r.length && !s.length) {
-      return { excludedCount: 0, realOnly: [], synthOnly: [], totalReal: 0, totalSynth: 0, commonCount: 0 };
-    }
-    const rSet = new Set(r);
-    const sSet = new Set(s);
-    const realOnly = r.filter((h) => !sSet.has(h));
-    const synthOnly = s.filter((h) => !rSet.has(h));
-    const commonCount = Array.isArray(commonHeaders) ? commonHeaders.length : 0;
-    const excludedCount = realOnly.length + synthOnly.length;
-    return { excludedCount, realOnly, synthOnly, totalReal: r.length, totalSynth: s.length, commonCount };
-  }, [realHeaders, syntheticHeaders, commonHeaders]);
 
   // (Removed duplicate classRanks/mapEmbeddingIndexToOriginal/originalData block)
 
@@ -781,38 +764,6 @@ export default function RightSidebar({
         {/* Controls (apply to both Overall and Selected plots) */}
         {originalData && originalData.headers && originalData.headers.length > 0 && (
           <Box>
-            {headerMismatchInfo.excludedCount > 0 && (
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-                <Tooltip
-                  arrow
-                  placement="left"
-                  title={
-                    <Box>
-                      <Typography variant="caption" sx={{ display: 'block' }}>
-                        Using intersection of headers for analysis
-                      </Typography>
-                      <Typography variant="caption" sx={{ display: 'block' }}>
-                        Common: {headerMismatchInfo.commonCount}
-                      </Typography>
-                      <Typography variant="caption" sx={{ display: 'block' }}>
-                        Real-only: {headerMismatchInfo.realOnly.length}
-                      </Typography>
-                      <Typography variant="caption" sx={{ display: 'block' }}>
-                        Synthetic-only: {headerMismatchInfo.synthOnly.length}
-                      </Typography>
-                    </Box>
-                  }
-                >
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    color="warning"
-                    label={`Excluded ${headerMismatchInfo.excludedCount} cols`}
-                    sx={{ fontSize: '0.7rem', height: 22 }}
-                  />
-                </Tooltip>
-              </Box>
-            )}
             <FormControl fullWidth size="small" sx={{ mb: 1 }}>
               <InputLabel sx={{ fontSize: 12, '&.MuiInputLabel-shrink': { fontSize: 12 } }}>Column for Analysis</InputLabel>
               <Select value={histogramColumn} label="Column for Analysis" onChange={(e) => setHistogramColumn(e.target.value)} sx={{ '& .MuiSelect-select': { fontSize: 12, py: 0.5 } }}>
