@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Paper, Typography, Chip, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button } from '@mui/material';
+import { Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
@@ -45,7 +45,7 @@ export default function RightSidebar({
   const globalAbortControllerRef = useRef(null);
 
   // Build aligned datasets using intersection of headers to avoid column count mismatches
-  const { availableHeaders, alignedRealData, alignedSyntheticData } = useMemo(() => {
+  const { availableHeaders, alignedRealData, alignedSyntheticData, realColumnIndex, syntheticColumnIndex } = useMemo(() => {
     const hasRealHeaders = Array.isArray(realHeaders) && realHeaders.length > 0;
     const hasSynthHeaders = Array.isArray(syntheticHeaders) && syntheticHeaders.length > 0;
 
@@ -101,6 +101,8 @@ export default function RightSidebar({
       availableHeaders: headers,
       alignedRealData: alignedReal,
       alignedSyntheticData: alignedSynth,
+      realColumnIndex: realIdx,
+      syntheticColumnIndex: synthIdx,
     };
   }, [realHeaders, syntheticHeaders, realData, syntheticData]);
 
@@ -172,6 +174,114 @@ export default function RightSidebar({
     }
     return { data, headers, labels };
   }, [alignedRealData, alignedSyntheticData, availableHeaders]);
+
+  // Whether the selected column exists in each dataset
+  const realHasSelectedColumn = useMemo(() => {
+    return Array.isArray(realColumnIndex) && histogramColumn >= 0 && histogramColumn < realColumnIndex.length && realColumnIndex[histogramColumn] >= 0;
+  }, [realColumnIndex, histogramColumn]);
+  const synthHasSelectedColumn = useMemo(() => {
+    return Array.isArray(syntheticColumnIndex) && histogramColumn >= 0 && histogramColumn < syntheticColumnIndex.length && syntheticColumnIndex[histogramColumn] >= 0;
+  }, [syntheticColumnIndex, histogramColumn]);
+
+  // Infer dataset-specific type for a single column (numeric vs categorical)
+  const inferTypeForRows = useCallback((rows, colIndex) => {
+    if (!Array.isArray(rows) || rows.length === 0 || colIndex < 0) return 'empty';
+    const sampleLimit = 500;
+    let seen = 0;
+    let numeric = 0;
+    for (let i = 0; i < rows.length && seen < sampleLimit; i++) {
+      const row = rows[i];
+      if (!Array.isArray(row)) continue;
+      const v = row[colIndex];
+      if (v === null || v === undefined || v === '') continue;
+      seen++;
+      const n = typeof v === 'number' ? v : parseFloat(v);
+      if (Number.isFinite(n)) numeric++;
+    }
+    if (seen === 0) return 'empty';
+    return numeric / seen > 0.5 ? 'numeric' : 'categorical';
+  }, []);
+
+  // Decide if mixed-type coercion is needed between real and synthetic datasets for current column
+  const needsMixedTypeCoercion = useMemo(() => {
+    const col = histogramColumn;
+    const realType = inferTypeForRows(alignedRealData, col);
+    const synthType = inferTypeForRows(alignedSyntheticData, col);
+    if ((realType === 'empty') || (synthType === 'empty')) return false; // if one side empty, no coercion needed
+    return realType !== synthType;
+  }, [histogramColumn, alignedRealData, alignedSyntheticData, inferTypeForRows]);
+
+  const rowHasValue = useCallback((row, colIndex) => {
+    if (!Array.isArray(row)) return false;
+    const value = row[colIndex];
+    return value !== undefined && value !== null && value !== '';
+  }, []);
+
+  const filterRowsWithValues = useCallback((rows, colIndex) => {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    return rows.filter((row) => rowHasValue(row, colIndex));
+  }, [rowHasValue]);
+
+  // Coerce the target column to string for safe categorical plotting
+  const sanitizeRowsForCategorical = useCallback((rows, colIndex) => {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    return rows.map((row) => {
+      const r = Array.isArray(row) ? row.slice() : [];
+      const v = Array.isArray(row) ? row[colIndex] : undefined;
+      // Replace null/undefined/empty with 'NA' and coerce to string
+      r[colIndex] = (v === null || v === undefined || v === '') ? 'NA' : String(v);
+      return r;
+    });
+  }, []);
+
+  const buildLocalPlot = useCallback((realRows, syntheticRows) => {
+    const gatherValues = (rows) => {
+      if (!Array.isArray(rows) || rows.length === 0) return [];
+      return rows
+        .map((row) => (Array.isArray(row) ? row[histogramColumn] : undefined))
+        .filter((v) => v !== undefined && v !== null && v !== '');
+    };
+
+    const realValues = gatherValues(realRows);
+    const syntheticValues = gatherValues(syntheticRows);
+
+    if (realValues.length === 0 && syntheticValues.length === 0) {
+      return null;
+    }
+
+    const dataTypeFilter = realValues.length > 0 && syntheticValues.length > 0
+      ? 'mixed'
+      : (realValues.length > 0 ? 'real-only' : 'synthetic-only');
+
+    const realKind = Array.isArray(realRows) && realRows.length ? inferTypeForRows(realRows, histogramColumn) : 'empty';
+    const synthKind = Array.isArray(syntheticRows) && syntheticRows.length ? inferTypeForRows(syntheticRows, histogramColumn) : 'empty';
+    const numericReal = realKind === 'numeric' || realKind === 'empty';
+    const numericSynth = synthKind === 'numeric' || synthKind === 'empty';
+    const wantHistogram = histogramPlotType === 'histogram' && numericReal && numericSynth;
+
+    if (wantHistogram) {
+      return {
+        plot_type: 'histogram',
+        real_values: realValues,
+        synthetic_values: syntheticValues,
+        data_type_filter: dataTypeFilter,
+      };
+    }
+
+    const toStr = (v) => (v === null || v === undefined || v === '' ? 'NA' : String(v));
+    const realCats = realValues.map(toStr);
+    const synthCats = syntheticValues.map(toStr);
+    const categories = Array.from(new Set([...(realCats || []), ...(synthCats || [])]));
+    const countCat = (arr, cats) => cats.map((c) => arr.reduce((s, v) => s + (v === c ? 1 : 0), 0));
+
+    return {
+      plot_type: 'bar',
+      categories,
+      real_counts: countCat(realCats, categories),
+      synthetic_counts: countCat(synthCats, categories),
+      data_type_filter: dataTypeFilter,
+    };
+  }, [histogramColumn, histogramPlotType, inferTypeForRows]);
 
   // Headers available for selection (exclude unnamed headers)
   const displayHeaders = useMemo(() => {
@@ -255,6 +365,21 @@ export default function RightSidebar({
 
     const dataType = classifyColumnType(histogramColumn, originalData);
     const availablePlotTypes = getAvailablePlotTypes(dataType);
+    // If mixed-type coercion needed, force categorical interpretation for selection subset
+    const mixedType = needsMixedTypeCoercion;
+    if (mixedType) {
+      return {
+        realValues: realValues.map(v => (v === null || v === undefined || v === '' ? 'NA' : String(v))),
+        syntheticValues: syntheticValues.map(v => (v === null || v === undefined || v === '' ? 'NA' : String(v))),
+        columnName: originalData.headers[histogramColumn] || '',
+        totalSelected: selectedPoints.length,
+        realSelected: realValues.length,
+        syntheticSelected: syntheticValues.length,
+        dataType: 'categorical',
+        availablePlotTypes: ['bar'],
+        dataTypeFilter
+      };
+    }
 
     return {
       realValues,
@@ -267,7 +392,7 @@ export default function RightSidebar({
       availablePlotTypes,
       dataTypeFilter
     };
-  }, [selectedPoints, histogramColumn, originalData, mapEmbeddingIndexToOriginal]);
+  }, [selectedPoints, histogramColumn, originalData, mapEmbeddingIndexToOriginal, needsMixedTypeCoercion]);
 
   // Debounced API call to generate plot
   const generatePlotData = useCallback(async () => {
@@ -280,9 +405,8 @@ export default function RightSidebar({
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
-    // Build payload rows using the class-wise rank mapping
-    const selectedRealData = [];
-    const selectedSyntheticData = [];
+    let selectedRealData = [];
+    let selectedSyntheticData = [];
     for (const embeddingIndex of selectedPoints) {
       const mapped = mapEmbeddingIndexToOriginal(embeddingIndex);
       if (!mapped || !Array.isArray(mapped.row)) continue;
@@ -290,22 +414,22 @@ export default function RightSidebar({
       else if (mapped.label === 'Synthetic') selectedSyntheticData.push(mapped.row);
     }
 
-    if (selectedRealData.length === 0 && selectedSyntheticData.length === 0) {
+    if (!realHasSelectedColumn) selectedRealData = [];
+    if (!synthHasSelectedColumn) selectedSyntheticData = [];
+
+    const filteredRealData = filterRowsWithValues(selectedRealData, histogramColumn);
+    const filteredSyntheticData = filterRowsWithValues(selectedSyntheticData, histogramColumn);
+
+    if (filteredRealData.length === 0 && filteredSyntheticData.length === 0) {
       setPlotError('No valid data points found for the selected column');
+      setPlotData(null);
       setPlotLoading(false);
       return;
     }
 
-    const dataTypeFilter = histData.dataTypeFilter || 'mixed';
-    const requestData = {
-      real_data: selectedRealData,
-      synthetic_data: selectedSyntheticData,
-      column: originalData.headers[histogramColumn],
-      plot_type: histogramPlotType,
-      real_headers: originalData.headers,
-      synthetic_headers: originalData.headers,
-      data_type_filter: dataTypeFilter,
-    };
+    const hasReal = filteredRealData.length > 0;
+    const hasSynthetic = filteredSyntheticData.length > 0;
+    const dataTypeFilter = hasReal && hasSynthetic ? 'mixed' : hasReal ? 'real-only' : 'synthetic-only';
 
     const requestKey = JSON.stringify({
       selectedPoints: [...selectedPoints].sort(),
@@ -313,11 +437,41 @@ export default function RightSidebar({
       plotType: histogramPlotType,
       dataTypeFilter,
     });
-
     if (lastRequestParamsRef.current === requestKey) {
       return;
     }
     lastRequestParamsRef.current = requestKey;
+
+    if (!hasReal || !hasSynthetic) {
+      const localPlot = buildLocalPlot(filteredRealData, filteredSyntheticData);
+      if (localPlot) {
+        setPlotData(localPlot);
+        setPlotError(null);
+      } else {
+        setPlotData(null);
+        setPlotError('No valid data points found for the selected column');
+      }
+      setPlotLoading(false);
+      return;
+    }
+
+    const mixedType = needsMixedTypeCoercion;
+    let preparedRealData = filteredRealData;
+    let preparedSyntheticData = filteredSyntheticData;
+    if (mixedType) {
+      preparedRealData = sanitizeRowsForCategorical(filteredRealData, histogramColumn);
+      preparedSyntheticData = sanitizeRowsForCategorical(filteredSyntheticData, histogramColumn);
+    }
+
+    const requestData = {
+      real_data: preparedRealData,
+      synthetic_data: preparedSyntheticData,
+      column: originalData.headers[histogramColumn],
+      plot_type: mixedType ? 'bar' : histogramPlotType,
+      real_headers: originalData.headers,
+      synthetic_headers: originalData.headers,
+      data_type_filter: 'mixed',
+    };
 
     setPlotLoading(true);
     setPlotError(null);
@@ -328,13 +482,22 @@ export default function RightSidebar({
       setPlotData(data);
     } catch (err) {
       if (err.name === 'AbortError' || abortController.signal.aborted) return;
-      setPlotError(`Failed to generate plot: ${err.message}`);
+      const errMsg = err?.message || '';
+      if (errMsg.includes('Data arrays cannot be empty')) {
+        const fallbackPlot = buildLocalPlot(filteredRealData, filteredSyntheticData);
+        if (fallbackPlot) {
+          setPlotData(fallbackPlot);
+          setPlotError(null);
+          return;
+        }
+      }
+      setPlotError(`Failed to generate plot: ${errMsg || 'Unknown error'}`);
     } finally {
       if (!abortController.signal.aborted) {
         setPlotLoading(false);
       }
     }
-  }, [selectedPoints, histogramColumn, histogramPlotType, originalData, generateHistogramData, mapEmbeddingIndexToOriginal]);
+  }, [selectedPoints, histogramColumn, histogramPlotType, originalData, generateHistogramData, mapEmbeddingIndexToOriginal, needsMixedTypeCoercion, sanitizeRowsForCategorical, filterRowsWithValues, buildLocalPlot, realHasSelectedColumn, synthHasSelectedColumn]);
 
   // Auto-correct plot type when column changes
   useEffect(() => {
@@ -615,12 +778,13 @@ export default function RightSidebar({
   // Generate overall (global) distribution using embedded subset (based on labels)
   const generateGlobalPlotData = useCallback(async () => {
     if (!originalData || !originalData.headers || originalData.headers.length === 0) return;
-    // Abort previous
     if (globalAbortControllerRef.current) globalAbortControllerRef.current.abort();
     const abortController = new AbortController();
     globalAbortControllerRef.current = abortController;
 
-    // Determine embedded subset sizes (if labels available) and slice aligned arrays accordingly
+    setGlobalPlotLoading(true);
+    setGlobalPlotError(null);
+
     let embeddedRealCount = 0;
     let embeddedSynthCount = 0;
     if (Array.isArray(metadata?.labels)) {
@@ -637,37 +801,74 @@ export default function RightSidebar({
       ? (embeddedSynthCount > 0 ? alignedSyntheticData.slice(0, Math.min(embeddedSynthCount, alignedSyntheticData.length)) : alignedSyntheticData)
       : [];
 
-    if (allReal.length === 0 && allSynthetic.length === 0) {
+    if (!realHasSelectedColumn) allReal = [];
+    if (!synthHasSelectedColumn) allSynthetic = [];
+
+    const filteredReal = filterRowsWithValues(allReal, histogramColumn);
+    const filteredSynthetic = filterRowsWithValues(allSynthetic, histogramColumn);
+
+    const hasReal = filteredReal.length > 0;
+    const hasSynthetic = filteredSynthetic.length > 0;
+
+    if (!hasReal && !hasSynthetic) {
       setGlobalPlotData(null);
       setGlobalPlotError('No data available to plot');
       setGlobalPlotLoading(false);
       return;
     }
 
-    const dataTypeFilter = allReal.length > 0 && allSynthetic.length > 0 ? 'mixed' : (allReal.length > 0 ? 'real-only' : 'synthetic-only');
+    if (!hasReal || !hasSynthetic) {
+      const localPlot = buildLocalPlot(filteredReal, filteredSynthetic);
+      if (localPlot) {
+        setGlobalPlotData(localPlot);
+        setGlobalPlotError(null);
+      } else {
+        setGlobalPlotData(null);
+        setGlobalPlotError('No data available to plot');
+      }
+      setGlobalPlotLoading(false);
+      return;
+    }
+
+    let backendReal = filteredReal;
+    let backendSynthetic = filteredSynthetic;
+    const mixedType = needsMixedTypeCoercion;
+    if (mixedType) {
+      backendReal = sanitizeRowsForCategorical(filteredReal, histogramColumn);
+      backendSynthetic = sanitizeRowsForCategorical(filteredSynthetic, histogramColumn);
+    }
+
     const requestData = {
-      real_data: allReal,
-      synthetic_data: allSynthetic,
+      real_data: backendReal,
+      synthetic_data: backendSynthetic,
       column: originalData.headers[histogramColumn],
-      plot_type: histogramPlotType,
+      plot_type: mixedType ? 'bar' : histogramPlotType,
       real_headers: originalData.headers,
       synthetic_headers: originalData.headers,
-      data_type_filter: dataTypeFilter,
+      data_type_filter: 'mixed',
     };
 
-    setGlobalPlotLoading(true);
-    setGlobalPlotError(null);
     try {
       const resp = await generateDistributionPlot(requestData, abortController.signal);
       if (abortController.signal.aborted) return;
       setGlobalPlotData(resp);
     } catch (err) {
       if (err.name === 'AbortError' || abortController.signal.aborted) return;
-      setGlobalPlotError(`Failed to generate overall plot: ${err.message}`);
+      const errMsg = err?.message || '';
+      if (errMsg.includes('Data arrays cannot be empty')) {
+        const fallbackPlot = buildLocalPlot(filteredReal, filteredSynthetic);
+        if (fallbackPlot) {
+          setGlobalPlotData(fallbackPlot);
+          setGlobalPlotError(null);
+          setGlobalPlotLoading(false);
+          return;
+        }
+      }
+      setGlobalPlotError(`Failed to generate overall plot: ${errMsg || 'Unknown error'}`);
     } finally {
       if (!abortController.signal.aborted) setGlobalPlotLoading(false);
     }
-  }, [originalData, histogramColumn, histogramPlotType, alignedRealData, alignedSyntheticData, metadata]);
+  }, [originalData, histogramColumn, histogramPlotType, alignedRealData, alignedSyntheticData, metadata, needsMixedTypeCoercion, sanitizeRowsForCategorical, filterRowsWithValues, buildLocalPlot, realHasSelectedColumn, synthHasSelectedColumn]);
 
   // Trigger overall distribution when inputs change
   useEffect(() => {
@@ -769,17 +970,13 @@ export default function RightSidebar({
             <FormControl fullWidth size="small" sx={{ mb: 1 }}>
               <InputLabel sx={{ fontSize: 12, '&.MuiInputLabel-shrink': { fontSize: 12 } }}>Column for Analysis</InputLabel>
               <Select value={histogramColumn} label="Column for Analysis" onChange={(e) => setHistogramColumn(e.target.value)} sx={{ '& .MuiSelect-select': { fontSize: 12, py: 0.5 } }}>
-                {displayHeaders.map(({ name, index }) => {
-                  const columnDataType = classifyColumnType(index, originalData);
-                  return (
-                    <MenuItem key={index} value={index} sx={{ fontSize: 12, minHeight: 32, py: 0.25 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                        <Typography variant="body2" sx={{ flex: 1, fontSize: 12 }}>{name}</Typography>
-                        <Chip label={columnDataType} size="small" color={columnDataType === 'numeric' ? 'primary' : 'secondary'} variant="outlined" sx={{ fontSize: '0.7rem', height: '20px' }} />
-                      </Box>
-                    </MenuItem>
-                  );
-                })}
+                {displayHeaders.map(({ name, index }) => (
+                  <MenuItem key={index} value={index} sx={{ fontSize: 12, minHeight: 32, py: 0.25 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                      <Typography variant="body2" sx={{ flex: 1, fontSize: 12 }}>{name}</Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
 
