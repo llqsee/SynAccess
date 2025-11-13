@@ -434,8 +434,44 @@ const EmbeddingPlot = ({
 
 
 
+  const deriveSampleSeed = metadata => {
+    const configuredSeed = metadata?.params?.random_state;
+    if (Number.isFinite(configuredSeed)) {
+      return configuredSeed;
+    }
+
+    const fingerprint = metadata?.dataset_identification?.fingerprint;
+    if (fingerprint && typeof fingerprint === 'string') {
+      let hash = 0;
+      for (let i = 0; i < fingerprint.length; i++) {
+        hash = ((hash << 5) - hash + fingerprint.charCodeAt(i)) >>> 0;
+      }
+      return hash;
+    }
+
+    return 0;
+  };
+
+  const shuffleWithSeed = (input, seed) => {
+    const result = input.slice();
+    let state = (Number.isFinite(seed) ? seed : 0) >>> 0;
+    if (state === 0) {
+      state = 0x9e3779b9; // Use golden ratio constant when no seed is provided
+    }
+
+    for (let i = result.length - 1; i > 0; i--) {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      const j = state % (i + 1);
+      const tmp = result[i];
+      result[i] = result[j];
+      result[j] = tmp;
+    }
+
+    return result;
+  };
+
   // Intelligent sampling function for large datasets
-  const sampleData = (data, labels, maxPoints = 8000) => {
+  const sampleData = (data, labels, maxPoints = 8000, seed = 0) => {
     // Filter out invalid data points first
     const validIndices = [];
     data.forEach((point, index) => {
@@ -471,12 +507,10 @@ const EmbeddingPlot = ({
     const realSampleSize = Math.floor(maxPoints * 0.5);
     const syntheticSampleSize = maxPoints - realSampleSize;
 
-    const sampledRealIndices = realIndices
-      .sort(() => 0.5 - Math.random())
+    const sampledRealIndices = shuffleWithSeed(realIndices, seed ^ 0x85ebca6b)
       .slice(0, Math.min(realSampleSize, realIndices.length));
 
-    const sampledSyntheticIndices = syntheticIndices
-      .sort(() => 0.5 - Math.random())
+    const sampledSyntheticIndices = shuffleWithSeed(syntheticIndices, seed ^ 0xc2b2ae35)
       .slice(0, Math.min(syntheticSampleSize, syntheticIndices.length));
 
     const allSampledIndices = [...sampledRealIndices, ...sampledSyntheticIndices]
@@ -559,7 +593,8 @@ const EmbeddingPlot = ({
     // If the total points are <= 10,000, show all points to avoid 50/50 downsampling artifacts
     const totalPoints = data.length;
     const samplingCap = totalPoints <= 10000 ? totalPoints : 10000;
-    const { sampledData, sampledLabels, indexMap } = sampleData(data, metadata.labels, samplingCap);
+    const sampleSeed = deriveSampleSeed(metadata);
+    const { sampledData, sampledLabels, indexMap } = sampleData(data, metadata.labels, samplingCap, sampleSeed);
 
 
 
