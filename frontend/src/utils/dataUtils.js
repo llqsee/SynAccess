@@ -139,8 +139,7 @@ export const getAvailablePlotTypes = (dataType) => {
   if (dataType === 'numeric') {
     return [
       { value: 'histogram', label: 'Histogram' },
-      { value: 'violin', label: 'Violin' },
-      { value: 'beeswarm', label: 'Beeswarm' }
+      { value: 'violin', label: 'Violin' }
     ];
   } else {
     return [

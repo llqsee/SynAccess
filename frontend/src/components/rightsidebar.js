@@ -269,23 +269,6 @@ export default function RightSidebar({
       ? 'mixed'
       : (hasRealRaw ? 'real-only' : 'synthetic-only');
 
-    if (histogramPlotType === 'beeswarm') {
-      const hasReal = realNumericValues.length > 0;
-      const hasSynthetic = syntheticNumericValues.length > 0;
-      if (!hasReal && !hasSynthetic) {
-        return null;
-      }
-      const beeswarmFilter = hasReal && hasSynthetic
-        ? 'mixed'
-        : (hasReal ? 'real-only' : 'synthetic-only');
-      return {
-        plot_type: 'beeswarm',
-        real_values: realNumericValues,
-        synthetic_values: syntheticNumericValues,
-        data_type_filter: beeswarmFilter,
-      };
-    }
-
     const realKind = Array.isArray(realRows) && realRows.length ? inferTypeForRows(realRows, histogramColumn) : 'empty';
     const synthKind = Array.isArray(syntheticRows) && syntheticRows.length ? inferTypeForRows(syntheticRows, histogramColumn) : 'empty';
     const numericReal = realKind === 'numeric' || realKind === 'empty';
@@ -477,19 +460,6 @@ export default function RightSidebar({
     }
     lastRequestParamsRef.current = requestKey;
 
-    if (histogramPlotType === 'beeswarm') {
-      const beeswarmPlot = buildLocalPlot(filteredRealData, filteredSyntheticData);
-      if (beeswarmPlot) {
-        setPlotData(beeswarmPlot);
-        setPlotError(null);
-      } else {
-        setPlotData(null);
-        setPlotError('No valid data points found for the selected column');
-      }
-      setPlotLoading(false);
-      return;
-    }
-
     if (!hasReal || !hasSynthetic) {
       const localPlot = buildLocalPlot(filteredRealData, filteredSyntheticData);
       if (localPlot) {
@@ -551,7 +521,7 @@ export default function RightSidebar({
   useEffect(() => {
     if (!originalData || !originalData.headers || histogramColumn >= originalData.headers.length) return;
     const columnDataType = classifyColumnType(histogramColumn, originalData);
-    const numericPlotTypes = ['histogram', 'violin', 'beeswarm'];
+  const numericPlotTypes = ['histogram', 'violin'];
     const categoricalPlotTypes = ['bar'];
     const compatible = (columnDataType === 'numeric' && numericPlotTypes.includes(histogramPlotType)) ||
       (columnDataType === 'categorical' && categoricalPlotTypes.includes(histogramPlotType));
@@ -815,190 +785,6 @@ export default function RightSidebar({
         );
       }
 
-        case 'beeswarm': {
-          const layoutBeeswarm = (values) => {
-            if (!Array.isArray(values) || values.length === 0) {
-              return { offsets: [], spread: 0 };
-            }
-            if (values.length === 1) {
-              return { offsets: [0], spread: 0 }; // single point stays centered
-            }
-
-            const minValue = Math.min(...values);
-            const maxValue = Math.max(...values);
-            const range = Math.max(maxValue - minValue, 1e-8);
-
-            const sorted = values
-              .map((value, idx) => ({ value, idx, norm: (value - minValue) / range }))
-              .sort((a, b) => a.norm - b.norm);
-
-            const baseRadius = 0.12;
-            const densityBoost = 0.9 / Math.sqrt(values.length + 2);
-            const radius = Math.min(baseRadius + densityBoost, 0.42);
-            const radiusSq = radius * radius;
-            const separation = radius * 2;
-            const candidatesBuffer = new Array(32);
-
-            const offsets = new Array(values.length).fill(0);
-            const active = [];
-
-            const collides = (candidate, currentNorm) => {
-              for (let i = 0; i < active.length; i++) {
-                const other = active[i];
-                const dy = currentNorm - other.norm;
-                if (dy > separation) continue;
-                if (dy < -separation) break;
-                const dx = candidate - other.x;
-                if ((dx * dx + dy * dy) < (radiusSq * 4) - 1e-6) {
-                  return true;
-                }
-              }
-              return false;
-            };
-
-            sorted.forEach((point) => {
-              while (active.length && (point.norm - active[0].norm) > separation) {
-                active.shift();
-              }
-
-              let candidate = 0;
-              let placed = false;
-
-              let bufferSize = 0;
-              for (let i = 0; i < active.length; i++) {
-                const other = active[i];
-                const dy = point.norm - other.norm;
-                if (Math.abs(dy) > separation) continue;
-                const dx = Math.sqrt(Math.max((radiusSq * 4) - (dy * dy), 0));
-                candidatesBuffer[bufferSize++] = other.x + dx;
-                candidatesBuffer[bufferSize++] = other.x - dx;
-              }
-              candidatesBuffer[bufferSize++] = 0;
-
-              if (bufferSize > 1) {
-                const orderedCandidates = new Array(bufferSize);
-                for (let i = 0; i < bufferSize; i++) orderedCandidates[i] = candidatesBuffer[i];
-                orderedCandidates.sort((a, b) => {
-                  const absA = Math.abs(a);
-                  const absB = Math.abs(b);
-                  if (absA === absB) return b - a;
-                  return absA - absB;
-                });
-                for (let i = 0; i < orderedCandidates.length; i++) {
-                  const potential = orderedCandidates[i];
-                  if (!collides(potential, point.norm)) {
-                    candidate = potential;
-                    placed = true;
-                    break;
-                  }
-                }
-              }
-
-              if (!placed) {
-                let step = radius;
-                let direction = 1;
-                let safety = 0;
-                while (safety < 80) {
-                  const potential = direction * step;
-                  if (!collides(potential, point.norm)) {
-                    candidate = potential;
-                    placed = true;
-                    break;
-                  }
-                  step += radius * 0.5;
-                  direction *= -1;
-                  safety++;
-                }
-              }
-
-              offsets[point.idx] = candidate;
-              const insertionIndex = active.findIndex(item => item.norm > point.norm);
-              if (insertionIndex === -1) {
-                active.push({ norm: point.norm, x: candidate });
-              } else {
-                active.splice(insertionIndex, 0, { norm: point.norm, x: candidate });
-              }
-            });
-
-            const maxOffset = offsets.reduce((max, v) => Math.max(max, Math.abs(v)), 0) || 1;
-            const clamp = Math.min(0.48 / maxOffset, 1);
-            const scaledOffsets = offsets.map((v) => Math.max(-0.95, Math.min(0.95, v * clamp)));
-
-            return { offsets: scaledOffsets, spread: scaledOffsets.reduce((max, v) => Math.max(max, Math.abs(v)), 0) };
-          };
-
-          const categories = [];
-          if (Array.isArray(dataObj.real_values) && dataObj.real_values.length) {
-            categories.push({ label: 'Real', pos: categories.length, values: dataObj.real_values });
-          }
-          if (Array.isArray(dataObj.synthetic_values) && dataObj.synthetic_values.length) {
-            categories.push({ label: 'Synthetic', pos: categories.length, values: dataObj.synthetic_values });
-          }
-
-          const traces = [];
-          let maxSpread = 0;
-
-          const pushTrace = (dataset, label, color) => {
-            const { offsets, spread } = layoutBeeswarm(dataset.values || []);
-            maxSpread = Math.max(maxSpread, spread);
-            if ((dataset.values || []).length === 0) return;
-            const xVals = (dataset.values || []).map((_, idx) => dataset.pos + offsets[idx]);
-            traces.push({
-              x: xVals,
-              y: dataset.values,
-              mode: 'markers',
-              name: label,
-              marker: { color, size: 6, opacity: 0.8, line: { width: 0.5, color: '#ffffff' } },
-              hovertemplate: `${label}: %{y}<extra></extra>`
-            });
-          };
-
-          categories.forEach((cat) => {
-            if (cat.label === 'Real' && dataObj.data_type_filter !== 'synthetic-only') {
-              pushTrace(cat, 'Real', '#2563eb');
-            } else if (cat.label === 'Real') {
-              maxSpread = Math.max(maxSpread, 0);
-            }
-            if (cat.label === 'Synthetic' && dataObj.data_type_filter !== 'real-only') {
-              pushTrace(cat, 'Synthetic', '#dc2626');
-            }
-          });
-
-          if (!traces.length) {
-            return <Typography>No data available for beeswarm plot</Typography>;
-          }
-
-    const tickvals = categories.map((c) => c.pos);
-    const ticktext = categories.map((c) => c.label);
-    const spread = Math.max(maxSpread, 0.45);
-    const padding = spread + 0.3;
-          const rangeStart = categories.length ? categories[0].pos - padding : -0.6;
-          const rangeEnd = categories.length ? categories[categories.length - 1].pos + padding : 0.6;
-
-          return (
-            <Plot
-              data={traces}
-              layout={plotLayout({
-                margin: { l: 60, r: 20, t: 20, b: 40 },
-                xaxis: {
-                  title: 'Dataset',
-                  tickvals,
-                  ticktext,
-                  range: [rangeStart, rangeEnd],
-                  zeroline: false,
-                  showgrid: false,
-                },
-                yaxis: { title: xAxisTitle },
-                showlegend: false,
-                hovermode: 'closest',
-              })}
-              style={{ width: '100%', height: '160px' }}
-              config={{ displayModeBar: false, doubleClick: 'reset' }}
-              key={plotKey}
-            />
-          );
-        }
-
       default:
         return <Typography>Unsupported plot type: {dataObj.plot_type}</Typography>;
     }
@@ -1046,19 +832,6 @@ export default function RightSidebar({
     if (!hasReal && !hasSynthetic) {
       setGlobalPlotData(null);
       setGlobalPlotError('No data available to plot');
-      setGlobalPlotLoading(false);
-      return;
-    }
-
-    if (histogramPlotType === 'beeswarm') {
-      const beeswarmPlot = buildLocalPlot(filteredReal, filteredSynthetic);
-      if (beeswarmPlot) {
-        setGlobalPlotData(beeswarmPlot);
-        setGlobalPlotError(null);
-      } else {
-        setGlobalPlotData(null);
-        setGlobalPlotError('No data available to plot');
-      }
       setGlobalPlotLoading(false);
       return;
     }
