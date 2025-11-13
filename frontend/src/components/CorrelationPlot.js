@@ -2,6 +2,11 @@ import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import * as d3 from 'd3';
 import { Box, Typography } from '@mui/material';
 
+// Shared palette with EmbeddingPlot so correlation visuals stay aligned with overall analysis.
+const REAL_COLOR = '#3b82f6';
+const SYNTH_COLOR = '#dc2626';
+const HIGHLIGHT_STROKE = '#000000';
+
 const parseNum = (value) => (typeof value === 'number' ? value : parseFloat(value));
 
 const isFiniteNum = (value) => Number.isFinite(value) && !Number.isNaN(value);
@@ -789,7 +794,7 @@ const CorrelationPlot = ({
       width = 340,
       height = 340,
       margin = { top: 36, right: 24, bottom: 40, left: 44 },
-      color = '#1f77b4',
+      color = REAL_COLOR,
       pointRadius = 2,
       xLabel = 'x',
       yLabel = 'y',
@@ -847,7 +852,7 @@ const CorrelationPlot = ({
     if (highlighted.length > 0) {
       g.append('g')
         .attr('fill', 'none')
-        .attr('stroke', '#ef4444')
+        .attr('stroke', HIGHLIGHT_STROKE)
         .attr('stroke-width', 1.2)
         .selectAll('circle')
         .data(highlighted)
@@ -876,7 +881,7 @@ const CorrelationPlot = ({
       width = 340,
       height = 340,
       margin = { top: 36, right: 24, bottom: 60, left: 50 },
-      color = '#1f77b4',
+      color = REAL_COLOR,
       xLabel = 'Category',
       yLabel = 'Value',
       selectedGroups = new Map(),
@@ -968,7 +973,7 @@ const CorrelationPlot = ({
         g.append('g')
           .attr('transform', `translate(${gx},0)`)
           .attr('fill', 'none')
-          .attr('stroke', '#ef4444')
+          .attr('stroke', HIGHLIGHT_STROKE)
           .attr('stroke-width', 1.2)
           .selectAll('circle')
           .data(highlighted)
@@ -1166,13 +1171,13 @@ const CorrelationPlot = ({
           realScatterRef.current,
           realPts,
           domains,
-          { title: 'Real', width: perWidth, height: perHeight, color: '#2563eb', xLabel: selectedPair.xName, yLabel: selectedPair.yName, highlightIndices: selectedRowSets.realSet }
+          { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR, xLabel: selectedPair.xName, yLabel: selectedPair.yName, highlightIndices: selectedRowSets.realSet }
         );
         drawScatter(
           synthScatterRef.current,
           synthPts,
           domains,
-          { title: 'Synthetic', width: perWidth, height: perHeight, color: '#10b981', xLabel: selectedPair.xName, yLabel: selectedPair.yName, highlightIndices: selectedRowSets.synthSet }
+          { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR, xLabel: selectedPair.xName, yLabel: selectedPair.yName, highlightIndices: selectedRowSets.synthSet }
         );
         return;
       }
@@ -1254,14 +1259,14 @@ const CorrelationPlot = ({
           allCats,
           realGroups,
           yDomain,
-          { title: 'Real', width: perWidth, height: perHeight, color: '#2563eb', xLabel: xLab, yLabel: yLab, selectedGroups: realSelGroups, pointRadius: 2.5 }
+          { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR, xLabel: xLab, yLabel: yLab, selectedGroups: realSelGroups, pointRadius: 2.5 }
         );
         drawBeeswarm(
           synthScatterRef.current,
           allCats,
           synthGroups,
           yDomain,
-          { title: 'Synthetic', width: perWidth, height: perHeight, color: '#10b981', xLabel: xLab, yLabel: yLab, selectedGroups: synthSelGroups, pointRadius: 2.5 }
+          { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR, xLabel: xLab, yLabel: yLab, selectedGroups: synthSelGroups, pointRadius: 2.5 }
         );
         return;
       }
