@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 import base64
 import pickle
+import hashlib
 
 from backend.services.embedding import EmbeddingService
 from backend.services.job_service import JobService
@@ -67,15 +68,36 @@ async def compute_embedding(request: EmbeddingRequest):
             logger.warning(f"Couldn't create dataset description: {e}")
             dataset_description = f"{request.method.upper()} Embedding"
         
-        # Set up the job record
-        # Inject alignment_strategy into params if not explicitly provided
-        if request.alignment_strategy and 'alignment_strategy' not in request.params:
-            request.params['alignment_strategy'] = request.alignment_strategy
+        # Work with a mutable copy of params so we can inject defaults
+        params = dict(request.params or {})
+        if request.alignment_strategy and 'alignment_strategy' not in params:
+            params['alignment_strategy'] = request.alignment_strategy
 
+        # Derive a deterministic random_state when sampling is enabled but seed omitted
+        if params.get('random_state') is None:
+            real_sample_target = params.get('n_real_samples') or request.n_samples or len(request.real_data or [])
+            synth_sample_target = params.get('n_synth_samples') or request.n_samples or len(request.synthetic_data or [])
+            seed_components = [
+                dataset_description,
+                request.method.lower(),
+                request.real_dataset_name or '',
+                request.synthetic_dataset_name or '',
+                str(real_sample_target),
+                str(synth_sample_target),
+            ]
+            seed_input = "|".join(seed_components)
+            seed_value = int(hashlib.sha256(seed_input.encode('utf-8')).hexdigest(), 16) % (2 ** 32)
+            params['random_state'] = seed_value
+            logger.info(
+                "Assigned deterministic random_state=%s for embedding job configured via parameters",
+                seed_value,
+            )
+
+        # Set up the job record
         JobService.create_job(
             job_id=job_id,
             method=request.method,
-            params=request.params,
+            params=params,
             n_samples=request.n_samples,
             status="queued",
             dataset_description=dataset_description
@@ -88,7 +110,7 @@ async def compute_embedding(request: EmbeddingRequest):
             real_data=request.real_data,
             synthetic_data=request.synthetic_data,
             method=request.method,
-            params=request.params,
+            params=params,
             n_samples=request.n_samples,
             real_headers=request.real_headers,
             synthetic_headers=request.synthetic_headers
