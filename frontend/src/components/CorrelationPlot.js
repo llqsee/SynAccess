@@ -1454,13 +1454,23 @@ const CorrelationPlot = ({
     if (!pair) return null;
 
     return (
-      <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        <Typography variant="subtitle2" sx={{ fontSize: 15, fontWeight: 600, px: 1 }}>
+      <Box
+        ref={containerRef}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0.5,
+          flex: '1 1 calc(50% - 8px)',
+          maxWidth: 'calc(50% - 8px)',
+          minWidth: 360,
+        }}
+      >
+        <Typography variant="subtitle2" sx={{ fontSize: 14, fontWeight: 600, px: 1 }}>
           {pair.yName} vs {pair.xName}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'flex-start' }}>
-          <Box ref={realContainerRef} sx={{ flex: '0 0 auto', width: heatmapDims?.width || 340 }} />
-          <Box ref={synthContainerRef} sx={{ flex: '0 0 auto', width: heatmapDims?.width || 340 }} />
+          <Box ref={realContainerRef} sx={{ flex: '1 1 0' }} />
+          <Box ref={synthContainerRef} sx={{ flex: '1 1 0' }} />
         </Box>
       </Box>
     );
@@ -1518,7 +1528,7 @@ const CorrelationPlot = ({
               </Typography>
             ) : null}
             {hasDiffMatrix && selectedPairs.length > 0 ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'stretch' }}>
                 {selectedPairs.map((pair) => (
                   <PairwiseComparison
                     key={`${pair.xName}||${pair.yName}`}
