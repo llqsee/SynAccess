@@ -618,7 +618,7 @@ const EmbeddingPlot = ({
     const effectivePlotHeight = plotHeight * devicePixelRatio;
 
     // Advanced point sizing based on dataset size and density (no need to multiply by devicePixelRatio since we're scaling the group)
-    const basePointSize = plotWidth < 400 ? 0.7 : plotWidth < 800 ? 0.9 : 1.2;
+    const basePointSize = plotWidth < 400 ? 1.1 : plotWidth < 800 ? 1.5 : 1.9;
     const densityFactor = Math.max(0.3, Math.min(1.5, 1000 / Math.sqrt(numPoints)));
     const adjustedPointSize = basePointSize * densityFactor;
 
@@ -1697,6 +1697,7 @@ const EmbeddingPlot = ({
 
     // Responsive legend positioning - float inside plot area (top-right) without consuming margins
     const showAnomalyLegend = showAnomalies && anomalyResults && anomalyResults.synthetic_data;
+    const legendPointRadius = Math.max(2.5, Math.min(5, adjustedPointSize * 2));
 
     // Create legend group inside the scaled plotting group so coordinates are in innerWidth/innerHeight
     const legend = g.append("g")
@@ -1724,17 +1725,17 @@ const EmbeddingPlot = ({
       realLegendRow.append("circle")
         .attr("cx", 8)
         .attr("cy", 0)
-        .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
+        .attr("r", legendPointRadius)
         .attr("fill", colorScale("Real")) // Use same color as data points
         .attr("stroke", d3.color(colorScale("Real")).darker(0.3))
         .attr("stroke-width", 0.5)
         .attr("opacity", 0.85);
 
       realLegendRow.append("text")
-        .attr("x", 20)
+        .attr("x", 16)
         .attr("y", 4)
         .text(`Real`)
-        .style("font-size", "11px")
+        .style("font-size", "13px")
         .style("font-weight", "500")
         .style("font-family", "system-ui, -apple-system, sans-serif")
         .style("fill", "#374151");
@@ -1746,17 +1747,17 @@ const EmbeddingPlot = ({
       normalLegendRow.append("circle")
         .attr("cx", 8)
         .attr("cy", 0)
-        .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
+        .attr("r", legendPointRadius)
         .attr("fill", colorScale("Synthetic")) // Use same color as data points
         .attr("stroke", d3.color(colorScale("Synthetic")).darker(0.3))
         .attr("stroke-width", 0.5)
         .attr("opacity", 0.85);
 
       normalLegendRow.append("text")
-        .attr("x", 20)
+        .attr("x", 16)
         .attr("y", 4)
         .text(`Synthetic`)
-        .style("font-size", "11px")
+        .style("font-size", "13px")
         .style("font-weight", "500")
         .style("font-family", "system-ui, -apple-system, sans-serif")
         .style("fill", "#374151");
@@ -1771,17 +1772,17 @@ const EmbeddingPlot = ({
         legendRow.append("circle")
           .attr("cx", 8)
           .attr("cy", 0)
-          .attr("r", Math.max(2.5, adjustedPointSize * 1.2))
+          .attr("r", legendPointRadius)
           .attr("fill", colorScale(label))
           .attr("stroke", d3.color(colorScale(label)).darker(0.3))
           .attr("stroke-width", 0.5)
           .attr("opacity", 0.85);
 
         legendRow.append("text")
-          .attr("x", 20)
+          .attr("x", 16)
           .attr("y", 4)
           .text(`${label}`)
-          .style("font-size", "11px")
+          .style("font-size", "18px")
           .style("font-weight", "500")
           .style("font-family", "system-ui, -apple-system, sans-serif")
           .style("fill", "#374151");
@@ -2268,7 +2269,7 @@ const EmbeddingPlot = ({
     }}>
       {/* Title */}
       <Box sx={{ p: 1, borderBottom: '0.1px solid', borderColor: 'divider' }}>
-        <Typography variant="subtitle2">Overall Analysis</Typography>
+        <Typography variant="subtitle2">Multi-variable Analysis</Typography>
       </Box>
       {/* Main Plot Area */}
       <Box
@@ -2502,19 +2503,19 @@ const EmbeddingPlot = ({
             <Table size="small" stickyHeader aria-label="Variable type comparison">
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontSize: 11, fontWeight: 600, width: 140, maxWidth: 140 }}>Variable</TableCell>
-                  <TableCell sx={{ fontSize: 12, fontWeight: 600 }}>Real Type</TableCell>
-                  <TableCell sx={{ fontSize: 12, fontWeight: 600 }}>Synthetic Type</TableCell>
-                  <TableCell sx={{ fontSize: 12, fontWeight: 600 }}>Match</TableCell>
+                  <TableCell sx={{ fontSize: 13, fontWeight: 600, width: 140, maxWidth: 140 }}>Variable</TableCell>
+                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Real Type</TableCell>
+                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Synthetic Type</TableCell>
+                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Match</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {variableTypeRows.map((row) => (
                   <TableRow key={row.variable} hover>
-                    <TableCell sx={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>{row.variable}</TableCell>
-                    <TableCell sx={{ fontSize: 12 }}>{row.realType}</TableCell>
-                    <TableCell sx={{ fontSize: 12 }}>{row.syntheticType}</TableCell>
-                    <TableCell sx={{ fontSize: 12 }}>
+                    <TableCell sx={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>{row.variable}</TableCell>
+                    <TableCell sx={{ fontSize: 13 }}>{row.realType}</TableCell>
+                    <TableCell sx={{ fontSize: 13 }}>{row.syntheticType}</TableCell>
+                    <TableCell sx={{ fontSize: 13 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <span role="img" aria-label={row.match.label}>{row.match.icon}</span>
                         <Typography component="span" variant="caption" color="text.secondary">

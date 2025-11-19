@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react'
 import * as d3 from 'd3';
 import { Box, Typography } from '@mui/material';
 
-// Shared palette with EmbeddingPlot so correlation visuals stay aligned with overall analysis.
+// Shared palette with EmbeddingPlot so correlation visuals stay aligned with the multi-variable analysis view.
 const REAL_COLOR = '#3b82f6';
 const SYNTH_COLOR = '#dc2626';
 const HIGHLIGHT_STROKE = '#000000';
@@ -10,6 +10,15 @@ const HIGHLIGHT_STROKE = '#000000';
 const parseNum = (value) => (typeof value === 'number' ? value : parseFloat(value));
 
 const isFiniteNum = (value) => Number.isFinite(value) && !Number.isNaN(value);
+
+const makePair = (xName, yName) => ({ xName, yName });
+
+const pairsEqual = (a, b) => {
+  if (!a || !b) return false;
+  const direct = a.xName === b.xName && a.yName === b.yName;
+  const swapped = a.xName === b.yName && a.yName === b.xName;
+  return direct || swapped;
+};
 
 const pearsonForPair = (rows, i, j) => {
   let n = 0;
@@ -122,16 +131,16 @@ const CorrelationPlot = ({
   sampleSize = 2000
 }) => {
   const rowRef = useRef(null);
-  const scatterRowRef = useRef(null);
   const realRef = useRef(null);
   const synthRef = useRef(null);
   const diffRef = useRef(null);
   const legendRef = useRef(null);
   const diffLegendRef = useRef(null);
-  const realScatterRef = useRef(null);
-  const synthScatterRef = useRef(null);
 
-  const [selectedPair, setSelectedPair] = useState(null); // { xName, yName }
+  const [selectedPairs, setSelectedPairs] = useState([]);
+  const [activePair, setActivePair] = useState(null);
+  const [heatmapDims, setHeatmapDims] = useState({ width: 340, height: 340 });
+  const lastClickedPairRef = useRef(null);
 
   // Determine embedded datasets and headers to use throughout (prefer exact metadata datasets)
   const embeddedSource = useMemo(() => {
@@ -425,7 +434,8 @@ const CorrelationPlot = ({
       zmax = 1,
       getMetricForPair = (i, j) => 'Value',
       onCellClick = null,
-      selectedPair = null
+      selectedPairs = [],
+      activePair = null
     } = options || {};
 
     const sel = d3.select(container);
@@ -476,7 +486,7 @@ const CorrelationPlot = ({
         .style('color', '#fff')
         .style('padding', '6px 8px')
         .style('border-radius', '4px')
-        .style('font-size', '12px')
+        .style('font-size', '14px')
         .style('pointer-events', 'none')
         .style('z-index', '1000')
         .html(`<b>${d.y}</b> vs <b>${d.x}</b><br/>${metric}: ${Number.isFinite(d.v) ? d.v.toFixed(3) : 'NaN'}`);
@@ -492,21 +502,39 @@ const CorrelationPlot = ({
       d3.selectAll('.corr-tooltip').remove();
     });
 
-    // Selection highlight overlay
-    if (selectedPair && Number.isInteger(selectedPair.i) && Number.isInteger(selectedPair.j)) {
-      const iSel = selectedPair.i;
-      const jSel = selectedPair.j;
-      const xLabel = labels[jSel];
-      const yLabel = labels[iSel];
-      g.append('rect')
-        .attr('x', x(xLabel))
-        .attr('y', y(yLabel))
-        .attr('width', x.bandwidth())
-        .attr('height', y.bandwidth())
-        .attr('fill', 'none')
-        .attr('stroke', '#111827')
-        .attr('stroke-width', 2)
-        .style('pointer-events', 'none');
+    const selectedGroup = Array.isArray(selectedPairs) ? selectedPairs : [];
+    if (selectedGroup.length > 0) {
+      const overlay = g.append('g').attr('class', 'selected-pairs-overlay').style('pointer-events', 'none');
+      selectedGroup.forEach(({ i, j }) => {
+        if (!Number.isInteger(i) || !Number.isInteger(j)) return;
+        const xLabel = labels[j];
+        const yLabel = labels[i];
+        if (xLabel === undefined || yLabel === undefined) return;
+        overlay.append('rect')
+          .attr('x', x(xLabel))
+          .attr('y', y(yLabel))
+          .attr('width', x.bandwidth())
+          .attr('height', y.bandwidth())
+          .attr('fill', 'none')
+          .attr('stroke', '#4b5563')
+          .attr('stroke-width', 1.5);
+      });
+    }
+
+    if (activePair && Number.isInteger(activePair.i) && Number.isInteger(activePair.j)) {
+      const xLabel = labels[activePair.j];
+      const yLabel = labels[activePair.i];
+      if (xLabel !== undefined && yLabel !== undefined) {
+        g.append('rect')
+          .attr('x', x(xLabel))
+          .attr('y', y(yLabel))
+          .attr('width', x.bandwidth())
+          .attr('height', y.bandwidth())
+          .attr('fill', 'none')
+          .attr('stroke', '#111827')
+          .attr('stroke-width', 2.4)
+          .style('pointer-events', 'none');
+      }
     }
 
     // Axes with dynamic label sizing/visibility based on variable count
@@ -521,7 +549,7 @@ const CorrelationPlot = ({
       gxAxis.selectAll('text').remove();
       gyAxis.selectAll('text').remove();
     } else {
-      const fontSize = nVars < 5 ? '12px' : '9px';
+      const fontSize = nVars < 5 ? '15px' : '12px';
       gxAxis.selectAll('text')
         .style('font-size', fontSize)
         .style('text-anchor', 'end')
@@ -537,7 +565,7 @@ const CorrelationPlot = ({
       .attr('x', margin.left + innerWidth / 2)
       .attr('y', 22)
       .attr('text-anchor', 'middle')
-      .style('font-size', '12px')
+      .style('font-size', '14px')
       .style('font-weight', 600)
       .style('fill', '#374151')
       .text(title);
@@ -559,11 +587,12 @@ const CorrelationPlot = ({
       .attr('height', height);
 
     // Title
+    const titleX = orientation === 'vertical' ? Math.max(0, margin.left - 30) : margin.left;
     svg.append('text')
-      .attr('x', margin.left)
-      .attr('y', 12)
+      .attr('x', titleX)
+      .attr('y', 22)
       .attr('text-anchor', 'start')
-      .style('font-size', '11px')
+      .style('font-size', '13px')
       .style('fill', '#374151')
       .text(title);
 
@@ -609,7 +638,7 @@ const CorrelationPlot = ({
         .attr('transform', `translate(0, ${6 + barHeight})`)
         .call(legendAxis)
         .selectAll('text')
-        .style('font-size', '10px');
+        .style('font-size', '12px');
     } else {
       const barWidth = 12;
       g.append('rect')
@@ -626,17 +655,32 @@ const CorrelationPlot = ({
         .attr('transform', `translate(${barWidth}, 0)`) 
         .call(legendAxis)
         .selectAll('text')
-        .style('font-size', '10px');
+        .style('font-size', '12px');
     }
   };
 
   useEffect(() => {
-    if (!selectedPair) return;
-    const { xName, yName } = selectedPair;
-    if (!diffMatrix.cols.includes(xName) || !diffMatrix.cols.includes(yName)) {
-      setSelectedPair(null);
+    setSelectedPairs((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      const filtered = prev.filter((pair) => {
+        if (!pair) return false;
+        return diffMatrix.cols.includes(pair.xName) && diffMatrix.cols.includes(pair.yName);
+      });
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [diffMatrix]);
+
+  useEffect(() => {
+    if (!activePair) return;
+    const valid = diffMatrix.cols.includes(activePair.xName) && diffMatrix.cols.includes(activePair.yName);
+    if (!valid) {
+      setActivePair((prev) => {
+        if (!prev) return null;
+        const fallback = selectedPairs.find((pair) => diffMatrix.cols.includes(pair.xName) && diffMatrix.cols.includes(pair.yName));
+        return fallback || null;
+      });
     }
-  }, [selectedPair, diffMatrix]);
+  }, [activePair, diffMatrix, selectedPairs]);
 
   const hasRealMatrix = Array.isArray(realMatrix.cols) && realMatrix.cols.length > 0 && Array.isArray(realMatrix.matrix) && realMatrix.matrix.length > 0;
   const hasSynthMatrix = Array.isArray(synthMatrix.cols) && synthMatrix.cols.length > 0 && Array.isArray(synthMatrix.matrix) && synthMatrix.matrix.length > 0;
@@ -672,13 +716,29 @@ const CorrelationPlot = ({
       const perWidth = Math.max(200, Math.floor(usableForHeatmaps / Math.max(1, heatmapCount)));
       const perHeight = perWidth;
       const commonOpts = { width: perWidth, height: perHeight, margin: { top: 40, right: 20, bottom: 70, left: 70 } };
+      setHeatmapDims((prev) => {
+        if (prev.width === perWidth && prev.height === perHeight) return prev;
+        return { width: perWidth, height: perHeight };
+      });
       const zmin = -1;
       const zmax = 1;
 
-      const selectedForLabels = (labels) => {
-        if (!selectedPair) return null;
-        const i = labels.indexOf(selectedPair.yName);
-        const j = labels.indexOf(selectedPair.xName);
+      const indicesForPairs = (labels) => {
+        if (!Array.isArray(selectedPairs) || selectedPairs.length === 0) return [];
+        return selectedPairs.reduce((acc, pair) => {
+          if (!pair) return acc;
+          const i = labels.indexOf(pair.yName);
+          const j = labels.indexOf(pair.xName);
+          if (i === -1 || j === -1) return acc;
+          acc.push({ i, j });
+          return acc;
+        }, []);
+      };
+
+      const activeForLabels = (labels) => {
+        if (!activePair) return null;
+        const i = labels.indexOf(activePair.yName);
+        const j = labels.indexOf(activePair.xName);
         if (i === -1 || j === -1) return null;
         return { i, j };
       };
@@ -686,12 +746,14 @@ const CorrelationPlot = ({
       const handlePairClick = (xName, yName) => {
         if (!xName || !yName) return;
         if (!diffMatrix.cols.includes(xName) || !diffMatrix.cols.includes(yName)) return;
-        setSelectedPair(prev => {
-          if (prev) {
-            const same = (prev.xName === xName && prev.yName === yName) || (prev.xName === yName && prev.yName === xName);
-            if (same) return null;
+        const nextPair = makePair(xName, yName);
+        lastClickedPairRef.current = nextPair;
+        setSelectedPairs((prev) => {
+          const existingIndex = prev.findIndex((pair) => pairsEqual(pair, nextPair));
+          if (existingIndex !== -1) {
+            return [...prev.slice(0, existingIndex), ...prev.slice(existingIndex + 1)];
           }
-          return { xName, yName };
+          return [...prev, nextPair];
         });
       };
 
@@ -711,7 +773,8 @@ const CorrelationPlot = ({
               const yName = realMatrix.cols[i];
               handlePairClick(xName, yName);
             },
-            selectedPair: selectedForLabels(realMatrix.cols)
+            selectedPairs: indicesForPairs(realMatrix.cols),
+            activePair: activeForLabels(realMatrix.cols)
           }
         );
       }
@@ -732,7 +795,8 @@ const CorrelationPlot = ({
               const yName = synthMatrix.cols[i];
               handlePairClick(xName, yName);
             },
-            selectedPair: selectedForLabels(synthMatrix.cols)
+            selectedPairs: indicesForPairs(synthMatrix.cols),
+            activePair: activeForLabels(synthMatrix.cols)
           }
         );
       }
@@ -763,7 +827,8 @@ const CorrelationPlot = ({
               const yName = diffMatrix.cols[i];
               handlePairClick(xName, yName);
             },
-            selectedPair: selectedForLabels(diffMatrix.cols)
+            selectedPairs: indicesForPairs(diffMatrix.cols),
+            activePair: activeForLabels(diffMatrix.cols)
           }
         );
 
@@ -784,7 +849,7 @@ const CorrelationPlot = ({
     drawAll();
     window.addEventListener('resize', drawAll);
     return () => window.removeEventListener('resize', drawAll);
-  }, [hasRealMatrix, hasSynthMatrix, hasDiffMatrix, realMatrix, synthMatrix, diffMatrix, selectedPair]);
+  }, [hasRealMatrix, hasSynthMatrix, hasDiffMatrix, realMatrix, synthMatrix, diffMatrix, selectedPairs, activePair]);
 
   // Scatter drawing helper
   const drawScatter = (container, points, domains, options) => {
@@ -793,9 +858,9 @@ const CorrelationPlot = ({
       title = '',
       width = 340,
       height = 340,
-      margin = { top: 36, right: 24, bottom: 40, left: 44 },
+      margin = { top: 44, right: 36, bottom: 80, left: 80 },
       color = REAL_COLOR,
-      pointRadius = 2,
+      pointRadius = 3,
       xLabel = 'x',
       yLabel = 'y',
       highlightIndices = new Set(),
@@ -817,21 +882,23 @@ const CorrelationPlot = ({
     const xAxis = d3.axisBottom(x).ticks(5);
     const yAxis = d3.axisLeft(y).ticks(5);
 
-    g.append('g').attr('transform', `translate(0,${innerHeight})`).call(xAxis);
-    g.append('g').call(yAxis);
+    const xAxisGroup = g.append('g').attr('transform', `translate(0,${innerHeight})`).call(xAxis);
+    const yAxisGroup = g.append('g').call(yAxis);
+    xAxisGroup.selectAll('text').style('font-size', '16px');
+    yAxisGroup.selectAll('text').style('font-size', '16px');
 
     // Axis labels
     svg.append('text')
       .attr('x', margin.left + innerWidth / 2)
       .attr('y', height - 6)
       .attr('text-anchor', 'middle')
-      .style('font-size', '11px')
+      .style('font-size', '15px')
       .style('fill', '#374151')
       .text(xLabel);
     svg.append('text')
       .attr('transform', `translate(12, ${margin.top + innerHeight / 2}) rotate(-90) `)
       .attr('text-anchor', 'middle')
-      .style('font-size', '11px')
+      .style('font-size', '15px')
       .style('fill', '#374151')
       .text(yLabel);
 
@@ -867,7 +934,7 @@ const CorrelationPlot = ({
       .attr('x', margin.left + innerWidth / 2)
       .attr('y', 18)
       .attr('text-anchor', 'middle')
-      .style('font-size', '12px')
+      .style('font-size', '16px')
       .style('font-weight', 600)
       .style('fill', '#374151')
       .text(title);
@@ -880,12 +947,12 @@ const CorrelationPlot = ({
       title = '',
       width = 340,
       height = 340,
-      margin = { top: 36, right: 24, bottom: 60, left: 50 },
+      margin = { top: 44, right: 36, bottom: 80, left: 80 },
       color = REAL_COLOR,
       xLabel = 'Category',
       yLabel = 'Value',
       selectedGroups = new Map(),
-      pointRadius = 2.5
+      pointRadius = 3.2
     } = options || {};
 
     const sel = d3.select(container);
@@ -902,21 +969,24 @@ const CorrelationPlot = ({
     const xAxis = d3.axisBottom(x);
     const yAxis = d3.axisLeft(y).ticks(5);
     g.append('g').attr('transform', `translate(0,${innerHeight})`).call(xAxis)
-      .selectAll('text').style('font-size', '10px').attr('transform', 'rotate(-30)').style('text-anchor', 'end');
-    g.append('g').call(yAxis).selectAll('text').style('font-size', '10px');
+      .selectAll('text')
+      .style('font-size', '16px')
+      .attr('transform', 'rotate(-30)')
+      .style('text-anchor', 'end');
+    g.append('g').call(yAxis).selectAll('text').style('font-size', '16px');
 
     // Axis labels
     svg.append('text')
       .attr('x', margin.left + innerWidth / 2)
       .attr('y', height - 6)
       .attr('text-anchor', 'middle')
-      .style('font-size', '11px')
+      .style('font-size', '15px')
       .style('fill', '#374151')
       .text(xLabel);
     svg.append('text')
       .attr('transform', `translate(14, ${margin.top + innerHeight / 2}) rotate(-90) `)
       .attr('text-anchor', 'middle')
-      .style('font-size', '11px')
+      .style('font-size', '15px')
       .style('fill', '#374151')
       .text(yLabel);
 
@@ -989,7 +1059,7 @@ const CorrelationPlot = ({
       .attr('x', margin.left + innerWidth / 2)
       .attr('y', 18)
       .attr('text-anchor', 'middle')
-      .style('font-size', '12px')
+      .style('font-size', '16px')
       .style('font-weight', 600)
       .style('fill', '#374151')
     .text(title);
@@ -1002,7 +1072,7 @@ const CorrelationPlot = ({
       title = '',
       width = 340,
       height = 340,
-      margin = { top: 36, right: 20, bottom: 70, left: 70 },
+      margin = { top: 44, right: 36, bottom: 80, left: 80 },
       colors = d3.interpolateBlues,
       zmin = 0,
       zmax = 1,
@@ -1067,13 +1137,13 @@ const CorrelationPlot = ({
       .attr('transform', `translate(0, ${innerHeight})`)
       .call(xAxis)
       .selectAll('text')
-      .style('font-size', '10px')
+      .style('font-size', '14px')
       .style('text-anchor', 'end')
       .attr('transform', 'rotate(-45)');
     g.append('g')
       .call(yAxis)
       .selectAll('text')
-      .style('font-size', '10px');
+      .style('font-size', '14px');
     g.selectAll('.domain').remove();
     g.selectAll('.tick line').remove();
 
@@ -1082,13 +1152,13 @@ const CorrelationPlot = ({
       .attr('x', margin.left + innerWidth / 2)
       .attr('y', height - 6)
       .attr('text-anchor', 'middle')
-      .style('font-size', '11px')
+      .style('font-size', '13px')
       .style('fill', '#374151')
       .text(xLabel);
     svg.append('text')
       .attr('transform', `translate(16, ${margin.top + innerHeight / 2}) rotate(-90) `)
       .attr('text-anchor', 'middle')
-      .style('font-size', '11px')
+      .style('font-size', '13px')
       .style('fill', '#374151')
       .text(yLabel);
 
@@ -1096,286 +1166,332 @@ const CorrelationPlot = ({
       .attr('x', margin.left + innerWidth / 2)
       .attr('y', 18)
       .attr('text-anchor', 'middle')
-      .style('font-size', '12px')
+      .style('font-size', '14px')
       .style('font-weight', 600)
       .style('fill', '#374151')
       .text(title);
   };
 
-  // Render pairwise plots when a pair is selected
-  useEffect(() => {
-    const render = () => {
-      if (!selectedPair || !hasDiffMatrix) {
-        [realScatterRef, synthScatterRef].forEach(ref => { if (ref.current) d3.select(ref.current).selectAll('*').remove(); });
-        return;
-      }
+  const PairwiseComparison = React.memo(function PairwiseComparison({
+    pair,
+    diffMatrix,
+    embeddedSource,
+    sampleRows,
+    selectedRowSets,
+    drawScatter,
+    drawBeeswarm,
+    drawCatHeatmap,
+    heatmapDims,
+  }) {
+    const containerRef = useRef(null);
+    const realContainerRef = useRef(null);
+    const synthContainerRef = useRef(null);
 
-      const { xName, yName } = selectedPair;
-      const i = diffMatrix.cols.indexOf(yName);
-      const j = diffMatrix.cols.indexOf(xName);
-      if (i === -1 || j === -1) {
-        [realScatterRef, synthScatterRef].forEach(ref => { if (ref.current) d3.select(ref.current).selectAll('*').remove(); });
-        return;
-      }
-
-      const container = scatterRowRef.current;
-      const totalWidth = container ? container.getBoundingClientRect().width : 1020;
-      const gapPx = 8;
-      const perWidth = Math.max(220, Math.floor((totalWidth - gapPx) / 2));
-      const perHeight = perWidth;
-
-      const { embRealRows, embSynthRows } = embeddedSource;
-      const realRows = sampleRows(embRealRows);
-      const synthRows = sampleRows(embSynthRows);
-      const ti = diffMatrix.types[i];
-      const tj = diffMatrix.types[j];
-
-      const xIdxReal = diffMatrix.realIndices[j];
-      const yIdxReal = diffMatrix.realIndices[i];
-      const xIdxSynth = diffMatrix.synthIndices[j];
-      const yIdxSynth = diffMatrix.synthIndices[i];
-
-      const toPoints = (rows, xi, yi) => {
-        const pts = [];
-        for (let r = 0; r < rows.length; r++) {
-          const vx = parseNum(rows[r]?.[xi]);
-          const vy = parseNum(rows[r]?.[yi]);
-          if (isFiniteNum(vx) && isFiniteNum(vy)) pts.push({ x: vx, y: vy, rowIndex: r });
-        }
-        return pts;
-      };
-
-      const bothNumeric = ti === 'numeric' && tj === 'numeric';
-      const bothCategorical = ti === 'categorical' && tj === 'categorical';
-
-      if (bothNumeric) {
-        const realPts = toPoints(realRows, xIdxReal, yIdxReal);
-        const synthPts = toPoints(synthRows, xIdxSynth, yIdxSynth);
-        const allX = realPts.map(p => p.x).concat(synthPts.map(p => p.x));
-        const allY = realPts.map(p => p.y).concat(synthPts.map(p => p.y));
-        if (allX.length === 0 || allY.length === 0) {
-          [realScatterRef, synthScatterRef].forEach(ref => {
-            const el = ref.current; if (!el) return;
-            const sel = d3.select(el);
-            sel.selectAll('*').remove();
+    useEffect(() => {
+      const clearCharts = (message = null) => {
+        [realContainerRef, synthContainerRef].forEach((ref) => {
+          const el = ref.current;
+          if (!el) return;
+          const sel = d3.select(el);
+          sel.selectAll('*').remove();
+          if (message) {
             sel.append('div')
               .style('padding', '8px')
               .style('color', '#6b7280')
               .style('font-size', '12px')
-              .text('No numeric data found to plot scatter.');
-          });
+              .text(message);
+          }
+        });
+      };
+
+      const render = () => {
+        if (!pair || !diffMatrix || !Array.isArray(diffMatrix.cols) || diffMatrix.cols.length === 0) {
+          clearCharts();
           return;
         }
-        const domains = { x: d3.extent(allX), y: d3.extent(allY) };
-        drawScatter(
-          realScatterRef.current,
-          realPts,
-          domains,
-          { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR, xLabel: selectedPair.xName, yLabel: selectedPair.yName, highlightIndices: selectedRowSets.realSet }
-        );
-        drawScatter(
-          synthScatterRef.current,
-          synthPts,
-          domains,
-          { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR, xLabel: selectedPair.xName, yLabel: selectedPair.yName, highlightIndices: selectedRowSets.synthSet }
-        );
-        return;
-      }
 
-      const catNum = (!bothNumeric && !bothCategorical);
-      if (catNum) {
-        // Identify which is categorical vs numeric in our (row i, col j) positions
-        // If ti is categorical => y is categorical, x is numeric? Our convention: x from j (columns), y from i (rows)
-        const catIsRow = ti === 'categorical';
-        const catIdxReal = catIsRow ? yIdxReal : xIdxReal;
-        const numIdxReal = catIsRow ? xIdxReal : yIdxReal;
-        const catIdxSynth = catIsRow ? yIdxSynth : xIdxSynth;
-        const numIdxSynth = catIsRow ? xIdxSynth : yIdxSynth;
+        const { xName, yName } = pair;
+        const i = diffMatrix.cols.indexOf(yName);
+        const j = diffMatrix.cols.indexOf(xName);
+        if (i === -1 || j === -1) {
+          clearCharts();
+          return;
+        }
 
-        // Build category -> values map for each dataset
-        const buildGroups = (rows, catIdx, numIdx) => {
-          const map = new Map();
+        const container = containerRef.current;
+        const totalWidth = container ? container.getBoundingClientRect().width : 1020;
+        const gapPx = 8;
+        const sizeWidth = heatmapDims?.width || 340;
+        const sizeHeight = heatmapDims?.height || 340;
+        const perWidth = Math.max(200, Math.min(sizeWidth, Math.floor((totalWidth - gapPx) / 2)));
+        const perHeight = sizeHeight;
+
+        const { embRealRows, embSynthRows } = embeddedSource;
+        const realRows = sampleRows(embRealRows);
+        const synthRows = sampleRows(embSynthRows);
+
+        const ti = Array.isArray(diffMatrix.types) ? diffMatrix.types[i] : null;
+        const tj = Array.isArray(diffMatrix.types) ? diffMatrix.types[j] : null;
+        if (!ti || !tj) {
+          clearCharts('No type metadata available for this pair.');
+          return;
+        }
+
+        const realIndices = Array.isArray(diffMatrix.realIndices) ? diffMatrix.realIndices : [];
+        const synthIndices = Array.isArray(diffMatrix.synthIndices) ? diffMatrix.synthIndices : [];
+        const xIdxReal = realIndices[j];
+        const yIdxReal = realIndices[i];
+        const xIdxSynth = synthIndices[j];
+        const yIdxSynth = synthIndices[i];
+        if ([xIdxReal, yIdxReal, xIdxSynth, yIdxSynth].some((idx) => idx === undefined)) {
+          clearCharts('Pair indices are unavailable in one of the datasets.');
+          return;
+        }
+
+        const toPoints = (rows, xi, yi) => {
+          const pts = [];
+          if (!Array.isArray(rows) || rows.length === 0) return pts;
           for (let r = 0; r < rows.length; r++) {
-            const cRaw = rows[r]?.[catIdx];
-            const yRaw = rows[r]?.[numIdx];
-            if (cRaw === null || cRaw === undefined || cRaw === '') continue;
-            const yv = parseNum(yRaw);
-            if (!isFiniteNum(yv)) continue;
-            const key = String(cRaw);
-            const arr = map.get(key) || [];
-            arr.push(yv);
-            map.set(key, arr);
+            const vx = parseNum(rows[r]?.[xi]);
+            const vy = parseNum(rows[r]?.[yi]);
+            if (isFiniteNum(vx) && isFiniteNum(vy)) pts.push({ x: vx, y: vy, rowIndex: r });
           }
-          return map;
-        };
-        const buildSelectedGroups = (rows, catIdx, numIdx, selectedSet) => {
-          const map = new Map();
-          for (let r = 0; r < rows.length; r++) {
-            if (!selectedSet.has(r)) continue;
-            const cRaw = rows[r]?.[catIdx];
-            const yRaw = rows[r]?.[numIdx];
-            if (cRaw === null || cRaw === undefined || cRaw === '') continue;
-            const yv = parseNum(yRaw);
-            if (!isFiniteNum(yv)) continue;
-            const key = String(cRaw);
-            const arr = map.get(key) || [];
-            arr.push(yv);
-            map.set(key, arr);
-          }
-          return map;
+          return pts;
         };
 
-        const realGroups = buildGroups(realRows, catIdxReal, numIdxReal);
-        const synthGroups = buildGroups(synthRows, catIdxSynth, numIdxSynth);
-        const realSelGroups = buildSelectedGroups(realRows, catIdxReal, numIdxReal, selectedRowSets.realSet);
-        const synthSelGroups = buildSelectedGroups(synthRows, catIdxSynth, numIdxSynth, selectedRowSets.synthSet);
-        const allCats = Array.from(new Set([
-          ...Array.from(realGroups.keys()),
-          ...Array.from(synthGroups.keys())
+        const bothNumeric = ti === 'numeric' && tj === 'numeric';
+        const bothCategorical = ti === 'categorical' && tj === 'categorical';
+
+        if (bothNumeric) {
+          const realPts = toPoints(realRows, xIdxReal, yIdxReal);
+          const synthPts = toPoints(synthRows, xIdxSynth, yIdxSynth);
+          const allX = realPts.map((p) => p.x).concat(synthPts.map((p) => p.x));
+          const allY = realPts.map((p) => p.y).concat(synthPts.map((p) => p.y));
+          if (allX.length === 0 || allY.length === 0) {
+            clearCharts('No numeric data found to plot scatter.');
+            return;
+          }
+          const domains = { x: d3.extent(allX), y: d3.extent(allY) };
+          drawScatter(
+            realContainerRef.current,
+            realPts,
+            domains,
+            { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR, xLabel: xName, yLabel: yName, highlightIndices: selectedRowSets.realSet }
+          );
+          drawScatter(
+            synthContainerRef.current,
+            synthPts,
+            domains,
+            { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR, xLabel: xName, yLabel: yName, highlightIndices: selectedRowSets.synthSet }
+          );
+          return;
+        }
+
+        const catNum = (!bothNumeric && !bothCategorical);
+        if (catNum) {
+          const catIsRow = ti === 'categorical';
+          const catIdxReal = catIsRow ? yIdxReal : xIdxReal;
+          const numIdxReal = catIsRow ? xIdxReal : yIdxReal;
+          const catIdxSynth = catIsRow ? yIdxSynth : xIdxSynth;
+          const numIdxSynth = catIsRow ? xIdxSynth : yIdxSynth;
+
+          const buildGroups = (rows, catIdx, numIdx) => {
+            const map = new Map();
+            if (!Array.isArray(rows) || rows.length === 0) return map;
+            for (let r = 0; r < rows.length; r++) {
+              const cRaw = rows[r]?.[catIdx];
+              const yRaw = rows[r]?.[numIdx];
+              if (cRaw === null || cRaw === undefined || cRaw === '') continue;
+              const yv = parseNum(yRaw);
+              if (!isFiniteNum(yv)) continue;
+              const key = String(cRaw);
+              const arr = map.get(key) || [];
+              arr.push(yv);
+              map.set(key, arr);
+            }
+            return map;
+          };
+          const buildSelectedGroups = (rows, catIdx, numIdx, selectedSet) => {
+            const map = new Map();
+            if (!Array.isArray(rows) || rows.length === 0 || !(selectedSet instanceof Set)) return map;
+            for (let r = 0; r < rows.length; r++) {
+              if (!selectedSet.has(r)) continue;
+              const cRaw = rows[r]?.[catIdx];
+              const yRaw = rows[r]?.[numIdx];
+              if (cRaw === null || cRaw === undefined || cRaw === '') continue;
+              const yv = parseNum(yRaw);
+              if (!isFiniteNum(yv)) continue;
+              const key = String(cRaw);
+              const arr = map.get(key) || [];
+              arr.push(yv);
+              map.set(key, arr);
+            }
+            return map;
+          };
+
+          const realGroups = buildGroups(realRows, catIdxReal, numIdxReal);
+          const synthGroups = buildGroups(synthRows, catIdxSynth, numIdxSynth);
+          const realSelGroups = buildSelectedGroups(realRows, catIdxReal, numIdxReal, selectedRowSets.realSet);
+          const synthSelGroups = buildSelectedGroups(synthRows, catIdxSynth, numIdxSynth, selectedRowSets.synthSet);
+          const allCats = Array.from(new Set([
+            ...Array.from(realGroups.keys()),
+            ...Array.from(synthGroups.keys()),
+          ])).sort();
+
+          const allVals = [];
+          for (const v of realGroups.values()) allVals.push(...v);
+          for (const v of synthGroups.values()) allVals.push(...v);
+          if (allCats.length === 0 || allVals.length === 0) {
+            clearCharts('Not enough data to draw beeswarm plots.');
+            return;
+          }
+          const yDomain = d3.extent(allVals);
+          const xLab = catIsRow ? yName : xName;
+          const yLab = catIsRow ? xName : yName;
+          drawBeeswarm(
+            realContainerRef.current,
+            allCats,
+            realGroups,
+            yDomain,
+            { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR, xLabel: xLab, yLabel: yLab, selectedGroups: realSelGroups, pointRadius: 2.5 }
+          );
+          drawBeeswarm(
+            synthContainerRef.current,
+            allCats,
+            synthGroups,
+            yDomain,
+            { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR, xLabel: xLab, yLabel: yLab, selectedGroups: synthSelGroups, pointRadius: 2.5 }
+          );
+          return;
+        }
+
+        const buildCats = (rows, idx) => {
+          const set = new Set();
+          if (!Array.isArray(rows) || rows.length === 0) return set;
+          for (let r = 0; r < rows.length; r++) {
+            const v = rows[r]?.[idx];
+            if (v === null || v === undefined || v === '') continue;
+            set.add(String(v));
+          }
+          return set;
+        };
+
+        const rowCats = Array.from(new Set([
+          ...buildCats(realRows, yIdxReal),
+          ...buildCats(synthRows, yIdxSynth),
+        ])).sort();
+        const colCats = Array.from(new Set([
+          ...buildCats(realRows, xIdxReal),
+          ...buildCats(synthRows, xIdxSynth),
         ])).sort();
 
-        const allVals = [];
-        for (const v of realGroups.values()) allVals.push(...v);
-        for (const v of synthGroups.values()) allVals.push(...v);
-        if (allCats.length === 0 || allVals.length === 0) {
-          [realScatterRef, synthScatterRef].forEach(ref => {
-            const el = ref.current; if (!el) return;
-            const sel = d3.select(el);
-            sel.selectAll('*').remove();
-            sel.append('div')
-              .style('padding', '8px')
-              .style('color', '#6b7280')
-              .style('font-size', '12px')
-              .text('Not enough data to draw violins.');
-          });
-          return;
-        }
-        const yDomain = d3.extent(allVals);
-        // Draw two violins using same categories and yDomain
-        const xLab = catIsRow ? selectedPair.yName : selectedPair.xName;
-        const yLab = catIsRow ? selectedPair.xName : selectedPair.yName;
-        drawBeeswarm(
-          realScatterRef.current,
-          allCats,
-          realGroups,
-          yDomain,
-          { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR, xLabel: xLab, yLabel: yLab, selectedGroups: realSelGroups, pointRadius: 2.5 }
+        const buildTable = (rows, yIdx, xIdx, rCats, cCats) => {
+          const rMap = new Map(rCats.map((c, k) => [c, k]));
+          const cMap = new Map(cCats.map((c, k) => [c, k]));
+          const table = Array.from({ length: rCats.length }, () => new Array(cCats.length).fill(0));
+          if (!Array.isArray(rows) || rows.length === 0) return table;
+          for (let r = 0; r < rows.length; r++) {
+            const ry = rows[r]?.[yIdx];
+            const rx = rows[r]?.[xIdx];
+            if (ry === null || ry === undefined || ry === '' || rx === null || rx === undefined || rx === '') continue;
+            const yi = rMap.get(String(ry));
+            const xi = cMap.get(String(rx));
+            if (yi === undefined || xi === undefined) continue;
+            table[yi][xi] += 1;
+          }
+          return table;
+        };
+
+        const buildSelectedTable = (rows, yIdx, xIdx, rCats, cCats, selectedSet) => {
+          const rMap = new Map(rCats.map((c, k) => [c, k]));
+          const cMap = new Map(cCats.map((c, k) => [c, k]));
+          const table = Array.from({ length: rCats.length }, () => new Array(cCats.length).fill(0));
+          if (!Array.isArray(rows) || rows.length === 0 || !(selectedSet instanceof Set)) return table;
+          for (let r = 0; r < rows.length; r++) {
+            if (!selectedSet.has(r)) continue;
+            const ry = rows[r]?.[yIdx];
+            const rx = rows[r]?.[xIdx];
+            if (ry === null || ry === undefined || ry === '' || rx === null || rx === undefined || rx === '') continue;
+            const yi = rMap.get(String(ry));
+            const xi = cMap.get(String(rx));
+            if (yi === undefined || xi === undefined) continue;
+            table[yi][xi] += 1;
+          }
+          return table;
+        };
+
+        const realTable = buildTable(realRows, yIdxReal, xIdxReal, rowCats, colCats);
+        const synthTable = buildTable(synthRows, yIdxSynth, xIdxSynth, rowCats, colCats);
+        const realSelTable = buildSelectedTable(realRows, yIdxReal, xIdxReal, rowCats, colCats, selectedRowSets.realSet);
+        const synthSelTable = buildSelectedTable(synthRows, yIdxSynth, xIdxSynth, rowCats, colCats, selectedRowSets.synthSet);
+        const zmax = Math.max(
+          d3.max(realTable.flat()) || 0,
+          d3.max(synthTable.flat()) || 0,
+          1,
         );
-        drawBeeswarm(
-          synthScatterRef.current,
-          allCats,
-          synthGroups,
-          yDomain,
-          { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR, xLabel: xLab, yLabel: yLab, selectedGroups: synthSelGroups, pointRadius: 2.5 }
+
+        drawCatHeatmap(
+          realContainerRef.current,
+          rowCats,
+          colCats,
+          realTable,
+          { title: 'Real', width: perWidth, height: perHeight, zmin: 0, zmax, xLabel: xName, yLabel: yName, selectedTable: realSelTable, labelColor: '#ef4444' }
         );
-        return;
-      }
-
-      // Categorical-categorical: contingency heatmap
-      const buildCats = (rows, idx) => {
-        const set = new Set();
-        for (let r = 0; r < rows.length; r++) {
-          const v = rows[r]?.[idx];
-          if (v === null || v === undefined || v === '') continue;
-          set.add(String(v));
-        }
-        return Array.from(set);
-      };
-      const rowCats = Array.from(new Set([
-        ...buildCats(realRows, yIdxReal),
-        ...buildCats(synthRows, yIdxSynth)
-      ])).sort();
-      const colCats = Array.from(new Set([
-        ...buildCats(realRows, xIdxReal),
-        ...buildCats(synthRows, xIdxSynth)
-      ])).sort();
-
-      const buildTable = (rows, yIdx, xIdx, rCats, cCats) => {
-        const rMap = new Map(rCats.map((c, k) => [c, k]));
-        const cMap = new Map(cCats.map((c, k) => [c, k]));
-        const table = Array.from({ length: rCats.length }, () => new Array(cCats.length).fill(0));
-        for (let r = 0; r < rows.length; r++) {
-          const ry = rows[r]?.[yIdx];
-          const rx = rows[r]?.[xIdx];
-          if (ry === null || ry === undefined || ry === '' || rx === null || rx === undefined || rx === '') continue;
-          const yi = rMap.get(String(ry));
-          const xi = cMap.get(String(rx));
-          if (yi === undefined || xi === undefined) continue;
-          table[yi][xi] += 1;
-        }
-        return table;
-      };
-      const buildSelectedTable = (rows, yIdx, xIdx, rCats, cCats, selectedSet) => {
-        const rMap = new Map(rCats.map((c, k) => [c, k]));
-        const cMap = new Map(cCats.map((c, k) => [c, k]));
-        const table = Array.from({ length: rCats.length }, () => new Array(cCats.length).fill(0));
-        for (let r = 0; r < rows.length; r++) {
-          if (!selectedSet.has(r)) continue;
-          const ry = rows[r]?.[yIdx];
-          const rx = rows[r]?.[xIdx];
-          if (ry === null || ry === undefined || ry === '' || rx === null || rx === undefined || rx === '') continue;
-          const yi = rMap.get(String(ry));
-          const xi = cMap.get(String(rx));
-          if (yi === undefined || xi === undefined) continue;
-          table[yi][xi] += 1;
-        }
-        return table;
+        drawCatHeatmap(
+          synthContainerRef.current,
+          rowCats,
+          colCats,
+          synthTable,
+          { title: 'Synthetic', width: perWidth, height: perHeight, zmin: 0, zmax, xLabel: xName, yLabel: yName, selectedTable: synthSelTable, labelColor: '#ef4444' }
+        );
       };
 
-  const realTable = buildTable(realRows, yIdxReal, xIdxReal, rowCats, colCats);
-  const synthTable = buildTable(synthRows, yIdxSynth, xIdxSynth, rowCats, colCats);
-  const realSelTable = buildSelectedTable(realRows, yIdxReal, xIdxReal, rowCats, colCats, selectedRowSets.realSet);
-  const synthSelTable = buildSelectedTable(synthRows, yIdxSynth, xIdxSynth, rowCats, colCats, selectedRowSets.synthSet);
-      const zmax = Math.max(
-        d3.max(realTable.flat()) || 0,
-        d3.max(synthTable.flat()) || 0,
-        1
-      );
-      drawCatHeatmap(
-        realScatterRef.current,
-        rowCats,
-        colCats,
-        realTable,
-        { title: 'Real', width: perWidth, height: perHeight, zmin: 0, zmax, xLabel: selectedPair.xName, yLabel: selectedPair.yName, selectedTable: realSelTable, labelColor: '#ef4444' }
-      );
-      drawCatHeatmap(
-        synthScatterRef.current,
-        rowCats,
-        colCats,
-        synthTable,
-        { title: 'Synthetic', width: perWidth, height: perHeight, zmin: 0, zmax, xLabel: selectedPair.xName, yLabel: selectedPair.yName, selectedTable: synthSelTable, labelColor: '#ef4444' }
-      );
-    };
+      render();
+      window.addEventListener('resize', render);
+      return () => window.removeEventListener('resize', render);
+    }, [pair, diffMatrix, embeddedSource, sampleRows, selectedRowSets, drawScatter, drawBeeswarm, drawCatHeatmap, heatmapDims]);
 
-    render();
-    window.addEventListener('resize', render);
-    return () => window.removeEventListener('resize', render);
-  }, [selectedPair, diffMatrix, embeddedSource, selectedRowSets, hasDiffMatrix, sampleRows]);
+    if (!pair) return null;
+
+    return (
+      <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <Typography variant="subtitle2" sx={{ fontSize: 15, fontWeight: 600, px: 1 }}>
+          {pair.yName} vs {pair.xName}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'flex-start' }}>
+          <Box ref={realContainerRef} sx={{ flex: '0 0 auto', width: heatmapDims?.width || 340 }} />
+          <Box ref={synthContainerRef} sx={{ flex: '0 0 auto', width: heatmapDims?.width || 340 }} />
+        </Box>
+      </Box>
+    );
+  });
+
+  // Pairwise plots are rendered per selected pair below via dedicated components.
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
       <Box sx={{ p: 1, borderBottom: '0.1px solid', borderColor: 'divider', width: '100%', boxSizing: 'border-box' }}>
-        <Typography variant="subtitle2">Correlation Matrices</Typography>
+        <Typography variant="subtitle2">Bivariate Analysis</Typography>
       </Box>
       {/* Selection summary and variable count */}
       <Box sx={{ ml: 1, mb: 1, mt: 1 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Typography variant="body2" sx={{ fontSize: 12 }}>
+          <Typography variant="body2" sx={{ fontSize: 14 }}>
             Selected: <strong>{selectionSummary.total}</strong>/<strong>{datasetTotals.total}</strong>
           </Typography>
-          <Typography variant="body2" sx={{ fontSize: 12 }}>
+          <Typography variant="body2" sx={{ fontSize: 14 }}>
             Real: <strong>{selectionSummary.real}</strong>/<strong>{datasetTotals.real}</strong>
           </Typography>
-          <Typography variant="body2" sx={{ fontSize: 12 }}>
+          <Typography variant="body2" sx={{ fontSize: 14 }}>
             Synthetic: <strong>{selectionSummary.synthetic}</strong>/<strong>{datasetTotals.synthetic}</strong>
           </Typography>
-          <Typography variant="body2" sx={{ fontSize: 12 }}>
+          <Typography variant="body2" sx={{ fontSize: 14 }}>
             Real vars: <strong>{realMatrix.cols.length}</strong>
           </Typography>
-          <Typography variant="body2" sx={{ fontSize: 12 }}>
+          <Typography variant="body2" sx={{ fontSize: 14 }}>
             Synthetic vars: <strong>{synthMatrix.cols.length}</strong>
           </Typography>
-          <Typography variant="body2" sx={{ fontSize: 12 }}>
+          <Typography variant="body2" sx={{ fontSize: 14 }}>
             Intersection vars: <strong>{diffMatrix.cols.length}</strong>
           </Typography>
         </Box>
@@ -1396,15 +1512,29 @@ const CorrelationPlot = ({
             {hasDiffMatrix ? <Box ref={diffLegendRef} sx={{ flex: '0 0 auto' }} /> : null}
           </Box>
           <Box sx={{ mt: 1 }}>
-            {!selectedPair ? (
+            {selectedPairs.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ px: 1, py: 0.5 }}>
-                {hasDiffMatrix ? 'Tip: click a matrix cell to view scatterplots for that pair.' : 'No shared variables between datasets to compare pairwise plots.'}
+                {hasDiffMatrix ? 'Tip: click matrix cells to compare pairs. Each click stays highlighted for quick reference.' : 'No shared variables between datasets to compare pairwise plots.'}
               </Typography>
             ) : null}
-            <Box ref={scatterRowRef} sx={{ display: 'flex', gap: 1, flexWrap: 'nowrap', overflowX: 'auto', alignItems: 'flex-start' }}>
-              <Box ref={realScatterRef} sx={{ flex: '0 0 auto' }} />
-              <Box ref={synthScatterRef} sx={{ flex: '0 0 auto' }} />
-            </Box>
+            {hasDiffMatrix && selectedPairs.length > 0 ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {selectedPairs.map((pair) => (
+                  <PairwiseComparison
+                    key={`${pair.xName}||${pair.yName}`}
+                    pair={pair}
+                    diffMatrix={diffMatrix}
+                    embeddedSource={embeddedSource}
+                    sampleRows={sampleRows}
+                    selectedRowSets={selectedRowSets}
+                    drawScatter={drawScatter}
+                    drawBeeswarm={drawBeeswarm}
+                    drawCatHeatmap={drawCatHeatmap}
+                    heatmapDims={heatmapDims}
+                  />
+                ))}
+              </Box>
+            ) : null}
           </Box>
         </>
       )}
