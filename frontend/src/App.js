@@ -292,7 +292,7 @@ function AppContent() {
                   '& .MuiTab-root': {
                     minHeight: 26,
                     padding: '2px 8px',
-                    fontSize: '0.78rem', /* slightly increased font size */
+                    fontSize: '1.06rem', /* slightly increased font size */
                     minWidth: 60,
                     lineHeight: 1.15,
                     letterSpacing: 0.1,
