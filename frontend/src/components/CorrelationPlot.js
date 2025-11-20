@@ -404,7 +404,7 @@ const CorrelationPlot = ({
         for (let j = i + 1; j < n; j++) {
           const rv = (realCorr[i] && realCorr[i][j] != null) ? realCorr[i][j] : 0;
           const sv = (synthCorr[i] && synthCorr[i][j] != null) ? synthCorr[i][j] : 0;
-          const diff = sv - rv;
+          const diff = Math.abs(sv - rv);
           matrix[i][j] = diff;
           matrix[j][i] = diff;
         }
@@ -413,7 +413,7 @@ const CorrelationPlot = ({
         cols,
         types,
         matrix,
-        metricAt: buildMetricAt(types, 'Δ '),
+        metricAt: buildMetricAt(types, '|Δ| '),
         realIndices,
         synthIndices
       };
@@ -435,7 +435,9 @@ const CorrelationPlot = ({
       getMetricForPair = (i, j) => 'Value',
       onCellClick = null,
       selectedPairs = [],
-      activePair = null
+      activePair = null,
+      colorInterpolator = d3.interpolateRdBu,
+      colorDomain = null
     } = options || {};
 
     const sel = d3.select(container);
@@ -448,7 +450,10 @@ const CorrelationPlot = ({
 
     const x = d3.scaleBand().domain(labels).range([0, innerWidth]).padding(0);
     const y = d3.scaleBand().domain(labels).range([0, innerHeight]).padding(0);
-    const color = d3.scaleSequential(d3.interpolateRdBu).domain([zmax, zmin]);
+    const [domainStart, domainEnd] = Array.isArray(colorDomain) && colorDomain.length === 2
+      ? colorDomain
+      : [zmax, zmin];
+    const color = d3.scaleSequential(colorInterpolator).domain([domainStart, domainEnd]);
 
     // Build lower-triangle data
     const data = [];
@@ -571,7 +576,17 @@ const CorrelationPlot = ({
       .text(title);
   };
 
-  const drawLegend = (container, zmin, zmax, width, height, title = 'Legend', orientation = 'horizontal') => {
+  const drawLegend = (
+    container,
+    zmin,
+    zmax,
+    width,
+    height,
+    title = 'Legend',
+    orientation = 'horizontal',
+    colorInterpolator = d3.interpolateRdBu,
+    colorDomain = null
+  ) => {
     if (!container) return;
     const sel = d3.select(container);
     sel.selectAll('*').remove();
@@ -598,8 +613,11 @@ const CorrelationPlot = ({
 
     const g = svg.append('g').attr('transform', `translate(${margin.left}, ${margin.top})`);
 
-    const colors = d3.interpolateRdBu;
-    const color = d3.scaleSequential(colors).domain([zmax, zmin]);
+    const [domainStart, domainEnd] = Array.isArray(colorDomain) && colorDomain.length === 2
+      ? colorDomain
+      : [zmin, zmax];
+    const isAscendingDomain = domainEnd >= domainStart;
+    const color = d3.scaleSequential(colorInterpolator).domain([domainStart, domainEnd]);
 
     const gradId = `legend-grad-${Math.random().toString(36).slice(2)}`;
     const defs = svg.append('defs');
@@ -609,6 +627,9 @@ const CorrelationPlot = ({
     if (orientation === 'horizontal') {
       gradient.attr('x1', '0%').attr('y1', '0%')
               .attr('x2', '100%').attr('y2', '0%');
+    } else if (isAscendingDomain) {
+      gradient.attr('x1', '0%').attr('y1', '100%')
+              .attr('x2', '0%').attr('y2', '0%');
     } else {
       gradient.attr('x1', '0%').attr('y1', '0%')
               .attr('x2', '0%').attr('y2', '100%');
@@ -616,7 +637,7 @@ const CorrelationPlot = ({
 
     const stops = d3.range(0, 1.001, 0.1);
     stops.forEach(t => {
-      const val = zmin + (zmax - zmin) * t;
+      const val = domainStart + (domainEnd - domainStart) * t;
       gradient.append('stop')
         .attr('offset', `${t * 100}%`)
         .attr('stop-color', color(val));
@@ -632,7 +653,7 @@ const CorrelationPlot = ({
         .attr('fill', `url(#${gradId})`)
         .attr('rx', 2);
 
-      const legendScale = d3.scaleLinear().domain([zmin, zmax]).range([0, innerWidth]);
+      const legendScale = d3.scaleLinear().domain([domainStart, domainEnd]).range([0, innerWidth]);
       const legendAxis = d3.axisBottom(legendScale).ticks(4).tickFormat(d3.format('.2f'));
       g.append('g')
         .attr('transform', `translate(0, ${6 + barHeight})`)
@@ -649,7 +670,9 @@ const CorrelationPlot = ({
         .attr('fill', `url(#${gradId})`)
         .attr('rx', 2);
 
-      const legendScale = d3.scaleLinear().domain([zmax, zmin]).range([0, innerHeight]);
+      const legendScale = d3.scaleLinear()
+        .domain([domainStart, domainEnd])
+        .range(isAscendingDomain ? [innerHeight, 0] : [0, innerHeight]);
       const legendAxis = d3.axisRight(legendScale).ticks(4).tickFormat(d3.format('.2f'));
       g.append('g')
         .attr('transform', `translate(${barWidth}, 0)`) 
@@ -807,7 +830,7 @@ const CorrelationPlot = ({
           for (let j = 0; j < diffMatrix.matrix[i].length; j++) {
             if (i === j) continue;
             const v = diffMatrix.matrix[i][j];
-            if (Number.isFinite(v)) diffAbsMax = Math.max(diffAbsMax, Math.abs(v));
+            if (Number.isFinite(v)) diffAbsMax = Math.max(diffAbsMax, v);
           }
         }
         const dz = Math.max(0.01, diffAbsMax);
@@ -818,8 +841,8 @@ const CorrelationPlot = ({
           diffMatrix.cols,
           {
             ...commonOpts,
-            title: 'Difference (Synthetic - Real)',
-            zmin: -dz,
+            title: 'Difference',
+            zmin: 0,
             zmax: dz,
             getMetricForPair: diffMatrix.metricAt,
             onCellClick: (i, j) => {
@@ -828,19 +851,21 @@ const CorrelationPlot = ({
               handlePairClick(xName, yName);
             },
             selectedPairs: indicesForPairs(diffMatrix.cols),
-            activePair: activeForLabels(diffMatrix.cols)
+            activePair: activeForLabels(diffMatrix.cols),
+            colorInterpolator: d3.interpolateOrRd,
+            colorDomain: [0, dz]
           }
         );
 
         if (diffLegendRef.current) {
-          drawLegend(diffLegendRef.current, -dz, dz, legendWidth, perHeight, 'Difference', 'vertical');
+          drawLegend(diffLegendRef.current, 0, dz, legendWidth, perHeight, '', 'vertical', d3.interpolateOrRd, [0, dz]);
         }
       } else if (diffLegendRef.current) {
         d3.select(diffLegendRef.current).selectAll('*').remove();
       }
 
       if ((hasRealMatrix || hasSynthMatrix) && legendRef.current) {
-        drawLegend(legendRef.current, zmin, zmax, legendWidth, perHeight, 'Real/Synth', 'vertical');
+        drawLegend(legendRef.current, zmin, zmax, legendWidth, perHeight, 'Real/Synth', 'vertical', d3.interpolateRdBu, [zmax, zmin]);
       } else if (legendRef.current) {
         d3.select(legendRef.current).selectAll('*').remove();
       }
