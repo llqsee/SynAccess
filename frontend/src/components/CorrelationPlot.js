@@ -3,9 +3,38 @@ import * as d3 from 'd3';
 import { Box, Typography } from '@mui/material';
 
 // Shared palette with EmbeddingPlot so correlation visuals stay aligned with the multi-variable analysis view.
-const REAL_COLOR = '#3b82f6';
-const SYNTH_COLOR = '#dc2626';
+const REAL_COLOR = '#0072B2';
+const SYNTH_COLOR = '#D55E00';
 const HIGHLIGHT_STROKE = '#000000';
+
+const REAL_COLOR_SCHEME = {
+  base: REAL_COLOR,
+  fill: REAL_COLOR,
+  stroke: REAL_COLOR,
+  fillOpacity: 0.8,
+};
+
+const SYNTH_COLOR_SCHEME = {
+  base: SYNTH_COLOR,
+  fill: SYNTH_COLOR,
+  stroke: SYNTH_COLOR,
+  fillOpacity: 0.8,
+};
+
+const resolveColorSpec = (spec) => {
+  if (!spec) {
+    return { fillColor: '#6b7280', strokeColor: '#374151', fillOpacity: 0.9 };
+  }
+  if (typeof spec === 'string') {
+    const base = d3.color(spec);
+    const stroke = base ? base.darker(0.8).formatHex() : spec;
+    return { fillColor: spec, strokeColor: stroke, fillOpacity: 0.9 };
+  }
+  const fillColor = spec.fill ?? spec.base ?? '#6b7280';
+  const strokeColor = spec.stroke ?? spec.base ?? fillColor;
+  const fillOpacity = spec.fillOpacity ?? 0.9;
+  return { fillColor, strokeColor, fillOpacity };
+};
 
 const parseNum = (value) => (typeof value === 'number' ? value : parseFloat(value));
 
@@ -884,13 +913,15 @@ const CorrelationPlot = ({
       width = 340,
       height = 340,
       margin = { top: 44, right: 36, bottom: 80, left: 80 },
-      color = REAL_COLOR,
+      color = REAL_COLOR_SCHEME,
       pointRadius = 3,
       xLabel = 'x',
       yLabel = 'y',
       highlightIndices = new Set(),
       getRowIndex = (d) => d.rowIndex
     } = options || {};
+
+    const { fillColor, fillOpacity } = resolveColorSpec(color);
 
     const sel = d3.select(container);
     sel.selectAll('*').remove();
@@ -929,8 +960,8 @@ const CorrelationPlot = ({
 
     // Base points
     g.append('g')
-      .attr('fill', color)
-      .attr('fill-opacity', 0.5)
+      .attr('fill', fillColor)
+      .attr('fill-opacity', fillOpacity)
       .selectAll('circle')
       .data(points)
       .enter()
@@ -973,12 +1004,14 @@ const CorrelationPlot = ({
       width = 340,
       height = 340,
       margin = { top: 44, right: 36, bottom: 80, left: 80 },
-      color = REAL_COLOR,
+      color = REAL_COLOR_SCHEME,
       xLabel = 'Category',
       yLabel = 'Value',
       selectedGroups = new Map(),
       pointRadius = 3.2
     } = options || {};
+
+    const { fillColor, fillOpacity } = resolveColorSpec(color);
 
     const sel = d3.select(container);
     sel.selectAll('*').remove();
@@ -1050,8 +1083,8 @@ const CorrelationPlot = ({
       // Base points
       g.append('g')
         .attr('transform', `translate(${gx},0)`)
-        .attr('fill', color)
-        .attr('fill-opacity', 0.6)
+        .attr('fill', fillColor)
+        .attr('fill-opacity', fillOpacity)
         .selectAll('circle')
         .data(vals.map((v, idx) => ({ v, ox: offsets[idx] })))
         .enter()
@@ -1352,13 +1385,13 @@ const CorrelationPlot = ({
             realContainerRef.current,
             realPts,
             domains,
-            { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR, xLabel: xName, yLabel: yName, highlightIndices: selectedRowSets.realSet }
+            { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR_SCHEME, xLabel: xName, yLabel: yName, highlightIndices: selectedRowSets.realSet }
           );
           drawScatter(
             synthContainerRef.current,
             synthPts,
             domains,
-            { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR, xLabel: xName, yLabel: yName, highlightIndices: selectedRowSets.synthSet }
+            { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR_SCHEME, xLabel: xName, yLabel: yName, highlightIndices: selectedRowSets.synthSet }
           );
           return;
         }
@@ -1429,14 +1462,14 @@ const CorrelationPlot = ({
             allCats,
             realGroups,
             yDomain,
-            { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR, xLabel: xLab, yLabel: yLab, selectedGroups: realSelGroups, pointRadius: 2.5 }
+            { title: 'Real', width: perWidth, height: perHeight, color: REAL_COLOR_SCHEME, xLabel: xLab, yLabel: yLab, selectedGroups: realSelGroups, pointRadius: 2.5 }
           );
           drawBeeswarm(
             synthContainerRef.current,
             allCats,
             synthGroups,
             yDomain,
-            { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR, xLabel: xLab, yLabel: yLab, selectedGroups: synthSelGroups, pointRadius: 2.5 }
+            { title: 'Synthetic', width: perWidth, height: perHeight, color: SYNTH_COLOR_SCHEME, xLabel: xLab, yLabel: yLab, selectedGroups: synthSelGroups, pointRadius: 2.5 }
           );
           return;
         }

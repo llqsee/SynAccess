@@ -2,10 +2,14 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as d3 from 'd3';
 import { Box, Typography, Chip, IconButton, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { Clear, BarChart, CropFree, Warning, Download, Help, Gesture } from '@mui/icons-material';
+import anomalyDetectionService from '../services/anomalyDetectionService';
+
+const REAL_COLOR = '#0072B2';
+const SYNTH_COLOR = '#D55E00';
+const REAL_COLOR_TRANSPARENT = 'rgba(0, 114, 178, 0.12)';
 // import Plot from 'react-plotly.js';
 // import { generateDistributionPlot } from '../services/api';
 // import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
-import anomalyDetectionService from '../services/anomalyDetectionService';
 // import logger from '../utils/logger';
 
 // Debug logging helper gated by env var
@@ -583,7 +587,7 @@ const EmbeddingPlot = ({
     // Enhanced color scheme
     const colorScale = d3.scaleOrdinal()
       .domain(["Real", "Synthetic"])
-      .range(["#2563eb", "#dc2626"]);
+      .range([REAL_COLOR, SYNTH_COLOR]);
 
     // Remove axes and grid lines to maximize plotting area (no ticks/labels)
 
@@ -1127,13 +1131,7 @@ const EmbeddingPlot = ({
       })
       .attr("fill", (d, i) => {
         const label = sampledLabels[i];
-
-        // Simple color coding: real vs synthetic data
-        if (label === 'Real') {
-          return "#3b82f6"; // Blue for real data
-        } else {
-          return "#dc2626"; // Red for synthetic data
-        }
+        return label === 'Real' ? REAL_COLOR : SYNTH_COLOR;
       })
       .attr("stroke", (_, i) => {
         const originalIndex = indexMap[i];
@@ -1222,7 +1220,7 @@ const EmbeddingPlot = ({
           .style("max-width", "250px")
           .style("white-space", "nowrap")
           .html(`
-            <div style="font-weight: bold; margin-bottom: 6px; color: ${label === 'Real' ? '#3b82f6' : '#dc2626'};">
+            <div style="font-weight: bold; margin-bottom: 6px; color: ${label === 'Real' ? REAL_COLOR : SYNTH_COLOR};">
               ${label} Data Point
             </div>
             <div style="margin-bottom: 4px;">Index: ${originalIndex}</div>
@@ -1234,7 +1232,8 @@ const EmbeddingPlot = ({
             ` : ''}
             <div style="margin-top: 8px; display: flex; gap: 4px;">
               <button id="select-point-btn" style="
-                background: ${selectedPoints.includes(originalIndex) ? '#ef4444' : '#dc2626'};
+                background: ${SYNTH_COLOR};
+                opacity: ${selectedPoints.includes(originalIndex) ? 0.85 : 1};
                 color: white;
                 border: none;
                 padding: 4px 8px;
@@ -1244,7 +1243,7 @@ const EmbeddingPlot = ({
                 font-family: inherit;
               ">${selectedPoints.includes(originalIndex) ? 'Deselect' : 'Select'}</button>
               <button id="select-similar-btn" style="
-                background: #3b82f6;
+                background: ${REAL_COLOR};
                 color: white;
                 border: none;
                 padding: 4px 8px;
@@ -1422,8 +1421,8 @@ const EmbeddingPlot = ({
         lassoPath = g.append('path')
           .attr('class', 'lasso-path')
           .attr('d', `M ${p[0]},${p[1]}`)
-          .style('fill', 'rgba(37, 99, 235, 0.1)')
-          .style('stroke', '#2563eb')
+          .style('fill', REAL_COLOR_TRANSPARENT)
+          .style('stroke', REAL_COLOR)
           .style('stroke-width', '2px')
           .style('stroke-dasharray', '5,5')
           .style('pointer-events', 'none');
@@ -2283,14 +2282,14 @@ const EmbeddingPlot = ({
 
         {anomalyResults && anomalyResults.statistics && (
           <Chip
-            icon={<Warning />}
+            icon={<Warning sx={{ color: REAL_COLOR }} />}
             label={`${anomalyResults.statistics.real_anomalies || 0} real + ${anomalyResults.statistics.synthetic_anomalies || 0} synthetic anomalies detected`}
             size="small"
-            color="error"
-            variant="filled"
+            variant="outlined"
             sx={{
-              bgcolor: 'rgba(220, 38, 38, 0.9)',
-              fontSize: '11px'
+              fontSize: '11px',
+              borderColor: 'divider',
+              '& .MuiChip-label': { px: 1.5 }
             }}
           />
         )}
@@ -2313,14 +2312,14 @@ const EmbeddingPlot = ({
             Anomaly Legend
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'rgba(239, 68, 68, 0.2)', border: '2px solid rgba(239, 68, 68, 1.0)' }} />
-            <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 'bold' }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'rgba(0, 114, 178, 0.12)', border: `2px solid ${REAL_COLOR}` }} />
+            <Typography variant="caption" sx={{ color: REAL_COLOR, fontWeight: 'bold' }}>
               Real Overpopulation ({anomalyResults.cell_anomalies.filter(a => a.test_type === 'real_overpopulation' && a.is_significant).length})
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'rgba(59, 130, 246, 0.2)', border: '2px solid rgba(59, 130, 246, 1.0)' }} />
-            <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 'bold' }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'rgba(213, 94, 0, 0.12)', border: `2px solid ${SYNTH_COLOR}` }} />
+            <Typography variant="caption" sx={{ color: SYNTH_COLOR, fontWeight: 'bold' }}>
               Synthetic Overpopulation ({anomalyResults.cell_anomalies.filter(a => a.test_type === 'synthetic_overpopulation' && a.is_significant).length})
             </Typography>
           </Box>

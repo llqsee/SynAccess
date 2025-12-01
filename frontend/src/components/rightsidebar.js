@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
+import { Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
 import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
+
+const REAL_COLOR = '#0072B2';
+const SYNTH_COLOR = '#D55E00';
 
 // RightSidebar renders selection summary, column/plot controls, and the distribution plot
 // Props:
@@ -34,9 +37,6 @@ export default function RightSidebar({
   const [globalPlotData, setGlobalPlotData] = useState(null);
   const [globalPlotLoading, setGlobalPlotLoading] = useState(false);
   const [globalPlotError, setGlobalPlotError] = useState(null);
-  // Reset keys used to force Plot re-mount (reset zoom)
-  const [globalResetKey, setGlobalResetKey] = useState(0);
-  const [selectedResetKey, setSelectedResetKey] = useState(0);
   const [yScale, setYScale] = useState('count'); // 'count' | 'density'
 
   const abortControllerRef = useRef(null);
@@ -762,10 +762,10 @@ export default function RightSidebar({
 
           const traces = [];
           if (dataTypeFilter !== 'synthetic-only') {
-            traces.push({ x: axisCategories, y: realY, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 });
+            traces.push({ x: axisCategories, y: realY, type: 'bar', name: 'Real', marker: { color: REAL_COLOR }, opacity: 0.7 });
           }
           if (dataTypeFilter !== 'real-only') {
-            traces.push({ x: axisCategories, y: synthY, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 });
+            traces.push({ x: axisCategories, y: synthY, type: 'bar', name: 'Synthetic', marker: { color: SYNTH_COLOR }, opacity: 0.7 });
           }
 
           return (
@@ -823,7 +823,7 @@ export default function RightSidebar({
           if (dataTypeFilter === 'real-only') {
             return (
               <Plot
-                data={[{ ...buildHistogramPlot(dataObj.real_values, 'Real', '#2563eb', 0.7), xbins: sharedXBins }]}
+                data={[{ ...buildHistogramPlot(dataObj.real_values, 'Real', REAL_COLOR, 0.7), xbins: sharedXBins }]}
                 layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
                 style={{ width: '100%', height: '160px' }}
                 config={{ displayModeBar: false, doubleClick: 'reset' }}
@@ -833,7 +833,7 @@ export default function RightSidebar({
           } else if (dataTypeFilter === 'synthetic-only') {
             return (
               <Plot
-                data={[{ ...buildHistogramPlot(dataObj.synthetic_values, 'Synthetic', '#dc2626', 0.7), xbins: sharedXBins }]}
+                data={[{ ...buildHistogramPlot(dataObj.synthetic_values, 'Synthetic', SYNTH_COLOR, 0.7), xbins: sharedXBins }]}
                 layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
                 style={{ width: '100%', height: '160px' }}
                 config={{ displayModeBar: false, doubleClick: 'reset' }}
@@ -844,8 +844,8 @@ export default function RightSidebar({
             return (
               <Plot
                 data={[
-                  { ...buildHistogramPlot(dataObj.real_values, 'Real', '#2563eb', 0.5), xbins: sharedXBins },
-                  { ...buildHistogramPlot(dataObj.synthetic_values, 'Synthetic', '#dc2626', 0.5), xbins: sharedXBins },
+                  { ...buildHistogramPlot(dataObj.real_values, 'Real', REAL_COLOR, 0.5), xbins: sharedXBins },
+                  { ...buildHistogramPlot(dataObj.synthetic_values, 'Synthetic', SYNTH_COLOR, 0.5), xbins: sharedXBins },
                 ]}
                 layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, barmode: 'overlay', xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
                 style={{ width: '100%', height: '160px' }}
@@ -866,7 +866,7 @@ export default function RightSidebar({
         if (dataTypeFilter === 'real-only') {
           return (
             <Plot
-              data={[{ ...buildHistogramPlot(dataObj.real_values, 'Real', '#2563eb', 0.7), xbins: useXBins }]}
+              data={[{ ...buildHistogramPlot(dataObj.real_values, 'Real', REAL_COLOR, 0.7), xbins: useXBins }]}
               layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
               style={{ width: '100%', height: '160px' }}
               config={{ displayModeBar: false, doubleClick: 'reset' }}
@@ -876,7 +876,7 @@ export default function RightSidebar({
         } else if (dataTypeFilter === 'synthetic-only') {
           return (
             <Plot
-              data={[{ ...buildHistogramPlot(dataObj.synthetic_values, 'Synthetic', '#dc2626', 0.7), xbins: useXBins }]}
+              data={[{ ...buildHistogramPlot(dataObj.synthetic_values, 'Synthetic', SYNTH_COLOR, 0.7), xbins: useXBins }]}
               layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
               style={{ width: '100%', height: '160px' }}
               config={{ displayModeBar: false, doubleClick: 'reset' }}
@@ -888,8 +888,8 @@ export default function RightSidebar({
         return (
           <Plot
             data={[
-              { ...buildHistogramPlot(dataObj.real_values, 'Real', '#2563eb', 0.5), xbins: useXBins },
-              { ...buildHistogramPlot(dataObj.synthetic_values, 'Synthetic', '#dc2626', 0.5), xbins: useXBins },
+              { ...buildHistogramPlot(dataObj.real_values, 'Real', REAL_COLOR, 0.5), xbins: useXBins },
+              { ...buildHistogramPlot(dataObj.synthetic_values, 'Synthetic', SYNTH_COLOR, 0.5), xbins: useXBins },
             ]}
             layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, barmode: 'overlay', xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
             style={{ width: '100%', height: '160px' }}
@@ -903,7 +903,7 @@ export default function RightSidebar({
         if (dataTypeFilter === 'real-only') {
           return (
             <Plot
-              data={[{ y: dataObj.real_values, type: 'violin', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
+              data={[{ y: dataObj.real_values, type: 'violin', name: 'Real', marker: { color: REAL_COLOR }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
               layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
               style={{ width: '100%', height: '160px' }}
               config={{ displayModeBar: false, doubleClick: 'reset' }}
@@ -913,7 +913,7 @@ export default function RightSidebar({
         } else if (dataTypeFilter === 'synthetic-only') {
           return (
             <Plot
-              data={[{ y: dataObj.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
+              data={[{ y: dataObj.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: SYNTH_COLOR }, opacity: 0.7, box: { visible: true }, meanline: { visible: true } }]}
               layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
               style={{ width: '100%', height: '160px' }}
               config={{ displayModeBar: false, doubleClick: 'reset' }}
@@ -925,8 +925,8 @@ export default function RightSidebar({
         return (
           <Plot
             data={[
-              { y: dataObj.real_values, type: 'violin', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.5, box: { visible: true }, meanline: { visible: true } },
-              { y: dataObj.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.5, box: { visible: true }, meanline: { visible: true } },
+              { y: dataObj.real_values, type: 'violin', name: 'Real', marker: { color: REAL_COLOR }, opacity: 0.5, box: { visible: true }, meanline: { visible: true } },
+              { y: dataObj.synthetic_values, type: 'violin', name: 'Synthetic', marker: { color: SYNTH_COLOR }, opacity: 0.5, box: { visible: true }, meanline: { visible: true } },
             ]}
             layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: { title: xAxisTitle, showticklabels: false }, yaxis: { title: 'Value' }, showlegend: false })}
             style={{ width: '100%', height: '160px' }}
@@ -967,7 +967,7 @@ export default function RightSidebar({
         if (dataTypeFilter === 'real-only') {
           return (
             <Plot
-              data={[{ x: baseCategories, y: realValues, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 }]}
+              data={[{ x: baseCategories, y: realValues, type: 'bar', name: 'Real', marker: { color: REAL_COLOR }, opacity: 0.7 }]}
               layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
               style={{ width: '100%', height: '160px' }}
               config={{ displayModeBar: false, doubleClick: 'reset' }}
@@ -977,7 +977,7 @@ export default function RightSidebar({
         } else if (dataTypeFilter === 'synthetic-only') {
           return (
             <Plot
-              data={[{ x: baseCategories, y: synthValues, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 }]}
+              data={[{ x: baseCategories, y: synthValues, type: 'bar', name: 'Synthetic', marker: { color: SYNTH_COLOR }, opacity: 0.7 }]}
               layout={plotLayout({ margin: { l: 60, r: 20, t: 20, b: 40 }, xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
               style={{ width: '100%', height: '160px' }}
               config={{ displayModeBar: false, doubleClick: 'reset' }}
@@ -989,8 +989,8 @@ export default function RightSidebar({
         return (
           <Plot
             data={[
-              { x: baseCategories, y: realValues, type: 'bar', name: 'Real', marker: { color: '#2563eb' }, opacity: 0.7 },
-              { x: baseCategories, y: synthValues, type: 'bar', name: 'Synthetic', marker: { color: '#dc2626' }, opacity: 0.7 },
+              { x: baseCategories, y: realValues, type: 'bar', name: 'Real', marker: { color: REAL_COLOR }, opacity: 0.7 },
+              { x: baseCategories, y: synthValues, type: 'bar', name: 'Synthetic', marker: { color: SYNTH_COLOR }, opacity: 0.7 },
             ]}
             layout={plotLayout({ margin: { l: 40, r: 20, t: 20, b: 40 }, barmode: 'group', xaxis: xaxisOptions, yaxis: { title: yAxisTitle }, showlegend: false })}
             style={{ width: '100%', height: '160px' }}
@@ -1004,9 +1004,6 @@ export default function RightSidebar({
         return <Typography>Unsupported plot type: {dataObj.plot_type}</Typography>;
     }
   };
-
-  // Backward-compatible renderer for selected plot
-  const renderPlot = () => renderPlotFor(plotData, undefined, globalAxisSyncSpec);
 
   // Generate overall (global) distribution using embedded subset (based on labels)
   const generateGlobalPlotData = useCallback(async () => {
@@ -1167,9 +1164,15 @@ export default function RightSidebar({
   const plotLayout = useCallback((overrides = {}) => {
     const xaxis = { ...(overrides.xaxis || {}) };
     const yaxis = { ...(overrides.yaxis || {}) };
-    return {
+    const baseLayout = {
       font: plotBaseFont,
       ...overrides,
+    };
+    if (typeof baseLayout.dragmode === 'undefined') {
+      baseLayout.dragmode = false; // keep selections from zooming
+    }
+    return {
+      ...baseLayout,
       xaxis: { ...xaxis, ...axisFonts },
       yaxis: { ...yaxis, ...axisFonts },
     };
@@ -1308,24 +1311,21 @@ export default function RightSidebar({
             )}
             {!globalPlotLoading && !globalPlotError && globalPlotData && (
               <Box sx={{ width: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', p: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {(globalPlotData?.data_type_filter === 'mixed' || globalPlotData?.data_type_filter === 'real-only') && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Box sx={{ width: 12, height: 12, bgcolor: '#2563eb', opacity: 0.7, borderRadius: 0.5 }} />
-                        <Typography variant="caption" sx={{ fontSize: 13 }}>Real</Typography>
-                      </Box>
-                    )}
-                    {(globalPlotData?.data_type_filter === 'mixed' || globalPlotData?.data_type_filter === 'synthetic-only') && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Box sx={{ width: 12, height: 12, bgcolor: '#dc2626', opacity: 0.7, borderRadius: 0.5 }} />
-                        <Typography variant="caption" sx={{ fontSize: 13 }}>Synthetic</Typography>
-                      </Box>
-                    )}
-                  </Box>
-                  <Button size="small" variant="outlined" onClick={() => setGlobalResetKey((k) => k + 1)} sx={{ fontSize: 13, px: 0.95, py: 0.45, minHeight: 26, textTransform: 'none' }}>Reset zoom</Button>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+                  {(globalPlotData?.data_type_filter === 'mixed' || globalPlotData?.data_type_filter === 'real-only') && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 12, height: 12, bgcolor: REAL_COLOR, opacity: 0.7, borderRadius: 0.5 }} />
+                      <Typography variant="caption" sx={{ fontSize: 13 }}>Real</Typography>
+                    </Box>
+                  )}
+                  {(globalPlotData?.data_type_filter === 'mixed' || globalPlotData?.data_type_filter === 'synthetic-only') && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 12, height: 12, bgcolor: SYNTH_COLOR, opacity: 0.7, borderRadius: 0.5 }} />
+                      <Typography variant="caption" sx={{ fontSize: 13 }}>Synthetic</Typography>
+                    </Box>
+                  )}
                 </Box>
-                {renderPlotFor(globalPlotData, `global-${globalResetKey}`, globalAxisSyncSpec)}
+                {renderPlotFor(globalPlotData, 'global', globalAxisSyncSpec)}
               </Box>
             )}
           </Box>
@@ -1356,24 +1356,21 @@ export default function RightSidebar({
 
             {!plotLoading && !plotError && plotData && (
               <Box sx={{ width: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', p: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {(plotData?.data_type_filter === 'mixed' || plotData?.data_type_filter === 'real-only') && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Box sx={{ width: 12, height: 12, bgcolor: '#2563eb', opacity: 0.7, borderRadius: 0.5 }} />
-                        <Typography variant="caption" sx={{ fontSize: 13 }}>Real</Typography>
-                      </Box>
-                    )}
-                    {(plotData?.data_type_filter === 'mixed' || plotData?.data_type_filter === 'synthetic-only') && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Box sx={{ width: 12, height: 12, bgcolor: '#dc2626', opacity: 0.7, borderRadius: 0.5 }} />
-                        <Typography variant="caption" sx={{ fontSize: 13 }}>Synthetic</Typography>
-                      </Box>
-                    )}
-                  </Box>
-                  <Button size="small" variant="outlined" onClick={() => setSelectedResetKey((k) => k + 1)} sx={{ fontSize: 13, px: 0.95, py: 0.45, minHeight: 26, textTransform: 'none' }}>Reset zoom</Button>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+                  {(plotData?.data_type_filter === 'mixed' || plotData?.data_type_filter === 'real-only') && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 12, height: 12, bgcolor: REAL_COLOR, opacity: 0.7, borderRadius: 0.5 }} />
+                      <Typography variant="caption" sx={{ fontSize: 13 }}>Real</Typography>
+                    </Box>
+                  )}
+                  {(plotData?.data_type_filter === 'mixed' || plotData?.data_type_filter === 'synthetic-only') && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ width: 12, height: 12, bgcolor: SYNTH_COLOR, opacity: 0.7, borderRadius: 0.5 }} />
+                      <Typography variant="caption" sx={{ fontSize: 13 }}>Synthetic</Typography>
+                    </Box>
+                  )}
                 </Box>
-                {renderPlotFor(plotData, `selected-${selectedResetKey}`, globalAxisSyncSpec)}
+                {renderPlotFor(plotData, 'selected', globalAxisSyncSpec)}
               </Box>
             )}
 
@@ -1391,7 +1388,7 @@ export default function RightSidebar({
           )
         )}
 
-        {/* Bottom legend removed: legend now lives inline with Reset zoom per plot */}
+        {/* Bottom legend removed: legend now lives inline with each plot */}
       </Box>
     </Paper>
   );
