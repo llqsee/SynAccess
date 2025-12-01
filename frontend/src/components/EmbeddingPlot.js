@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
-import { Box, Typography, Chip, IconButton, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
+import { Box, Typography, Chip, IconButton, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { Clear, BarChart, CropFree, Warning, Download, Help, Gesture } from '@mui/icons-material';
 // import Plot from 'react-plotly.js';
 // import { generateDistributionPlot } from '../services/api';
@@ -253,147 +253,6 @@ const EmbeddingPlot = ({
     return '';
   }, [anomalyResults, getOriginalData]);
 
-  const variableTypeRows = useMemo(() => {
-    const inferColumnType = (rows, index) => {
-      if (!Array.isArray(rows) || rows.length === 0 || index === -1) return '—';
-      const sampleLimit = 400;
-      const values = [];
-      for (let i = 0; i < rows.length && values.length < sampleLimit; i++) {
-        const row = rows[i];
-        if (!Array.isArray(row) || index >= row.length) continue;
-        const value = row[index];
-        if (value === null || value === undefined || value === '') continue;
-        values.push(value);
-      }
-      if (values.length === 0) return '—';
-
-      let numericCount = 0;
-      let integerCount = 0;
-      values.forEach((val) => {
-        const num = typeof val === 'number' ? val : parseFloat(val);
-        if (Number.isFinite(num)) {
-          numericCount += 1;
-          if (Number.isInteger(num)) {
-            integerCount += 1;
-          }
-        }
-      });
-
-      if (numericCount === 0 || (numericCount / values.length) <= 0.5) {
-        return 'categorical';
-      }
-
-      return integerCount === numericCount ? 'integer' : 'float';
-    };
-
-    const normalizeDataset = (dataset, fallback) => {
-      const headers = Array.isArray(dataset?.headers) ? dataset.headers : fallback.headers;
-      const rows = Array.isArray(dataset?.data) ? dataset.data : fallback.rows;
-      return { headers: Array.isArray(headers) ? headers : [], rows: Array.isArray(rows) ? rows : [] };
-    };
-
-    const original = getOriginalData();
-    const canUseOriginal = original && Array.isArray(original.data) && Array.isArray(original.labels);
-    const fallbackRealRows = canUseOriginal ? original.data.filter((_, idx) => original.labels[idx] === 'Real') : [];
-    const fallbackSyntheticRows = canUseOriginal ? original.data.filter((_, idx) => original.labels[idx] === 'Synthetic') : [];
-
-    // Try to retrieve per-dataset headers from metadata or session storage
-    let sessionRealHeaders = [];
-    let sessionSyntheticHeaders = [];
-    try {
-      const sessionReal = window?.sessionStorage?.getItem('realData');
-      const sessionSynth = window?.sessionStorage?.getItem('syntheticData');
-      if (sessionReal) {
-        const parsed = JSON.parse(sessionReal);
-        if (Array.isArray(parsed?.headers)) sessionRealHeaders = parsed.headers;
-      }
-      if (sessionSynth) {
-        const parsed = JSON.parse(sessionSynth);
-        if (Array.isArray(parsed?.headers)) sessionSyntheticHeaders = parsed.headers;
-      }
-    } catch (e) {
-      // Ignore session access errors
-    }
-
-    const fallbackRealHeaders = Array.isArray(metadata?.realData?.headers)
-      ? metadata.realData.headers
-      : (sessionRealHeaders.length ? sessionRealHeaders : (original?.headers || []));
-
-    const fallbackSyntheticHeaders = Array.isArray(metadata?.syntheticData?.headers)
-      ? metadata.syntheticData.headers
-      : (sessionSyntheticHeaders.length ? sessionSyntheticHeaders : (original?.headers || []));
-
-    const realDataset = normalizeDataset(metadata?.realData, { headers: fallbackRealHeaders, rows: fallbackRealRows });
-    const syntheticDataset = normalizeDataset(metadata?.syntheticData, { headers: fallbackSyntheticHeaders, rows: fallbackSyntheticRows });
-
-    const normalizeHeader = (header) => (typeof header === 'string' ? header.trim() : header);
-
-    const buildHeaderMap = (headers) => {
-      const map = new Map();
-      if (!Array.isArray(headers)) return map;
-      headers.forEach((rawHeader, index) => {
-        const key = normalizeHeader(rawHeader);
-        if (!key) return;
-        if (!map.has(key)) {
-          map.set(key, { index, original: rawHeader });
-        }
-      });
-      return map;
-    };
-
-    const realHeaderMap = buildHeaderMap(realDataset.headers);
-    const syntheticHeaderMap = buildHeaderMap(syntheticDataset.headers);
-
-    const headerUnion = Array.from(new Set([
-      ...realHeaderMap.keys(),
-      ...syntheticHeaderMap.keys()
-    ]));
-
-    if (headerUnion.length === 0) return [];
-
-    const formatType = (type) => {
-      if (!type || type === '—') return '—';
-      return type.charAt(0).toUpperCase() + type.slice(1);
-    };
-
-    const evaluateMatch = (realType, synthType) => {
-      const numericTypes = new Set(['integer', 'float']);
-      if ((realType === '—' || !realType) && (synthType === '—' || !synthType)) {
-        return { icon: '⚠️', label: 'No data' };
-      }
-      if (realType === synthType && realType !== '—') {
-        return { icon: '✅', label: 'Types match' };
-      }
-      if (realType === '—' || synthType === '—') {
-        return { icon: '⚠️', label: 'Missing column' };
-      }
-      if (numericTypes.has(realType) && numericTypes.has(synthType)) {
-        if (realType === synthType) {
-          return { icon: '✅', label: 'Numeric types match' };
-        }
-        return { icon: '⚠️', label: 'Numeric (int vs float)' };
-      }
-      return { icon: '❌', label: 'Type mismatch' };
-    };
-
-    return headerUnion
-      .map((header) => {
-        const realMeta = realHeaderMap.get(header) || null;
-        const synthMeta = syntheticHeaderMap.get(header) || null;
-        const realIndex = realMeta ? realMeta.index : -1;
-        const synthIndex = synthMeta ? synthMeta.index : -1;
-        const realType = inferColumnType(realDataset.rows, realIndex);
-        const syntheticType = inferColumnType(syntheticDataset.rows, synthIndex);
-        const match = evaluateMatch(realType, syntheticType);
-        return {
-          variable: (realMeta?.original ?? synthMeta?.original ?? header) || '—',
-          realType: formatType(realType),
-          syntheticType: formatType(syntheticType),
-          match
-        };
-      })
-      .sort((a, b) => a.variable.localeCompare(b.variable));
-  }, [getOriginalData, metadata]);
 
   // Simplified visibility - show all points by default
   const getVisiblePoints = useCallback(() => {
@@ -2485,52 +2344,6 @@ const EmbeddingPlot = ({
       {/* Resize handle removed for fixed-size embedding */}
 
       {/* External RightSidebar will be rendered by parent next to this plot */}
-
-      {variableTypeRows.length > 0 && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            Variable Type Comparison
-          </Typography>
-          <TableContainer
-            sx={{
-              maxHeight: 240,
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 1,
-              overflowY: 'auto'
-            }}
-          >
-            <Table size="small" stickyHeader aria-label="Variable type comparison">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontSize: 13, fontWeight: 600, width: 140, maxWidth: 140 }}>Variable</TableCell>
-                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Real Type</TableCell>
-                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Synthetic Type</TableCell>
-                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Match</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {variableTypeRows.map((row) => (
-                  <TableRow key={row.variable} hover>
-                    <TableCell sx={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>{row.variable}</TableCell>
-                    <TableCell sx={{ fontSize: 13 }}>{row.realType}</TableCell>
-                    <TableCell sx={{ fontSize: 13 }}>{row.syntheticType}</TableCell>
-                    <TableCell sx={{ fontSize: 13 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <span role="img" aria-label={row.match.label}>{row.match.icon}</span>
-                        <Typography component="span" variant="caption" color="text.secondary">
-                          {row.match.label}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
-      )}
-
       {/* Help Dialog */}
       <Dialog
         open={showHelpDialog}

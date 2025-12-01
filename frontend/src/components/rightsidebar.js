@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button } from '@mui/material';
+import { Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Alert, CircularProgress, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import Plot from 'react-plotly.js';
 import { generateDistributionPlot } from '../services/api';
@@ -174,6 +174,99 @@ export default function RightSidebar({
     }
     return { data, headers, labels };
   }, [alignedRealData, alignedSyntheticData, availableHeaders]);
+
+  const variableTypeRows = useMemo(() => {
+    const inferColumnType = (rows, columnIndex) => {
+      if (!Array.isArray(rows) || rows.length === 0 || columnIndex < 0) return '—';
+      const sampleLimit = 400;
+      const values = [];
+      for (let i = 0; i < rows.length && values.length < sampleLimit; i++) {
+        const row = rows[i];
+        if (!Array.isArray(row)) continue;
+        const value = row[columnIndex];
+        if (value === null || value === undefined || value === '') continue;
+        values.push(value);
+      }
+      if (values.length === 0) return '—';
+
+      let numericCount = 0;
+      let integerCount = 0;
+      values.forEach((val) => {
+        const num = typeof val === 'number' ? val : parseFloat(val);
+        if (Number.isFinite(num)) {
+          numericCount += 1;
+          if (Number.isInteger(num)) {
+            integerCount += 1;
+          }
+        }
+      });
+
+      if (numericCount === 0 || (numericCount / values.length) <= 0.5) {
+        return 'categorical';
+      }
+
+      return integerCount === numericCount ? 'integer' : 'float';
+    };
+
+    const normalizeHeader = (header) => (typeof header === 'string' ? header.trim() : header);
+
+    const buildHeaderMap = (headers) => {
+      const map = new Map();
+      if (!Array.isArray(headers)) return map;
+      headers.forEach((rawHeader) => {
+        const key = normalizeHeader(rawHeader);
+        if (!key || map.has(key)) return;
+        map.set(key, { original: rawHeader });
+      });
+      return map;
+    };
+
+    const formatType = (type) => {
+      if (!type || type === '—') return '—';
+      return type.charAt(0).toUpperCase() + type.slice(1);
+    };
+
+    const evaluateMatch = (realType, synthType) => {
+      const numericTypes = new Set(['integer', 'float']);
+      if ((realType === '—' || !realType) && (synthType === '—' || !synthType)) {
+        return { icon: '⚠️', label: 'No data' };
+      }
+      if (realType === synthType && realType !== '—') {
+        return { icon: '✅', label: 'Types match' };
+      }
+      if (realType === '—' || synthType === '—') {
+        return { icon: '⚠️', label: 'Missing column' };
+      }
+      if (numericTypes.has(realType) && numericTypes.has(synthType)) {
+        if (realType === synthType) {
+          return { icon: '✅', label: 'Numeric types match' };
+        }
+        return { icon: '⚠️', label: 'Numeric (int vs float)' };
+      }
+      return { icon: '❌', label: 'Type mismatch' };
+    };
+
+    const headers = Array.isArray(availableHeaders) ? availableHeaders : [];
+    if (!headers.length) return [];
+
+    const realHeaderMap = buildHeaderMap(realHeaders);
+    const syntheticHeaderMap = buildHeaderMap(syntheticHeaders);
+
+    return headers
+      .map((header, index) => {
+        const normalized = normalizeHeader(header);
+        const realType = inferColumnType(alignedRealData, index);
+        const syntheticType = inferColumnType(alignedSyntheticData, index);
+        const match = evaluateMatch(realType, syntheticType);
+        return {
+          variable: (realHeaderMap.get(normalized)?.original ?? syntheticHeaderMap.get(normalized)?.original ?? header) || '—',
+          realType: formatType(realType),
+          syntheticType: formatType(syntheticType),
+          match,
+        };
+      })
+      .sort((a, b) => a.variable.localeCompare(b.variable));
+  }, [availableHeaders, alignedRealData, alignedSyntheticData, realHeaders, syntheticHeaders]);
 
   // Whether the selected column exists in each dataset
   const realHasSelectedColumn = useMemo(() => {
@@ -1103,6 +1196,51 @@ export default function RightSidebar({
           </Typography>
         </Box>
       </Box>
+
+      {variableTypeRows.length > 0 && (
+        <Box sx={{ px: 1, pb: 1 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Variable Type Comparison
+          </Typography>
+          <TableContainer
+            sx={{
+              maxHeight: 240,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              overflowY: 'auto'
+            }}
+          >
+            <Table size="small" stickyHeader aria-label="Variable type comparison">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontSize: 13, fontWeight: 600, width: 140, maxWidth: 140 }}>Variable</TableCell>
+                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Real Type</TableCell>
+                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Synthetic Type</TableCell>
+                  <TableCell sx={{ fontSize: 13, fontWeight: 600 }}>Match</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {variableTypeRows.map((row) => (
+                  <TableRow key={row.variable} hover>
+                    <TableCell sx={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>{row.variable}</TableCell>
+                    <TableCell sx={{ fontSize: 13 }}>{row.realType}</TableCell>
+                    <TableCell sx={{ fontSize: 13 }}>{row.syntheticType}</TableCell>
+                    <TableCell sx={{ fontSize: 13 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <span role="img" aria-label={row.match.label}>{row.match.icon}</span>
+                        <Typography component="span" variant="caption" color="text.secondary">
+                          {row.match.label}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Box>
+      )}
 
       <Box sx={{ flex: 1, p: 1, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
         {/* Controls (apply to both Overall and Selected plots) */}
