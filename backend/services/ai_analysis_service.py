@@ -3,18 +3,21 @@ import json
 from datetime import datetime
 import logging
 
+from backend.config import settings
+
 logger = logging.getLogger(__name__)
 
 class DataQualityExpert:
-    def __init__(self, api_key):
+    def __init__(self, api_key: str, model_name: str):
         self.client = anthropic.Anthropic(api_key=api_key)
+        self.model_name = model_name
 
     def analyze(self, validation_results):
         try:
             prompt = self._build_prompt(validation_results)
 
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model=self.model_name,
                 max_tokens=4000,
                 temperature=1,
                 system="You are a senior Data Quality Expert. Analyze the validation results and give clear, useful recommendations.",
@@ -66,7 +69,7 @@ class DataQualityExpert:
         """Check if the AI service is available."""
         try:
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model=self.model_name,
                 max_tokens=10,
                 messages=[{"role": "user", "content": "Test"}]
             )
@@ -83,8 +86,11 @@ def initialize_ai_agent(api_key: str):
     global data_quality_expert
     if api_key:
         try:
-            data_quality_expert = DataQualityExpert(api_key)
-            logger.info("AI data quality expert initialized successfully")
+            data_quality_expert = DataQualityExpert(api_key, settings.claude_model)
+            logger.info(
+                "AI data quality expert initialized successfully using model %s",
+                settings.claude_model,
+            )
             return data_quality_expert
         except Exception as e:
             logger.error(f"Failed to initialize AI agent: {str(e)}")

@@ -1,4 +1,4 @@
-name: mavis
+name: mavis_neto
 channels:
   - conda-forge
   - defaults
