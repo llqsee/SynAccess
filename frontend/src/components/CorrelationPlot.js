@@ -1097,7 +1097,7 @@ const CorrelationPlot = ({
       title = '',
       width = 340,
       height = 340,
-      margin = { top: 44, right: 36, bottom: 80, left: 80 },
+      margin = { top: 44, right: 50, bottom: 80, left: 80 },
       colors = d3.interpolateBlues,
       zmin = 0,
       zmax = 1,
@@ -1186,6 +1186,57 @@ const CorrelationPlot = ({
       .style('font-size', '13px')
       .style('fill', '#374151')
       .text(yLabel);
+
+    // Continuous legend so users can map colors back to correlation strength
+    const legendHeight = innerHeight;
+    const legendWidth = 14;
+    const legendX = width - margin.right + 6;
+    const legendY = margin.top;
+    const legendId = `cat-heatmap-legend-${Math.random().toString(36).slice(2, 8)}`;
+
+    const defs = svg.append('defs');
+    const legendGradient = defs.append('linearGradient')
+      .attr('id', legendId)
+      .attr('x1', '0%')
+      .attr('x2', '0%')
+      .attr('y1', '100%')
+      .attr('y2', '0%');
+
+    const stopCount = 6;
+    for (let i = 0; i <= stopCount; i++) {
+      const t = i / stopCount;
+      legendGradient.append('stop')
+        .attr('offset', `${t * 100}%`)
+        .attr('stop-color', color(zmin + t * (zmax - zmin)));
+    }
+
+    svg.append('rect')
+      .attr('x', legendX)
+      .attr('y', legendY)
+      .attr('width', legendWidth)
+      .attr('height', legendHeight)
+      .attr('fill', `url(#${legendId})`)
+      .attr('stroke', '#d1d5db')
+      .attr('stroke-width', 0.5);
+
+    const legendScale = d3.scaleLinear().domain([zmin, zmax]).range([legendY + legendHeight, legendY]);
+    const legendAxis = d3.axisRight(legendScale).ticks(5).tickSize(4).tickPadding(4);
+    svg.append('g')
+      .attr('class', 'legend-axis')
+      .attr('transform', `translate(${legendX + legendWidth}, 0)`)
+      .call(legendAxis)
+      .selectAll('text')
+      .style('font-size', '12px');
+    svg.selectAll('.legend-axis .domain').remove();
+    svg.selectAll('.legend-axis .tick line').attr('stroke', '#d1d5db');
+
+    svg.append('text')
+      .attr('x', legendX + legendWidth / 2)
+      .attr('y', legendY - 8)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '12px')
+      .style('fill', '#374151')
+      .text('Strength');
 
     svg.append('text')
       .attr('x', margin.left + innerWidth / 2)
