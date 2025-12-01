@@ -7,6 +7,10 @@ import anomalyDetectionService from '../services/anomalyDetectionService';
 const REAL_COLOR = '#0072B2';
 const SYNTH_COLOR = '#D55E00';
 const REAL_COLOR_TRANSPARENT = 'rgba(0, 114, 178, 0.12)';
+const REAL_ANOMALY_FILL = 'rgba(0, 114, 178, 0.2)';
+const REAL_ANOMALY_STROKE = 'rgba(0, 114, 178, 0.9)';
+const SYNTH_ANOMALY_FILL = 'rgba(213, 94, 0, 0.2)';
+const SYNTH_ANOMALY_STROKE = 'rgba(213, 94, 0, 0.9)';
 // import Plot from 'react-plotly.js';
 // import { generateDistributionPlot } from '../services/api';
 // import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '../utils/dataUtils';
@@ -782,11 +786,11 @@ const EmbeddingPlot = ({
                 .attr("height", rectHeight)
                 .attr("fill", isAnomalous ?
                   (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.test_type === 'real_overpopulation' ?
-                    "rgba(220, 38, 38, 0.2)" : "rgba(59, 130, 246, 0.2)") : // Red for real overpopulation, blue for synthetic overpopulation
+                    REAL_ANOMALY_FILL : SYNTH_ANOMALY_FILL) : // Brand colors for anomaly fills
                   "rgba(100, 100, 100, 0.01)") // Very subtle fill for normal cells
                 .attr("stroke", isAnomalous ?
                   (anomalyResults.cell_anomalies.find(a => a.cell_x === i && a.cell_y === j)?.test_type === 'real_overpopulation' ?
-                    "rgba(220, 38, 38, 0.9)" : "rgba(59, 130, 246, 0.9)") : // Red for real overpopulation, blue for synthetic overpopulation
+                    REAL_ANOMALY_STROKE : SYNTH_ANOMALY_STROKE) : // Brand colors for anomaly outlines
                   "rgba(150, 150, 150, 0.3)") // More visible border for normal cells to see alignment
                 .attr("stroke-width", isAnomalous ? 2.5 : 0.5)
                 // Enable pointer events only for anomalous cells to show tooltips
@@ -2215,12 +2219,12 @@ const EmbeddingPlot = ({
             }}
             disabled={anomalyLoading}
             sx={{
-              bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.3)' : 'rgba(59, 130, 246, 0.1)',
+              bgcolor: anomalyResults && showAnomalies ? REAL_ANOMALY_FILL : SYNTH_ANOMALY_FILL,
               '&:hover': {
-                bgcolor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.4)' : 'rgba(59, 130, 246, 0.2)'
+                bgcolor: anomalyResults && showAnomalies ? REAL_ANOMALY_FILL : SYNTH_ANOMALY_FILL
               },
               border: '1px solid',
-              borderColor: anomalyResults && showAnomalies ? 'rgba(220, 38, 38, 0.5)' : 'rgba(59, 130, 246, 0.3)',
+              borderColor: anomalyResults && showAnomalies ? REAL_ANOMALY_STROKE : SYNTH_ANOMALY_STROKE,
               '&:disabled': {
                 bgcolor: 'rgba(156, 163, 175, 0.1)',
                 borderColor: 'rgba(156, 163, 175, 0.3)'
@@ -2271,8 +2275,8 @@ const EmbeddingPlot = ({
               aria-label="Anomaly detection help"
               onClick={() => setShowHelpDialog(true)}
               sx={{
-                bgcolor: 'rgba(59, 130, 246, 0.1)',
-                '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' }
+                bgcolor: SYNTH_ANOMALY_FILL,
+                '&:hover': { bgcolor: SYNTH_ANOMALY_STROKE }
               }}
             >
               <Help fontSize="small" color="primary" />
