@@ -480,18 +480,16 @@ function AppContent() {
                     </Paper>
                   ) : embeddingGenerated ? (
                     <Grid container spacing={1} sx={{ height: '100%' }}>
-                      <Grid item xs={12} md={2.8} lg={2.8} sx={{ height: '100%' }}>
-                        <Box sx={{ 
-                          height: '100%', 
-                          border: '1px solid', 
-                          borderColor: 'divider', 
-                          borderRadius: 1,
-                          overflow: 'hidden'
-                        }}>
-                          <EmbeddingPlot
-                            data={embeddingData}
+                      <Grid item xs={12} md={2.7} lg={2.7} sx={{ height: '100%' }}>
+                        <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                          <RightSidebar
+                            realData={embeddingMetadata?.realData?.data || originalRealData?.data || realData?.data}
+                            syntheticData={embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data || syntheticData?.data}
+                            realHeaders={embeddingMetadata?.realData?.headers || originalRealData?.headers || realData?.headers}
+                            syntheticHeaders={embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers || syntheticData?.headers}
+                            embeddingData={embeddingData}
                             metadata={embeddingMetadata}
-                            onSelectionChange={setSelectedEmbeddingPoints}
+                            selectedPoints={selectedEmbeddingPoints}
                           />
                         </Box>
                       </Grid>
@@ -514,16 +512,18 @@ function AppContent() {
                           )}
                         </Box>
                       </Grid>
-                      <Grid item xs={12} md={2.7} lg={2.7} sx={{ height: '100%' }}>
-                        <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                          <RightSidebar
-                            realData={embeddingMetadata?.realData?.data || originalRealData?.data || realData?.data}
-                            syntheticData={embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data || syntheticData?.data}
-                            realHeaders={embeddingMetadata?.realData?.headers || originalRealData?.headers || realData?.headers}
-                            syntheticHeaders={embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers || syntheticData?.headers}
-                            embeddingData={embeddingData}
+                      <Grid item xs={12} md={2.8} lg={2.8} sx={{ height: '100%' }}>
+                        <Box sx={{ 
+                          height: '100%', 
+                          border: '1px solid', 
+                          borderColor: 'divider', 
+                          borderRadius: 1,
+                          overflow: 'hidden'
+                        }}>
+                          <EmbeddingPlot
+                            data={embeddingData}
                             metadata={embeddingMetadata}
-                            selectedPoints={selectedEmbeddingPoints}
+                            onSelectionChange={setSelectedEmbeddingPoints}
                           />
                         </Box>
                       </Grid>
