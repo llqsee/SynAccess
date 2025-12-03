@@ -1130,7 +1130,7 @@ const CorrelationPlot = ({
       title = '',
       width = 340,
       height = 340,
-      margin = { top: 44, right: 50, bottom: 80, left: 80 },
+      margin = { top: 44, right: 70, bottom: 80, left: 90 },
       colors = d3.interpolateBlues,
       zmin = 0,
       zmax = 1,
@@ -1195,13 +1195,14 @@ const CorrelationPlot = ({
       .attr('transform', `translate(0, ${innerHeight})`)
       .call(xAxis)
       .selectAll('text')
-      .style('font-size', '14px')
+      .style('font-size', '18px')
       .style('text-anchor', 'end')
-      .attr('transform', 'rotate(-45)');
+      .attr('transform', 'rotate(-30)');
     g.append('g')
       .call(yAxis)
       .selectAll('text')
-      .style('font-size', '14px');
+      .style('font-size', '18px')
+      .attr('transform', 'rotate(-30)');
     g.selectAll('.domain').remove();
     g.selectAll('.tick line').remove();
 
@@ -1210,13 +1211,13 @@ const CorrelationPlot = ({
       .attr('x', margin.left + innerWidth / 2)
       .attr('y', height - 6)
       .attr('text-anchor', 'middle')
-      .style('font-size', '13px')
+      .style('font-size', '14px')
       .style('fill', '#374151')
       .text(xLabel);
     svg.append('text')
       .attr('transform', `translate(16, ${margin.top + innerHeight / 2}) rotate(-90) `)
       .attr('text-anchor', 'middle')
-      .style('font-size', '13px')
+      .style('font-size', '14px')
       .style('fill', '#374151')
       .text(yLabel);
 
@@ -1259,7 +1260,7 @@ const CorrelationPlot = ({
       .attr('transform', `translate(${legendX + legendWidth}, 0)`)
       .call(legendAxis)
       .selectAll('text')
-      .style('font-size', '12px');
+      .style('font-size', '14px');
     svg.selectAll('.legend-axis .domain').remove();
     svg.selectAll('.legend-axis .tick line').attr('stroke', '#d1d5db');
 
@@ -1267,7 +1268,7 @@ const CorrelationPlot = ({
       .attr('x', legendX + legendWidth / 2)
       .attr('y', legendY - 8)
       .attr('text-anchor', 'middle')
-      .style('font-size', '12px')
+      .style('font-size', '14px')
       .style('fill', '#374151')
       .text('Strength');
 
