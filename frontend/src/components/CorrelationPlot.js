@@ -487,8 +487,8 @@ const CorrelationPlot = ({
     // Build lower-triangle data
     const data = [];
     for (let i = 0; i < labels.length; i++) {
-      for (let j = 0; j <= i; j++) {
-        const v = (matrix[i] && matrix[i][j] != null) ? matrix[i][j] : (i === j ? 1 : 0);
+      for (let j = 0; j < i; j++) {
+        const v = (matrix[i] && matrix[i][j] != null) ? matrix[i][j] : 0;
         data.push({ i, j, x: labels[j], y: labels[i], v });
       }
     }
@@ -577,6 +577,13 @@ const CorrelationPlot = ({
     const yAxis = d3.axisLeft(y).tickSize(0);
     const gxAxis = g.append('g').attr('transform', `translate(0, ${innerHeight})`).call(xAxis);
     const gyAxis = g.append('g').call(yAxis);
+
+    if (labels.length > 0) {
+      const firstLabel = labels[0];
+      const lastLabel = labels[labels.length - 1];
+      gyAxis.selectAll('.tick').filter((d) => d === firstLabel).remove();
+      gxAxis.selectAll('.tick').filter((d) => d === lastLabel).remove();
+    }
 
     if (nVars > 10) {
       // Hide tick labels when too many variables
