@@ -8,33 +8,39 @@ import { classifyColumnType, getAvailablePlotTypes, isDiscreteVariable } from '.
 const REAL_COLOR = '#0072B2';
 const SYNTH_COLOR = '#D55E00';
 
-const computePearsonCorrelation = (values, binaryLabels) => {
-  if (!Array.isArray(values) || !Array.isArray(binaryLabels)) return null;
-  const n = Math.min(values.length, binaryLabels.length);
-  if (n < 2) return null;
-  let sumX = 0;
-  let sumY = 0;
-  let sumXX = 0;
-  let sumYY = 0;
-  let sumXY = 0;
-  for (let i = 0; i < n; i++) {
-    const x = values[i];
-    const y = binaryLabels[i];
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    sumX += x;
-    sumY += y;
-    sumXX += x * x;
-    sumYY += y * y;
-    sumXY += x * y;
+const computeKolmogorovSmirnov = (realValues, synthValues) => {
+  if (!Array.isArray(realValues) || !Array.isArray(synthValues)) return null;
+  const filteredReal = realValues.filter((v) => Number.isFinite(v));
+  const filteredSynth = synthValues.filter((v) => Number.isFinite(v));
+  if (!filteredReal.length || !filteredSynth.length) return null;
+
+  const sortedReal = filteredReal.slice().sort((a, b) => a - b);
+  const sortedSynth = filteredSynth.slice().sort((a, b) => a - b);
+  const n = sortedReal.length;
+  const m = sortedSynth.length;
+  let i = 0;
+  let j = 0;
+  let cdfReal = 0;
+  let cdfSynth = 0;
+  let maxDiff = 0;
+
+  while (i < n || j < m) {
+    const value = Math.min(
+      i < n ? sortedReal[i] : Infinity,
+      j < m ? sortedSynth[j] : Infinity
+    );
+    while (i < n && sortedReal[i] === value) {
+      i += 1;
+    }
+    while (j < m && sortedSynth[j] === value) {
+      j += 1;
+    }
+    cdfReal = i / n;
+    cdfSynth = j / m;
+    maxDiff = Math.max(maxDiff, Math.abs(cdfReal - cdfSynth));
   }
-  const numerator = sumXY - (sumX * sumY) / n;
-  const denomX = sumXX - (sumX * sumX) / n;
-  const denomY = sumYY - (sumY * sumY) / n;
-  const denom = Math.sqrt(denomX * denomY);
-  if (!Number.isFinite(denom) || denom <= 1e-12) return null;
-  const corr = numerator / denom;
-  if (!Number.isFinite(corr)) return null;
-  return Math.max(-1, Math.min(1, corr));
+
+  return Math.min(1, Math.max(0, maxDiff));
 };
 
 const computeCramersVWithLabels = (categories, labels) => {
@@ -111,6 +117,7 @@ export default function RightSidebar({
   embeddingData,
   metadata,
   selectedPoints,
+  onVariableFilterChange = null,
 }) {
   const theme = useTheme();
   // Local sidebar states
@@ -502,8 +509,8 @@ export default function RightSidebar({
       let metricValue = null;
 
       if (columnType === 'numeric') {
-        const numericValues = [];
-        const binaryLabels = [];
+        const realValues = [];
+        const synthValues = [];
         for (let i = 0; i < rows.length; i++) {
           const label = labels[i];
           if (label !== 'Real' && label !== 'Synthetic') continue;
@@ -511,11 +518,11 @@ export default function RightSidebar({
           if (value === null || value === undefined || value === '') continue;
           const num = typeof value === 'number' ? value : parseFloat(value);
           if (!Number.isFinite(num)) continue;
-          numericValues.push(num);
-          binaryLabels.push(label === 'Synthetic' ? 1 : 0);
+          if (label === 'Real') realValues.push(num);
+          else synthValues.push(num);
         }
-        const corr = computePearsonCorrelation(numericValues, binaryLabels);
-        metricValue = corr === null ? null : Math.max(0, Math.min(1, Math.abs(corr)));
+        const ks = computeKolmogorovSmirnov(realValues, synthValues);
+        metricValue = ks === null ? null : Math.max(0, Math.min(1, ks));
       } else {
         const catValues = [];
         const labelValues = [];
@@ -623,6 +630,12 @@ export default function RightSidebar({
       setHistogramPlotType(fallbackType === 'numeric' ? 'histogram' : 'bar');
     }
   }, [filteredColumnOptions, histogramColumn, originalData]);
+
+  useEffect(() => {
+    if (typeof onVariableFilterChange !== 'function') return;
+    const names = filteredColumnOptions.map(({ name }) => name);
+    onVariableFilterChange(names);
+  }, [filteredColumnOptions, onVariableFilterChange]);
 
   // Initialize column and plot type to first available named header
   useEffect(() => {
@@ -1486,7 +1499,7 @@ export default function RightSidebar({
                 {showNumericFilter && numericSliderValue && (
                   <Box sx={{ mb: showCategoricalFilter ? 1.5 : 0 }}>
                     <Typography variant="caption" sx={{ fontSize: 12, fontWeight: 600, color: 'text.secondary', mb: 0.25, display: 'block' }}>
-                      Numeric difference (|Pearson|)
+                      Numeric difference (KS statistic)
                     </Typography>
                     <Slider
                       size="small"
@@ -1501,6 +1514,10 @@ export default function RightSidebar({
                       valueLabelFormat={(val) => val.toFixed(2)}
                       disabled={numericSliderDisabled}
                     />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
+                      <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Same (minimal difference)</Typography>
+                      <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Different (max difference)</Typography>
+                    </Box>
                     <Typography variant="caption" sx={{ fontSize: 12, color: 'text.secondary' }}>
                       Range: {numericSliderValue[0].toFixed(2)} – {numericSliderValue[1].toFixed(2)}
                     </Typography>
@@ -1524,6 +1541,10 @@ export default function RightSidebar({
                       valueLabelFormat={(val) => val.toFixed(2)}
                       disabled={categoricalSliderDisabled}
                     />
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
+                      <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Different (weak association)</Typography>
+                      <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Same (strong association)</Typography>
+                    </Box>
                     <Typography variant="caption" sx={{ fontSize: 12, color: 'text.secondary' }}>
                       Range: {categoricalSliderValue[0].toFixed(2)} – {categoricalSliderValue[1].toFixed(2)}
                     </Typography>
@@ -1548,7 +1569,7 @@ export default function RightSidebar({
                   filteredColumnOptions.map(({ name, index }) => {
                     const stat = columnDifferenceLookup.get(index);
                     const metricLabel = (stat && typeof stat.metricValue === 'number')
-                      ? `${stat.type === 'numeric' ? '|ρ|' : 'V'} ${stat.metricValue.toFixed(2)}`
+                      ? `${stat.type === 'numeric' ? 'KS' : 'V'} ${stat.metricValue.toFixed(2)}`
                       : 'No metric';
                     return (
                       <MenuItem key={index} value={index} sx={{ fontSize: 13, minHeight: 34, py: 0.25 }}>

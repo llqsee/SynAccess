@@ -146,6 +146,7 @@ function AppContent() {
   
   // Selection state lifted to App to coordinate EmbeddingPlot and RightSidebar
   const [selectedEmbeddingPoints, setSelectedEmbeddingPoints] = useState([]);
+  const [filteredCorrelationColumns, setFilteredCorrelationColumns] = useState(null);
 
   const setError = useCallback((error) => {
     setUploadError(error);
@@ -191,6 +192,14 @@ function AppContent() {
     loadFromHistory(embeddings, metadata, sessionState);
     setActiveTab(2); // Switch to visualization tab
   }, [loadFromHistory]);
+
+  const handleVariableFilterChange = useCallback((names) => {
+    if (Array.isArray(names)) {
+      setFilteredCorrelationColumns(names);
+    } else {
+      setFilteredCorrelationColumns(null);
+    }
+  }, []);
 
   // Determine which tabs should be enabled
   const dataUploaded = realData && syntheticData;
@@ -490,6 +499,7 @@ function AppContent() {
                             embeddingData={embeddingData}
                             metadata={embeddingMetadata}
                             selectedPoints={selectedEmbeddingPoints}
+                            onVariableFilterChange={handleVariableFilterChange}
                           />
                         </Box>
                       </Grid>
@@ -508,6 +518,7 @@ function AppContent() {
                               selectedPoints={selectedEmbeddingPoints}
                               defaultDataset="combined"
                               sampleSize={2000}
+                              filteredColumns={filteredCorrelationColumns}
                             />
                           )}
                         </Box>

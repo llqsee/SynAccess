@@ -7,6 +7,8 @@ const REAL_COLOR = '#0072B2';
 const SYNTH_COLOR = '#D55E00';
 const HIGHLIGHT_STROKE = '#000000';
 
+const normalizeHeader = (header) => (typeof header === 'string' ? header.trim() : header);
+
 const REAL_COLOR_SCHEME = {
   base: REAL_COLOR,
   fill: REAL_COLOR,
@@ -157,7 +159,8 @@ const CorrelationPlot = ({
   embeddingData,
   metadata,
   selectedPoints,
-  sampleSize = 2000
+  sampleSize = 2000,
+  filteredColumns = null
 }) => {
   const rowRef = useRef(null);
   const realRef = useRef(null);
@@ -170,6 +173,10 @@ const CorrelationPlot = ({
   const [activePair, setActivePair] = useState(null);
   const [heatmapDims, setHeatmapDims] = useState({ width: 340, height: 340 });
   const lastClickedPairRef = useRef(null);
+  const allowedHeaderSet = useMemo(() => {
+    if (!Array.isArray(filteredColumns)) return null;
+    return new Set(filteredColumns.map(normalizeHeader));
+  }, [filteredColumns]);
 
   // Determine embedded datasets and headers to use throughout (prefer exact metadata datasets)
   const embeddedSource = useMemo(() => {
@@ -324,6 +331,8 @@ const CorrelationPlot = ({
     const realRows = sampleRows(embRealRows);
     const synthRows = sampleRows(embSynthRows);
 
+    const headerAllowed = (header) => (!allowedHeaderSet || allowedHeaderSet.has(normalizeHeader(header)));
+
     const hasReal = hasData(realRows) && Array.isArray(embRealHeaders) && embRealHeaders.length > 0;
     const hasSynth = hasData(synthRows) && Array.isArray(embSynthHeaders) && embSynthHeaders.length > 0;
 
@@ -371,9 +380,12 @@ const CorrelationPlot = ({
     if (hasReal) {
       const sourceHeaders = Array.isArray(embRealHeaders) ? embRealHeaders : [];
       const realPairs = sourceHeaders
-        .map(header => ({ header, index: embRealHeaders.indexOf(header) }))
-        .filter(pair => pair.index >= 0);
-      const cols = realPairs.map(pair => pair.header);
+        .map((header, index) => {
+          if (!headerAllowed(header)) return null;
+          return { header, normalized: normalizeHeader(header), index };
+        })
+        .filter(Boolean);
+      const cols = realPairs.map(pair => pair.normalized ?? pair.header);
       const indices = realPairs.map(pair => pair.index);
       const types = realPairs.map(pair => (isNumericColumn(realRows, pair.index) ? 'numeric' : 'categorical'));
       const matrix = computeMatrix(realRows, indices, types);
@@ -390,9 +402,12 @@ const CorrelationPlot = ({
     if (hasSynth) {
       const sourceHeaders = Array.isArray(embSynthHeaders) ? embSynthHeaders : [];
       const synthPairs = sourceHeaders
-        .map(header => ({ header, index: embSynthHeaders.indexOf(header) }))
-        .filter(pair => pair.index >= 0);
-      const cols = synthPairs.map(pair => pair.header);
+        .map((header, index) => {
+          if (!headerAllowed(header)) return null;
+          return { header, normalized: normalizeHeader(header), index };
+        })
+        .filter(Boolean);
+      const cols = synthPairs.map(pair => pair.normalized ?? pair.header);
       const indices = synthPairs.map(pair => pair.index);
       const types = synthPairs.map(pair => (isNumericColumn(synthRows, pair.index) ? 'numeric' : 'categorical'));
       const matrix = computeMatrix(synthRows, indices, types);
@@ -407,16 +422,30 @@ const CorrelationPlot = ({
 
     let diffMatrix = emptyDiff;
     if (hasReal && hasSynth) {
-      const synthSet = new Set(embSynthHeaders);
-      const intersection = embRealHeaders.filter(h => synthSet.has(h));
-      const diffPairs = intersection
-        .map(header => ({
-          header,
-          realIndex: embRealHeaders.indexOf(header),
-          synthIndex: embSynthHeaders.indexOf(header)
-        }))
-        .filter(pair => pair.realIndex >= 0 && pair.synthIndex >= 0);
-      const cols = diffPairs.map(pair => pair.header);
+      const realInfo = Array.isArray(embRealHeaders)
+        ? embRealHeaders.map((header, index) => ({ header, normalized: normalizeHeader(header), realIndex: index }))
+        : [];
+      const synthIndexMap = new Map();
+      if (Array.isArray(embSynthHeaders)) {
+        embSynthHeaders.forEach((header, index) => {
+          const normalized = normalizeHeader(header);
+          if (!synthIndexMap.has(normalized)) synthIndexMap.set(normalized, index);
+        });
+      }
+      const diffPairs = realInfo
+        .map(info => {
+          const synthIndex = synthIndexMap.get(info.normalized);
+          if (synthIndex === undefined) return null;
+          if (!headerAllowed(info.header)) return null;
+          return {
+            header: info.header,
+            normalized: info.normalized,
+            realIndex: info.realIndex,
+            synthIndex,
+          };
+        })
+        .filter(Boolean);
+      const cols = diffPairs.map(pair => pair.normalized ?? pair.header);
       const realIndices = diffPairs.map(pair => pair.realIndex);
       const synthIndices = diffPairs.map(pair => pair.synthIndex);
       const types = diffPairs.map(pair => {
@@ -449,7 +478,7 @@ const CorrelationPlot = ({
     }
 
     return { realMatrix, synthMatrix, diffMatrix };
-  }, [embeddedSource, sampleRows]);
+  }, [embeddedSource, sampleRows, allowedHeaderSet]);
 
   // Heatmap helper for correlation matrices (lower triangle only)
   const drawHeatmap = (container, matrix, labels, options) => {
