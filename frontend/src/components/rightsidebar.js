@@ -100,6 +100,114 @@ const computeCramersVWithLabels = (categories, labels) => {
   return Math.max(0, Math.min(1, v));
 };
 
+const computeTotalVariationDistance = (distA, distB) => {
+  if (!Array.isArray(distA) || !Array.isArray(distB) || distA.length !== distB.length || !distA.length) return null;
+  let sum = 0;
+  for (let i = 0; i < distA.length; i++) {
+    const a = distA[i];
+    const b = distB[i];
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    sum += Math.abs(a - b);
+  }
+  const tvd = 0.5 * sum;
+  if (!Number.isFinite(tvd)) return null;
+  return Math.max(0, Math.min(1, tvd));
+};
+
+const computeJensenShannonDivergence = (distA, distB) => {
+  if (!Array.isArray(distA) || !Array.isArray(distB) || distA.length !== distB.length || !distA.length) return null;
+  const log2 = Math.log(2);
+  if (!Number.isFinite(log2)) return null;
+
+  const computeKL = (p, q) => {
+    let sum = 0;
+    for (let i = 0; i < p.length; i++) {
+      const pi = p[i];
+      const qi = q[i];
+      if (!Number.isFinite(pi) || !Number.isFinite(qi)) return null;
+      if (pi <= 0) continue;
+      const mi = 0.5 * (pi + qi);
+      if (mi <= 0) return null;
+      sum += pi * (Math.log(pi / mi) / log2);
+    }
+    return sum;
+  };
+
+  const klPM = computeKL(distA, distB);
+  const klQM = computeKL(distB, distA);
+  if (klPM === null || klQM === null) return null;
+  const jsd = 0.5 * (klPM + klQM);
+  if (!Number.isFinite(jsd) || jsd < 0) return null;
+  return Math.max(0, Math.min(1, jsd));
+};
+
+const computeCategoricalWassersteinDistance = (distA, distB) => {
+  if (!Array.isArray(distA) || !Array.isArray(distB) || distA.length !== distB.length || !distA.length) return null;
+  if (distA.length === 1) return 0;
+  let cumulativeDiff = 0;
+  let sumAbs = 0;
+  for (let i = 0; i < distA.length; i++) {
+    const a = distA[i];
+    const b = distB[i];
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    cumulativeDiff += (a - b);
+    sumAbs += Math.abs(cumulativeDiff);
+  }
+  const denom = Math.max(distA.length - 1, 1);
+  const wasserstein = sumAbs / denom;
+  if (!Number.isFinite(wasserstein) || wasserstein < 0) return null;
+  return Math.max(0, Math.min(1, wasserstein));
+};
+
+const computeNumericSummaryStats = (values) => {
+  if (!Array.isArray(values) || !values.length) return null;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const count = sorted.length;
+  const sum = sorted.reduce((acc, val) => acc + val, 0);
+  const mean = sum / count;
+  const variance = sorted.reduce((acc, val) => {
+    const diff = val - mean;
+    return acc + diff * diff;
+  }, 0) / count;
+  const std = Math.sqrt(Math.max(0, variance));
+  const mid = Math.floor(count / 2);
+  const median = count % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  const min = sorted[0];
+  const max = sorted[count - 1];
+  return { mean, std, median, min, max };
+};
+
+const safeAbsDiff = (a, b) => {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.abs(a - b);
+};
+
+const NUMERIC_METHOD_OPTIONS = [
+  { value: 'ks', label: 'Kolmogorov-Smirnov (KS) Statistic', short: 'KS' },
+  { value: 'meanDiff', label: 'Difference in Mean', short: 'dMean' },
+  { value: 'stdDiff', label: 'Difference in Std Dev', short: 'dStd' },
+  { value: 'medianDiff', label: 'Difference in Median', short: 'dMedian' },
+  { value: 'minDiff', label: 'Difference in Minimum', short: 'dMin' },
+  { value: 'maxDiff', label: 'Difference in Maximum', short: 'dMax' },
+];
+
+const CATEGORICAL_METHOD_OPTIONS = [
+  { value: 'cramersV', label: "Cramér's V", short: 'CramerV' },
+  { value: 'totalVariation', label: 'Total Variation Distance', short: 'TVD' },
+  { value: 'jensenShannon', label: 'Jensen-Shannon Divergence', short: 'JSD' },
+  { value: 'categoricalWasserstein', label: 'Categorical Wasserstein', short: 'CatWas' }
+];
+
+const NUMERIC_METHOD_LOOKUP = NUMERIC_METHOD_OPTIONS.reduce((acc, option) => {
+  acc[option.value] = option;
+  return acc;
+}, {});
+
+const CATEGORICAL_METHOD_LOOKUP = CATEGORICAL_METHOD_OPTIONS.reduce((acc, option) => {
+  acc[option.value] = option;
+  return acc;
+}, {});
+
 // RightSidebar renders selection summary, column/plot controls, and the distribution plot
 // Props:
 // - realData: array[] | undefined
@@ -133,6 +241,8 @@ export default function RightSidebar({
   const [yScale, setYScale] = useState('count'); // 'count' | 'density'
   const [numericDifferenceRange, setNumericDifferenceRange] = useState(null);
   const [categoricalDifferenceRange, setCategoricalDifferenceRange] = useState(null);
+  const [numericDifferenceMethod, setNumericDifferenceMethod] = useState('ks');
+  const [categoricalDifferenceMethod, setCategoricalDifferenceMethod] = useState('cramersV');
 
   const abortControllerRef = useRef(null);
   const plotGenerationTimeoutRef = useRef(null);
@@ -506,8 +616,6 @@ export default function RightSidebar({
 
     return headers.map((_, colIndex) => {
       const columnType = classifyColumnType(colIndex, originalData);
-      let metricValue = null;
-
       if (columnType === 'numeric') {
         const realValues = [];
         const synthValues = [];
@@ -521,27 +629,75 @@ export default function RightSidebar({
           if (label === 'Real') realValues.push(num);
           else synthValues.push(num);
         }
+
+        const numericMetrics = {};
         const ks = computeKolmogorovSmirnov(realValues, synthValues);
-        metricValue = ks === null ? null : Math.max(0, Math.min(1, ks));
-      } else {
-        const catValues = [];
-        const labelValues = [];
-        for (let i = 0; i < rows.length; i++) {
-          const label = labels[i];
-          if (label !== 'Real' && label !== 'Synthetic') continue;
-          const value = rows[i]?.[colIndex];
-          if (value === null || value === undefined || value === '') continue;
-          catValues.push(String(value));
-          labelValues.push(label);
-        }
-        const cramers = computeCramersVWithLabels(catValues, labelValues);
-        metricValue = cramers === null ? null : Math.max(0, Math.min(1, cramers));
+        numericMetrics.ks = (typeof ks === 'number' && Number.isFinite(ks)) ? Math.max(0, Math.min(1, ks)) : null;
+
+        const realStats = computeNumericSummaryStats(realValues);
+        const synthStats = computeNumericSummaryStats(synthValues);
+        const addSummaryMetric = (metricKey, statKey) => {
+          const diff = safeAbsDiff(realStats?.[statKey], synthStats?.[statKey]);
+          numericMetrics[metricKey] = (typeof diff === 'number' && Number.isFinite(diff)) ? diff : null;
+        };
+        addSummaryMetric('meanDiff', 'mean');
+        addSummaryMetric('stdDiff', 'std');
+        addSummaryMetric('medianDiff', 'median');
+        addSummaryMetric('minDiff', 'min');
+        addSummaryMetric('maxDiff', 'max');
+
+        return {
+          index: colIndex,
+          type: 'numeric',
+          metrics: numericMetrics,
+        };
       }
 
+      const catValues = [];
+      const labelValues = [];
+      const categoriesSet = new Set();
+      const realCounts = new Map();
+      const synthCounts = new Map();
+      const increment = (map, key) => {
+        map.set(key, (map.get(key) || 0) + 1);
+      };
+      for (let i = 0; i < rows.length; i++) {
+        const label = labels[i];
+        if (label !== 'Real' && label !== 'Synthetic') continue;
+        const value = rows[i]?.[colIndex];
+        if (value === null || value === undefined || value === '') continue;
+        const strValue = String(value);
+        catValues.push(strValue);
+        labelValues.push(label);
+        categoriesSet.add(strValue);
+        if (label === 'Real') increment(realCounts, strValue);
+        if (label === 'Synthetic') increment(synthCounts, strValue);
+      }
+      const cramers = computeCramersVWithLabels(catValues, labelValues);
+      const categories = Array.from(categoriesSet).sort((a, b) => a.localeCompare(b));
+      const sumCounts = (map) => Array.from(map.values()).reduce((sum, val) => sum + val, 0);
+      const realTotal = sumCounts(realCounts);
+      const synthTotal = sumCounts(synthCounts);
+      const buildProbabilities = (map, total) => categories.map((cat) => {
+        if (!total) return 0;
+        const count = map.get(cat) || 0;
+        return count / total;
+      });
+      const realDist = buildProbabilities(realCounts, realTotal);
+      const synthDist = buildProbabilities(synthCounts, synthTotal);
+      const hasBoth = categories.length > 0 && realTotal > 0 && synthTotal > 0;
+      const totalVariation = hasBoth ? computeTotalVariationDistance(realDist, synthDist) : null;
+      const jensenShannon = hasBoth ? computeJensenShannonDivergence(realDist, synthDist) : null;
+      const categoricalWasserstein = hasBoth ? computeCategoricalWassersteinDistance(realDist, synthDist) : null;
       return {
         index: colIndex,
-        type: columnType === 'numeric' ? 'numeric' : 'categorical',
-        metricValue,
+        type: 'categorical',
+        metrics: {
+          cramersV: (typeof cramers === 'number' && Number.isFinite(cramers)) ? Math.max(0, Math.min(1, cramers)) : null,
+          totalVariation,
+          jensenShannon,
+          categoricalWasserstein,
+        },
       };
     });
   }, [originalData]);
@@ -554,28 +710,70 @@ export default function RightSidebar({
     return map;
   }, [columnDifferenceStats]);
 
-  const numericDifferenceDomain = useMemo(() => {
-    const numericValues = (columnDifferenceStats || [])
-      .filter((stat) => stat.type === 'numeric' && typeof stat.metricValue === 'number')
-      .map((stat) => stat.metricValue);
-    if (!numericValues.length) return null;
-    const min = Math.min(...numericValues);
-    const max = Math.max(...numericValues);
-    return [min, max];
+  const numericDifferenceDomains = useMemo(() => {
+    const domains = {};
+    (columnDifferenceStats || []).forEach((stat) => {
+      if (stat.type !== 'numeric' || !stat.metrics) return;
+      NUMERIC_METHOD_OPTIONS.forEach(({ value }) => {
+        const metricValue = stat.metrics?.[value];
+        if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) return;
+        const existing = domains[value];
+        if (!existing) {
+          domains[value] = [metricValue, metricValue];
+        } else {
+          existing[0] = Math.min(existing[0], metricValue);
+          existing[1] = Math.max(existing[1], metricValue);
+        }
+      });
+    });
+    return domains;
   }, [columnDifferenceStats]);
 
-  const categoricalDifferenceDomain = useMemo(() => {
-    const categoricalValues = (columnDifferenceStats || [])
-      .filter((stat) => stat.type === 'categorical' && typeof stat.metricValue === 'number')
-      .map((stat) => stat.metricValue);
-    if (!categoricalValues.length) return null;
-    const min = Math.min(...categoricalValues);
-    const max = Math.max(...categoricalValues);
-    return [min, max];
+  const categoricalDifferenceDomains = useMemo(() => {
+    const domains = {};
+    (columnDifferenceStats || []).forEach((stat) => {
+      if (stat.type !== 'categorical' || !stat.metrics) return;
+      CATEGORICAL_METHOD_OPTIONS.forEach(({ value }) => {
+        const metricValue = stat.metrics?.[value];
+        if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) return;
+        const existing = domains[value];
+        if (!existing) {
+          domains[value] = [metricValue, metricValue];
+        } else {
+          existing[0] = Math.min(existing[0], metricValue);
+          existing[1] = Math.max(existing[1], metricValue);
+        }
+      });
+    });
+    return domains;
   }, [columnDifferenceStats]);
+
+  const numericDifferenceDomain = numericDifferenceDomains?.[numericDifferenceMethod] || null;
+  const categoricalDifferenceDomain = categoricalDifferenceDomains?.[categoricalDifferenceMethod] || null;
 
   useEffect(() => {
-    if (!numericDifferenceDomain) return;
+    const hasDomain = Array.isArray(numericDifferenceDomains?.[numericDifferenceMethod]);
+    if (hasDomain) return;
+    const fallback = NUMERIC_METHOD_OPTIONS.find(({ value }) => Array.isArray(numericDifferenceDomains?.[value]));
+    if (fallback && fallback.value !== numericDifferenceMethod) {
+      setNumericDifferenceMethod(fallback.value);
+    }
+  }, [numericDifferenceDomains, numericDifferenceMethod]);
+
+  useEffect(() => {
+    const hasDomain = Array.isArray(categoricalDifferenceDomains?.[categoricalDifferenceMethod]);
+    if (hasDomain) return;
+    const fallback = CATEGORICAL_METHOD_OPTIONS.find(({ value }) => Array.isArray(categoricalDifferenceDomains?.[value]));
+    if (fallback && fallback.value !== categoricalDifferenceMethod) {
+      setCategoricalDifferenceMethod(fallback.value);
+    }
+  }, [categoricalDifferenceDomains, categoricalDifferenceMethod]);
+
+  useEffect(() => {
+    if (!numericDifferenceDomain) {
+      setNumericDifferenceRange(null);
+      return;
+    }
     setNumericDifferenceRange((prev) => {
       if (!Array.isArray(prev)) return [...numericDifferenceDomain];
       const next = [
@@ -589,7 +787,10 @@ export default function RightSidebar({
   }, [numericDifferenceDomain]);
 
   useEffect(() => {
-    if (!categoricalDifferenceDomain) return;
+    if (!categoricalDifferenceDomain) {
+      setCategoricalDifferenceRange(null);
+      return;
+    }
     setCategoricalDifferenceRange((prev) => {
       if (!Array.isArray(prev)) return [...categoricalDifferenceDomain];
       const next = [
@@ -607,18 +808,66 @@ export default function RightSidebar({
     const epsilon = 1e-6;
     return displayHeaders.filter(({ index }) => {
       const stat = columnDifferenceLookup.get(index);
-      if (!stat || typeof stat.metricValue !== 'number') return true;
+      if (!stat || !stat.metrics) return true;
       if (stat.type === 'numeric') {
+        const metricValue = stat.metrics?.[numericDifferenceMethod];
+        if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) return true;
         if (!Array.isArray(numericDifferenceRange)) return true;
-        return stat.metricValue + epsilon >= numericDifferenceRange[0] && stat.metricValue - epsilon <= numericDifferenceRange[1];
+        return metricValue + epsilon >= numericDifferenceRange[0] && metricValue - epsilon <= numericDifferenceRange[1];
       }
       if (stat.type === 'categorical') {
+        const metricValue = stat.metrics?.[categoricalDifferenceMethod];
+        if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) return true;
         if (!Array.isArray(categoricalDifferenceRange)) return true;
-        return stat.metricValue + epsilon >= categoricalDifferenceRange[0] && stat.metricValue - epsilon <= categoricalDifferenceRange[1];
+        return metricValue + epsilon >= categoricalDifferenceRange[0] && metricValue - epsilon <= categoricalDifferenceRange[1];
       }
       return true;
     });
-  }, [displayHeaders, columnDifferenceLookup, numericDifferenceRange, categoricalDifferenceRange]);
+  }, [displayHeaders, columnDifferenceLookup, numericDifferenceRange, categoricalDifferenceRange, numericDifferenceMethod, categoricalDifferenceMethod]);
+
+  const filteredVariableCounts = useMemo(() => {
+    if (!Array.isArray(filteredColumnOptions) || !filteredColumnOptions.length) {
+      return { total: 0, numeric: 0, categorical: 0, realAvailable: 0, syntheticAvailable: 0 };
+    }
+    let numeric = 0;
+    let categorical = 0;
+    let realAvailable = 0;
+    let syntheticAvailable = 0;
+    filteredColumnOptions.forEach(({ index }) => {
+      const stat = columnDifferenceLookup.get(index);
+      let type = stat?.type;
+      if (!type && originalData) {
+        try {
+          type = classifyColumnType(index, originalData);
+        } catch (err) {
+          type = null;
+        }
+      }
+      if (type === 'numeric') numeric += 1;
+      else if (type === 'categorical') categorical += 1;
+
+      if (Array.isArray(realColumnIndex) && realColumnIndex[index] !== undefined && realColumnIndex[index] >= 0) {
+        realAvailable += 1;
+      }
+      if (Array.isArray(syntheticColumnIndex) && syntheticColumnIndex[index] !== undefined && syntheticColumnIndex[index] >= 0) {
+        syntheticAvailable += 1;
+      }
+    });
+    return { total: filteredColumnOptions.length, numeric, categorical, realAvailable, syntheticAvailable };
+  }, [filteredColumnOptions, columnDifferenceLookup, originalData, realColumnIndex, syntheticColumnIndex]);
+
+  const datasetVariableCounts = useMemo(() => {
+    const countPresent = (indices, fallbackHeaders) => {
+      if (Array.isArray(indices) && indices.length) {
+        return indices.reduce((sum, idx) => sum + (idx !== undefined && idx >= 0 ? 1 : 0), 0);
+      }
+      if (Array.isArray(fallbackHeaders)) return fallbackHeaders.length;
+      return 0;
+    };
+    const realVars = countPresent(realColumnIndex, realHeaders);
+    const syntheticVars = countPresent(syntheticColumnIndex, syntheticHeaders);
+    return { real: realVars, synthetic: syntheticVars };
+  }, [realColumnIndex, syntheticColumnIndex, realHeaders, syntheticHeaders]);
 
   useEffect(() => {
     if (!originalData || !filteredColumnOptions.length) return;
@@ -1419,6 +1668,12 @@ export default function RightSidebar({
   const showCategoricalFilter = Array.isArray(categoricalSliderValue);
   const numericSliderDisabled = showNumericFilter ? Math.abs(numericSliderValue[1] - numericSliderValue[0]) < 1e-4 : false;
   const categoricalSliderDisabled = showCategoricalFilter ? Math.abs(categoricalSliderValue[1] - categoricalSliderValue[0]) < 1e-4 : false;
+  const hasNumericMethodOptions = NUMERIC_METHOD_OPTIONS.some(({ value }) => Array.isArray(numericDifferenceDomains?.[value]));
+  const hasCategoricalMethodOptions = CATEGORICAL_METHOD_OPTIONS.some(({ value }) => Array.isArray(categoricalDifferenceDomains?.[value]));
+  const numericMethodMeta = NUMERIC_METHOD_LOOKUP[numericDifferenceMethod] || null;
+  const categoricalMethodMeta = CATEGORICAL_METHOD_LOOKUP[categoricalDifferenceMethod] || null;
+  const showNumericSection = hasNumericMethodOptions;
+  const showCategoricalSection = hasCategoricalMethodOptions;
 
   return (
     <Paper sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1438,6 +1693,12 @@ export default function RightSidebar({
           </Typography>
           <Typography variant="body2" sx={{ fontSize: 14 }}>
             Synthetic: <strong>{selectionSummary.synthetic}</strong>/<strong>{datasetTotals.synthetic}</strong>
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: 14 }}>
+            Real vars: <strong>{datasetVariableCounts.real}</strong>
+          </Typography>
+          <Typography variant="body2" sx={{ fontSize: 14 }}>
+            Synthetic vars: <strong>{datasetVariableCounts.synthetic}</strong>
           </Typography>
         </Box>
       </Box>
@@ -1491,65 +1752,134 @@ export default function RightSidebar({
         {/* Controls (apply to both Overall and Selected plots) */}
         {originalData && originalData.headers && originalData.headers.length > 0 && (
           <Box>
-            {(showNumericFilter || showCategoricalFilter) && (
+            {(showNumericSection || showCategoricalSection) && (
               <Box sx={{ mb: 2, p: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.default' }}>
                 <Typography variant="subtitle2" sx={{ fontSize: 13, mb: 1 }}>
                   Filter of Variables
                 </Typography>
-                {showNumericFilter && numericSliderValue && (
-                  <Box sx={{ mb: showCategoricalFilter ? 1.5 : 0 }}>
-                    <Typography variant="caption" sx={{ fontSize: 12, fontWeight: 600, color: 'text.secondary', mb: 0.25, display: 'block' }}>
-                      Numeric difference (KS statistic)
-                    </Typography>
-                    <Slider
-                      size="small"
-                      min={numericDifferenceDomain ? numericDifferenceDomain[0] : 0}
-                      max={numericDifferenceDomain ? numericDifferenceDomain[1] : 1}
-                      step={0.01}
-                      value={numericSliderValue}
-                      onChange={(event, value) => {
-                        if (Array.isArray(value)) setNumericDifferenceRange(value);
-                      }}
-                      valueLabelDisplay="auto"
-                      valueLabelFormat={(val) => val.toFixed(2)}
-                      disabled={numericSliderDisabled}
-                    />
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
-                      <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Same (minimal difference)</Typography>
-                      <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Different (max difference)</Typography>
-                    </Box>
-                    <Typography variant="caption" sx={{ fontSize: 12, color: 'text.secondary' }}>
-                      Range: {numericSliderValue[0].toFixed(2)} – {numericSliderValue[1].toFixed(2)}
-                    </Typography>
+                {showNumericSection && (
+                  <Box sx={{ mb: showCategoricalSection ? 1.5 : 0 }}>
+                    <FormControl fullWidth size="small" sx={{ mb: showNumericFilter ? 1 : 0 }}>
+                      <InputLabel sx={{ fontSize: 13, '&.MuiInputLabel-shrink': { fontSize: 13 } }}>Numeric difference method</InputLabel>
+                      <Select
+                        value={numericDifferenceMethod}
+                        label="Numeric difference method"
+                        onChange={(e) => {
+                          const nextMethod = e.target.value;
+                          setNumericDifferenceMethod(nextMethod);
+                          const nextDomain = numericDifferenceDomains?.[nextMethod];
+                          if (Array.isArray(nextDomain)) {
+                            setNumericDifferenceRange([...nextDomain]);
+                          } else {
+                            setNumericDifferenceRange(null);
+                          }
+                        }}
+                        sx={{ '& .MuiSelect-select': { fontSize: 13, py: 0.5 } }}
+                      >
+                        {NUMERIC_METHOD_OPTIONS.map((option) => (
+                          <MenuItem
+                            key={option.value}
+                            value={option.value}
+                            sx={{ fontSize: 13, minHeight: 34, py: 0.25 }}
+                            disabled={!Array.isArray(numericDifferenceDomains?.[option.value])}
+                          >
+                            <Typography variant="body2" sx={{ fontSize: 13 }}>{option.label}</Typography>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    {showNumericFilter && numericSliderValue && (
+                      <>
+                        <Typography variant="caption" sx={{ fontSize: 12, fontWeight: 600, color: 'text.secondary', mb: 0.25, display: 'block' }}>
+                          Numeric difference ({numericMethodMeta?.label || 'Selected metric'})
+                        </Typography>
+                        <Slider
+                          size="small"
+                          min={numericDifferenceDomain ? numericDifferenceDomain[0] : 0}
+                          max={numericDifferenceDomain ? numericDifferenceDomain[1] : 1}
+                          step={0.01}
+                          value={numericSliderValue}
+                          onChange={(event, value) => {
+                            if (Array.isArray(value)) setNumericDifferenceRange(value);
+                          }}
+                          valueLabelDisplay="auto"
+                          valueLabelFormat={(val) => val.toFixed(2)}
+                          disabled={numericSliderDisabled}
+                        />
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
+                          <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Same (minimal difference)</Typography>
+                          <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Different (max difference)</Typography>
+                        </Box>
+                        <Typography variant="caption" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                          Range ({numericMethodMeta?.short || 'Metric'}): {numericSliderValue[0].toFixed(2)} – {numericSliderValue[1].toFixed(2)}
+                        </Typography>
+                      </>
+                    )}
                   </Box>
                 )}
-                {showCategoricalFilter && categoricalSliderValue && (
+                {showCategoricalSection && (
                   <Box>
-                    <Typography variant="caption" sx={{ fontSize: 12, fontWeight: 600, color: 'text.secondary', mb: 0.25, display: 'block' }}>
-                      Categorical difference (Cramer's V)
-                    </Typography>
-                    <Slider
-                      size="small"
-                      min={categoricalDifferenceDomain ? categoricalDifferenceDomain[0] : 0}
-                      max={categoricalDifferenceDomain ? categoricalDifferenceDomain[1] : 1}
-                      step={0.01}
-                      value={categoricalSliderValue}
-                      onChange={(event, value) => {
-                        if (Array.isArray(value)) setCategoricalDifferenceRange(value);
-                      }}
-                      valueLabelDisplay="auto"
-                      valueLabelFormat={(val) => val.toFixed(2)}
-                      disabled={categoricalSliderDisabled}
-                    />
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
-                      <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Different (weak association)</Typography>
-                      <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>Same (strong association)</Typography>
-                    </Box>
-                    <Typography variant="caption" sx={{ fontSize: 12, color: 'text.secondary' }}>
-                      Range: {categoricalSliderValue[0].toFixed(2)} – {categoricalSliderValue[1].toFixed(2)}
-                    </Typography>
+                    <FormControl fullWidth size="small" sx={{ mb: showCategoricalFilter ? 1 : 0 }}>
+                      <InputLabel sx={{ fontSize: 13, '&.MuiInputLabel-shrink': { fontSize: 13 } }}>Categorical difference method</InputLabel>
+                      <Select
+                        value={categoricalDifferenceMethod}
+                        label="Categorical difference method"
+                        onChange={(e) => {
+                          const nextMethod = e.target.value;
+                          setCategoricalDifferenceMethod(nextMethod);
+                          const nextDomain = categoricalDifferenceDomains?.[nextMethod];
+                          if (Array.isArray(nextDomain)) {
+                            setCategoricalDifferenceRange([...nextDomain]);
+                          } else {
+                            setCategoricalDifferenceRange(null);
+                          }
+                        }}
+                        sx={{ '& .MuiSelect-select': { fontSize: 13, py: 0.5 } }}
+                      >
+                        {CATEGORICAL_METHOD_OPTIONS.map((option) => (
+                          <MenuItem
+                            key={option.value}
+                            value={option.value}
+                            sx={{ fontSize: 13, minHeight: 34, py: 0.25 }}
+                            disabled={!Array.isArray(categoricalDifferenceDomains?.[option.value])}
+                          >
+                            <Typography variant="body2" sx={{ fontSize: 13 }}>{option.label}</Typography>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    {showCategoricalFilter && categoricalSliderValue && (
+                      <>
+                        <Typography variant="caption" sx={{ fontSize: 12, fontWeight: 600, color: 'text.secondary', mb: 0.25, display: 'block' }}>
+                          Categorical difference ({categoricalMethodMeta?.label || 'Selected metric'})
+                        </Typography>
+                        <Slider
+                          size="small"
+                          min={categoricalDifferenceDomain ? categoricalDifferenceDomain[0] : 0}
+                          max={categoricalDifferenceDomain ? categoricalDifferenceDomain[1] : 1}
+                          step={0.01}
+                          value={categoricalSliderValue}
+                          onChange={(event, value) => {
+                            if (Array.isArray(value)) setCategoricalDifferenceRange(value);
+                          }}
+                          valueLabelDisplay="auto"
+                          valueLabelFormat={(val) => val.toFixed(2)}
+                          disabled={categoricalSliderDisabled}
+                        />
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
+                          <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>More similar</Typography>
+                          <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>More different</Typography>
+                        </Box>
+                        <Typography variant="caption" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                          Range ({categoricalMethodMeta?.short || 'Metric'}): {categoricalSliderValue[0].toFixed(2)} – {categoricalSliderValue[1].toFixed(2)}
+                        </Typography>
+                      </>
+                    )}
                   </Box>
                 )}
+                <Typography variant="caption" sx={{ fontSize: 12, color: 'text.secondary', display: 'block', mt: 1 }}>
+                  Filtered variables: {filteredVariableCounts.total} (numeric: {filteredVariableCounts.numeric}, categorical: {filteredVariableCounts.categorical})
+                </Typography>
               </Box>
             )}
             <FormControl fullWidth size="small" sx={{ mb: 1 }}>
@@ -1568,8 +1898,13 @@ export default function RightSidebar({
                 ) : (
                   filteredColumnOptions.map(({ name, index }) => {
                     const stat = columnDifferenceLookup.get(index);
-                    const metricLabel = (stat && typeof stat.metricValue === 'number')
-                      ? `${stat.type === 'numeric' ? 'KS' : 'V'} ${stat.metricValue.toFixed(2)}`
+                    const isNumericStat = stat?.type === 'numeric';
+                    const methodKey = isNumericStat ? numericDifferenceMethod : categoricalDifferenceMethod;
+                    const lookup = isNumericStat ? NUMERIC_METHOD_LOOKUP : CATEGORICAL_METHOD_LOOKUP;
+                    const metricValue = stat?.metrics?.[methodKey];
+                    const methodMeta = lookup?.[methodKey];
+                    const metricLabel = (typeof metricValue === 'number' && Number.isFinite(metricValue))
+                      ? `${methodMeta?.short || 'Metric'} ${metricValue.toFixed(2)}`
                       : 'No metric';
                     return (
                       <MenuItem key={index} value={index} sx={{ fontSize: 13, minHeight: 34, py: 0.25 }}>

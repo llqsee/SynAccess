@@ -1629,29 +1629,7 @@ const CorrelationPlot = ({
       <Box sx={{ p: 1, borderBottom: '0.1px solid', borderColor: 'divider', width: '100%', boxSizing: 'border-box' }}>
         <Typography variant="subtitle2">Bivariate Analysis</Typography>
       </Box>
-      {/* Selection summary and variable count */}
-      <Box sx={{ ml: 1, mb: 1, mt: 1 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Typography variant="body2" sx={{ fontSize: 14 }}>
-            Selected: <strong>{selectionSummary.total}</strong>/<strong>{datasetTotals.total}</strong>
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: 14 }}>
-            Real: <strong>{selectionSummary.real}</strong>/<strong>{datasetTotals.real}</strong>
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: 14 }}>
-            Synthetic: <strong>{selectionSummary.synthetic}</strong>/<strong>{datasetTotals.synthetic}</strong>
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: 14 }}>
-            Real vars: <strong>{realMatrix.cols.length}</strong>
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: 14 }}>
-            Synthetic vars: <strong>{synthMatrix.cols.length}</strong>
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: 14 }}>
-            Intersection vars: <strong>{diffMatrix.cols.length}</strong>
-          </Typography>
-        </Box>
-      </Box>
+      {/* Selection summary removed per user request */}
       {!hasAnyMatrix ? (
         <Box sx={{ p: 2 }}>
           <Typography variant="body2" color="text.secondary">
