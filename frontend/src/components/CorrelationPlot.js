@@ -301,6 +301,36 @@ const CorrelationPlot = ({
     return (numericCount / checked) >= 0.8;
   };
 
+  // Detect integer-like numerics with limited unique values (used for plot decisions)
+  const isDiscreteNumericColumn = (rows, colIdx, uniqueLimit = 20) => {
+    if (!rows || rows.length === 0) return false;
+    const maxCheck = Math.min(rows.length, 400);
+    let numericCount = 0;
+    let intLikeCount = 0;
+    const uniques = new Set();
+    for (let r = 0; r < maxCheck; r++) {
+      const raw = rows[r]?.[colIdx];
+      if (raw === null || raw === undefined || raw === '') continue;
+      const val = typeof raw === 'number' ? raw : parseFloat(raw);
+      if (!Number.isFinite(val)) continue;
+      numericCount += 1;
+      if (Math.abs(val - Math.round(val)) < 1e-6) intLikeCount += 1;
+      if (uniques.size <= uniqueLimit + 5) uniques.add(val);
+    }
+    if (numericCount < 3) return false;
+    const uniqueCount = uniques.size;
+    const uniquenessRatio = uniqueCount / numericCount;
+    const intShare = intLikeCount / numericCount;
+    return intShare >= 0.9 && uniqueCount <= uniqueLimit && uniquenessRatio <= 0.35;
+  };
+
+  const inferMatrixType = (rows, colIdx) => (isNumericColumn(rows, colIdx) ? 'numeric' : 'categorical');
+
+  const inferPlotType = (rows, colIdx) => {
+    if (!isNumericColumn(rows, colIdx)) return 'categorical';
+    return isDiscreteNumericColumn(rows, colIdx, 7) ? 'categorical' : 'numeric';
+  };
+
 
   // Build aligned mixed-type matrices for real and synthetic
   const { realMatrix, synthMatrix, diffMatrix } = useMemo(() => {
@@ -387,7 +417,7 @@ const CorrelationPlot = ({
         .filter(Boolean);
       const cols = realPairs.map(pair => pair.normalized ?? pair.header);
       const indices = realPairs.map(pair => pair.index);
-      const types = realPairs.map(pair => (isNumericColumn(realRows, pair.index) ? 'numeric' : 'categorical'));
+      const types = realPairs.map(pair => inferMatrixType(realRows, pair.index));
       const matrix = computeMatrix(realRows, indices, types);
       realMatrix = {
         cols,
@@ -409,7 +439,7 @@ const CorrelationPlot = ({
         .filter(Boolean);
       const cols = synthPairs.map(pair => pair.normalized ?? pair.header);
       const indices = synthPairs.map(pair => pair.index);
-      const types = synthPairs.map(pair => (isNumericColumn(synthRows, pair.index) ? 'numeric' : 'categorical'));
+      const types = synthPairs.map(pair => inferMatrixType(synthRows, pair.index));
       const matrix = computeMatrix(synthRows, indices, types);
       synthMatrix = {
         cols,
@@ -449,9 +479,9 @@ const CorrelationPlot = ({
       const realIndices = diffPairs.map(pair => pair.realIndex);
       const synthIndices = diffPairs.map(pair => pair.synthIndex);
       const types = diffPairs.map(pair => {
-        const realNum = isNumericColumn(realRows, pair.realIndex);
-        const synthNum = isNumericColumn(synthRows, pair.synthIndex);
-        return realNum && synthNum ? 'numeric' : 'categorical';
+        const realType = inferMatrixType(realRows, pair.realIndex);
+        const synthType = inferMatrixType(synthRows, pair.synthIndex);
+        return realType === 'numeric' && synthType === 'numeric' ? 'numeric' : 'categorical';
       });
       const realCorr = computeMatrix(realRows, realIndices, types);
       const synthCorr = computeMatrix(synthRows, synthIndices, types);
@@ -1209,7 +1239,7 @@ const CorrelationPlot = ({
       .attr('fill', d => color(d.v));
 
     // Numeric labels in each cell (show number of selected points)
-    const labelData = data.filter(d => showZeroSelected ? true : d.sel > 0);
+    const labelData = data;
     g.selectAll('text.cell-label')
       .data(labelData)
       .enter()
@@ -1223,7 +1253,12 @@ const CorrelationPlot = ({
       .style('font-weight', 600)
       .style('pointer-events', 'none')
       .style('fill', labelColor)
-      .text(d => `${d.sel}`);
+      .text(d => {
+        const base = Number.isFinite(d.v) ? d.v : 0;
+        const sel = Number.isFinite(d.sel) ? d.sel : 0;
+        if (selectedTable && (showZeroSelected || sel > 0)) return `${base} (${sel})`;
+        return `${base}`;
+      });
 
     const xAxis = d3.axisBottom(x).tickSize(0);
     const yAxis = d3.axisLeft(y).tickSize(0);
@@ -1376,13 +1411,6 @@ const CorrelationPlot = ({
         const realRows = sampleRows(embRealRows);
         const synthRows = sampleRows(embSynthRows);
 
-        const ti = Array.isArray(diffMatrix.types) ? diffMatrix.types[i] : null;
-        const tj = Array.isArray(diffMatrix.types) ? diffMatrix.types[j] : null;
-        if (!ti || !tj) {
-          clearCharts('No type metadata available for this pair.');
-          return;
-        }
-
         const realIndices = Array.isArray(diffMatrix.realIndices) ? diffMatrix.realIndices : [];
         const synthIndices = Array.isArray(diffMatrix.synthIndices) ? diffMatrix.synthIndices : [];
         const xIdxReal = realIndices[j];
@@ -1394,6 +1422,18 @@ const CorrelationPlot = ({
           return;
         }
 
+        const inferPlotTypeMerged = (xr, xs, idxReal, idxSynth) => {
+          const tReal = inferPlotType(xr, idxReal);
+          const tSynth = inferPlotType(xs, idxSynth);
+          return (tReal === 'categorical' || tSynth === 'categorical') ? 'categorical' : 'numeric';
+        };
+
+        const typeX = inferPlotTypeMerged(realRows, synthRows, xIdxReal, xIdxSynth);
+        const typeY = inferPlotTypeMerged(realRows, synthRows, yIdxReal, yIdxSynth);
+        const bothNumeric = typeX === 'numeric' && typeY === 'numeric';
+        const bothCategorical = typeX === 'categorical' && typeY === 'categorical';
+        const catNum = !bothNumeric && !bothCategorical;
+
         const toPoints = (rows, xi, yi) => {
           const pts = [];
           if (!Array.isArray(rows) || rows.length === 0) return pts;
@@ -1404,9 +1444,6 @@ const CorrelationPlot = ({
           }
           return pts;
         };
-
-        const bothNumeric = ti === 'numeric' && tj === 'numeric';
-        const bothCategorical = ti === 'categorical' && tj === 'categorical';
 
         if (bothNumeric) {
           const realPts = toPoints(realRows, xIdxReal, yIdxReal);
@@ -1433,9 +1470,8 @@ const CorrelationPlot = ({
           return;
         }
 
-        const catNum = (!bothNumeric && !bothCategorical);
         if (catNum) {
-          const catIsRow = ti === 'categorical';
+          const catIsRow = typeY === 'categorical';
           const catIdxReal = catIsRow ? yIdxReal : xIdxReal;
           const numIdxReal = catIsRow ? xIdxReal : yIdxReal;
           const catIdxSynth = catIsRow ? yIdxSynth : xIdxSynth;
