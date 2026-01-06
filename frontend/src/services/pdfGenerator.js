@@ -19,8 +19,8 @@ class PDFGenerator {
       this.addTitlePage(datasetInfo);
       this.addNewPage();
 
-      // Executive Summary (contains all AI analysis)
-      this.addExecutiveSummary(aiAnalysis);
+      // Summary (contains all AI analysis)
+      this.addSummary(aiAnalysis);
       this.addNewPage();
 
       // Metadata
@@ -65,9 +65,7 @@ class PDFGenerator {
     }
   }
 
-  addExecutiveSummary(aiAnalysis) {
-    this.addSectionTitle('Executive Summary');
-
+  addSummary(aiAnalysis) {
     // Handle both direct AI response and nested structure from backend
     let resultSummary = null;
     
@@ -99,7 +97,7 @@ class PDFGenerator {
     // or you could modify the AI agent to return structured data
     this.pdf.setFontSize(10);
     this.pdf.setFont('helvetica', 'normal');
-    this.addWrappedText('Technical analysis is included in the Executive Summary above.', this.margin, this.currentY, this.maxContentWidth);
+    this.addWrappedText('Technical analysis is included in the Summary above.', this.margin, this.currentY, this.maxContentWidth);
     this.currentY += 12;
   }
 
@@ -109,7 +107,7 @@ class PDFGenerator {
     // Since the AI agent returns a single text response, recommendations are included in the main analysis
     this.pdf.setFontSize(10);
     this.pdf.setFont('helvetica', 'normal');
-    this.addWrappedText('Expert recommendations are included in the Executive Summary above.', this.margin, this.currentY, this.maxContentWidth);
+    this.addWrappedText('Expert recommendations are included in the Summary above.', this.margin, this.currentY, this.maxContentWidth);
     this.currentY += 12;
   }
 
@@ -119,7 +117,7 @@ class PDFGenerator {
     // Since the AI agent returns a single text response, risk assessment is included in the main analysis
     this.pdf.setFontSize(10);
     this.pdf.setFont('helvetica', 'normal');
-    this.addWrappedText('Risk assessment is included in the Executive Summary above.', this.margin, this.currentY, this.maxContentWidth);
+    this.addWrappedText('Risk assessment is included in the Summary above.', this.margin, this.currentY, this.maxContentWidth);
     this.currentY += 12;
   }
 
@@ -165,14 +163,46 @@ class PDFGenerator {
 
   addWrappedText(text, x, y, maxWidth) {
     if (!text) return;
-    const lines = this.pdf.splitTextToSize(text, maxWidth);
-    if (y > 270) { this.addNewPage(); y = 20; }
+    
+    // Split by newlines to check for custom section markers
+    const paragraphs = text.split('\n');
     let currentY = y;
-    for (let i = 0; i < lines.length; i++) {
-      if (currentY > 270) { this.addNewPage(); currentY = 20; }
-      this.pdf.text(lines[i], x, currentY);
-      currentY += this.lineHeight;
+
+    for (const paragraph of paragraphs) {
+      const trimmed = paragraph.trim();
+      if (!trimmed) {
+        currentY += this.lineHeight / 2;
+        continue;
+      }
+
+      // Check for section markers from AI (e.g., SECTION_TITLE: Key Findings)
+      if (trimmed.startsWith('SECTION_TITLE:')) {
+        const titleText = trimmed.replace('SECTION_TITLE:', '').trim();
+        
+        // Ensure enough space for title and at least one line of content
+        if (currentY > 260) { this.addNewPage(); currentY = 20; }
+        
+        this.pdf.setFont('helvetica', 'bold');
+        this.pdf.setFontSize(11);
+        this.pdf.text(titleText, x, currentY);
+        
+        // Reset to normal font for content
+        this.pdf.setFont('helvetica', 'normal');
+        this.pdf.setFontSize(10);
+        currentY += this.lineHeight * 1.5;
+        continue;
+      }
+
+      // Split large paragraphs into wrapped lines
+      const wrappedLines = this.pdf.splitTextToSize(trimmed, maxWidth);
+      for (const line of wrappedLines) {
+        if (currentY > 270) { this.addNewPage(); currentY = 20; }
+        this.pdf.text(line, x, currentY);
+        currentY += this.lineHeight;
+      }
+      currentY += 2; // Small spacing between paragraphs
     }
+    
     this.currentY = currentY;
   }
 }
