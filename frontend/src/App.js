@@ -30,6 +30,7 @@ import Login from './components/Login';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import EmbeddingPlot from './components/EmbeddingPlot';
+import SimilarityScoreSummary from './components/SimilarityScoreSummary';
 import RightSidebar from './components/rightsidebar';
 import CorrelationPlot from './components/CorrelationPlot';
 // import DistributionPlot from './components/DistributionPlot';
@@ -147,6 +148,7 @@ function AppContent() {
   // Selection state lifted to App to coordinate EmbeddingPlot and RightSidebar
   const [selectedEmbeddingPoints, setSelectedEmbeddingPoints] = useState([]);
   const [filteredCorrelationColumns, setFilteredCorrelationColumns] = useState(null);
+  const [similarityScoreSummary, setSimilarityScoreSummary] = useState(null);
 
   const setError = useCallback((error) => {
     setUploadError(error);
@@ -489,24 +491,30 @@ function AppContent() {
                     </Paper>
                   ) : embeddingGenerated ? (
                     <Grid container spacing={1} sx={{ height: '100%' }}>
-                      <Grid item xs={12} md={2.7} lg={2.7} sx={{ height: '100%' }}>
-                        <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                          <RightSidebar
-                            realData={embeddingMetadata?.realData?.data || originalRealData?.data || realData?.data}
-                            syntheticData={embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data || syntheticData?.data}
-                            realHeaders={embeddingMetadata?.realData?.headers || originalRealData?.headers || realData?.headers}
-                            syntheticHeaders={embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers || syntheticData?.headers}
-                            embeddingData={embeddingData}
-                            metadata={embeddingMetadata}
-                            selectedPoints={selectedEmbeddingPoints}
-                            onVariableFilterChange={handleVariableFilterChange}
-                          />
+                      <Grid item xs={12} md={3.2} lg={3.2} sx={{ height: '100%' }}>
+                        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                            <SimilarityScoreSummary summary={similarityScoreSummary} />
+                          </Box>
+                          <Box sx={{
+                            flex: 1,
+                            minHeight: 0,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            overflow: 'hidden'
+                          }}>
+                            <EmbeddingPlot
+                              data={embeddingData}
+                              metadata={embeddingMetadata}
+                              onSelectionChange={setSelectedEmbeddingPoints}
+                              onScoreSummaryChange={setSimilarityScoreSummary}
+                            />
+                          </Box>
                         </Box>
                       </Grid>
-                      {/* Correlation Plot in the middle column */}
-                      <Grid item xs={12} md={6.5} lg={6.5} sx={{ height: '100%' }}>
+                      <Grid item xs={12} md={5.8} lg={5.8} sx={{ height: '100%' }}>
                         <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                          {/* Correlation heatmap between EmbeddingPlot and RightSidebar */}
                           {embeddingGenerated && (
                             <CorrelationPlot
                               realData={embeddingMetadata?.realData?.data || originalRealData?.data || realData?.data}
@@ -523,18 +531,17 @@ function AppContent() {
                           )}
                         </Box>
                       </Grid>
-                      <Grid item xs={12} md={2.8} lg={2.8} sx={{ height: '100%' }}>
-                        <Box sx={{ 
-                          height: '100%', 
-                          border: '1px solid', 
-                          borderColor: 'divider', 
-                          borderRadius: 1,
-                          overflow: 'hidden'
-                        }}>
-                          <EmbeddingPlot
-                            data={embeddingData}
+                      <Grid item xs={12} md={3.0} lg={3.0} sx={{ height: '100%' }}>
+                        <Box sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                          <RightSidebar
+                            realData={embeddingMetadata?.realData?.data || originalRealData?.data || realData?.data}
+                            syntheticData={embeddingMetadata?.syntheticData?.data || originalSyntheticData?.data || syntheticData?.data}
+                            realHeaders={embeddingMetadata?.realData?.headers || originalRealData?.headers || realData?.headers}
+                            syntheticHeaders={embeddingMetadata?.syntheticData?.headers || originalSyntheticData?.headers || syntheticData?.headers}
+                            embeddingData={embeddingData}
                             metadata={embeddingMetadata}
-                            onSelectionChange={setSelectedEmbeddingPoints}
+                            selectedPoints={selectedEmbeddingPoints}
+                            onVariableFilterChange={handleVariableFilterChange}
                           />
                         </Box>
                       </Grid>

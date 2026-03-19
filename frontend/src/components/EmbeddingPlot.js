@@ -29,7 +29,8 @@ const EmbeddingPlot = ({
   metadata,
   pointSize = 0.8,
   pointOpacity = 0.5,
-  onSelectionChange
+  onSelectionChange,
+  onScoreSummaryChange
 }) => {
   // All React hooks must be called first, before any early returns
   const svgRef = useRef();
@@ -260,6 +261,498 @@ const EmbeddingPlot = ({
 
     return '';
   }, [anomalyResults, getOriginalData]);
+
+  const scoreSummary = useMemo(() => {
+    const clamp01 = value => {
+      if (!Number.isFinite(value)) return null;
+      return Math.max(0, Math.min(1, value));
+    };
+
+    const toNumber = value => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const computePearson = (xs, ys) => {
+      const n = xs.length;
+      if (n < 3) return null;
+
+      const meanX = xs.reduce((acc, x) => acc + x, 0) / n;
+      const meanY = ys.reduce((acc, y) => acc + y, 0) / n;
+
+      let numerator = 0;
+      let varianceX = 0;
+      let varianceY = 0;
+
+      for (let i = 0; i < n; i++) {
+        const dx = xs[i] - meanX;
+        const dy = ys[i] - meanY;
+        numerator += dx * dy;
+        varianceX += dx * dx;
+        varianceY += dy * dy;
+      }
+
+      if (varianceX <= 0 || varianceY <= 0) return null;
+      return numerator / Math.sqrt(varianceX * varianceY);
+    };
+
+    const computeMean = values => {
+      if (!values.length) return null;
+      return values.reduce((acc, value) => acc + value, 0) / values.length;
+    };
+
+    const computeStd = values => {
+      if (values.length < 2) return null;
+      const mean = computeMean(values);
+      if (mean === null) return null;
+      const variance = values.reduce((acc, value) => {
+        const diff = value - mean;
+        return acc + (diff * diff);
+      }, 0) / values.length;
+      return Math.sqrt(variance);
+    };
+
+    const computeQuantile = (values, q) => {
+      if (!values.length) return null;
+      const sorted = [...values].sort((a, b) => a - b);
+      const position = (sorted.length - 1) * q;
+      const lower = Math.floor(position);
+      const upper = Math.ceil(position);
+      if (lower === upper) return sorted[lower];
+      const weight = position - lower;
+      return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+    };
+
+    const computeKSStatistic = (a, b) => {
+      if (!a.length || !b.length) return null;
+      const sortedA = [...a].sort((x, y) => x - y);
+      const sortedB = [...b].sort((x, y) => x - y);
+      let i = 0;
+      let j = 0;
+      let cdfA = 0;
+      let cdfB = 0;
+      let maxDiff = 0;
+
+      while (i < sortedA.length || j < sortedB.length) {
+        const nextA = i < sortedA.length ? sortedA[i] : Number.POSITIVE_INFINITY;
+        const nextB = j < sortedB.length ? sortedB[j] : Number.POSITIVE_INFINITY;
+        const value = Math.min(nextA, nextB);
+
+        while (i < sortedA.length && sortedA[i] <= value) i += 1;
+        while (j < sortedB.length && sortedB[j] <= value) j += 1;
+
+        cdfA = i / sortedA.length;
+        cdfB = j / sortedB.length;
+        maxDiff = Math.max(maxDiff, Math.abs(cdfA - cdfB));
+      }
+
+      return clamp01(maxDiff);
+    };
+
+    const originalData = getOriginalData();
+    const summary = {
+      overallScore: null,
+      overallWeights: {
+        structural: 0.25,
+        univariate: 0.30,
+        bivariate: 0.30,
+        anomaly: 0.15,
+      },
+      structuralScore: null,
+      structuralDiscrepancy: null,
+      structuralChecks: {
+        missingColumns: 0,
+        extraColumns: 0,
+        sharedColumns: 0,
+        typeMismatches: 0,
+        invalidCategoryValues: 0,
+        checkedCategoricalValues: 0,
+        outOfRangeValues: 0,
+        checkedNumericValues: 0,
+      },
+      univariateScore: null,
+      univariateDiscrepancy: null,
+      univariateChecks: {
+        numericVariables: 0,
+        categoricalVariables: 0,
+      },
+      bivariateScore: null,
+      bivariateDiscrepancy: null,
+      anomalyScore: null,
+      anomalyDiscrepancy: null,
+      multiVariableScore: null,
+      numericPairsEvaluated: 0,
+      anomalyRegionsEvaluated: 0,
+    };
+
+    const realRows = [];
+    const synthRows = [];
+
+    if (originalData?.data && originalData?.labels) {
+      originalData.data.forEach((row, idx) => {
+        if (!Array.isArray(row)) return;
+        const label = originalData.labels[idx];
+        if (label === 'Real') {
+          realRows.push(row);
+        } else if (label === 'Synthetic') {
+          synthRows.push(row);
+        }
+      });
+    }
+
+    const realHeaders = Array.isArray(metadata?.realData?.headers)
+      ? metadata.realData.headers
+      : (Array.isArray(originalData?.headers) ? originalData.headers : []);
+
+    const synthHeaders = Array.isArray(metadata?.syntheticData?.headers)
+      ? metadata.syntheticData.headers
+      : (Array.isArray(originalData?.headers) ? originalData.headers : []);
+
+    const normalizeHeader = header => String(header ?? '').trim();
+    const realHeaderMap = new Map();
+    const synthHeaderMap = new Map();
+
+    realHeaders.forEach((header, idx) => {
+      const key = normalizeHeader(header);
+      if (key && !realHeaderMap.has(key)) realHeaderMap.set(key, idx);
+    });
+    synthHeaders.forEach((header, idx) => {
+      const key = normalizeHeader(header);
+      if (key && !synthHeaderMap.has(key)) synthHeaderMap.set(key, idx);
+    });
+
+    const realHeaderKeys = new Set(realHeaderMap.keys());
+    const synthHeaderKeys = new Set(synthHeaderMap.keys());
+
+    const missingColumns = Array.from(realHeaderKeys).filter(key => !synthHeaderKeys.has(key));
+    const extraColumns = Array.from(synthHeaderKeys).filter(key => !realHeaderKeys.has(key));
+    const sharedColumns = Array.from(realHeaderKeys).filter(key => synthHeaderKeys.has(key));
+
+    const inferColumnType = values => {
+      const nonMissing = values.filter(value => value !== null && value !== undefined && String(value).trim() !== '');
+      if (nonMissing.length === 0) return null;
+      const numericCount = nonMissing.reduce((acc, value) => (toNumber(value) !== null ? acc + 1 : acc), 0);
+      return numericCount / nonMissing.length >= 0.9 ? 'numeric' : 'categorical';
+    };
+
+    let univariateDiscrepancySum = 0;
+    let univariateVariableCount = 0;
+    let numericVariableCount = 0;
+    let categoricalVariableCount = 0;
+
+    let typeMismatchCount = 0;
+    let invalidCategoryValues = 0;
+    let checkedCategoricalValues = 0;
+    let outOfRangeValues = 0;
+    let checkedNumericValues = 0;
+
+    sharedColumns.forEach(headerKey => {
+      const realIdx = realHeaderMap.get(headerKey);
+      const synthIdx = synthHeaderMap.get(headerKey);
+      if (realIdx === undefined || synthIdx === undefined) return;
+
+      const realValues = realRows.map(row => row[realIdx]);
+      const synthValues = synthRows.map(row => row[synthIdx]);
+
+      const realType = inferColumnType(realValues);
+      const synthType = inferColumnType(synthValues);
+      if (!realType || !synthType) return;
+
+      if (realType !== synthType) {
+        typeMismatchCount += 1;
+        return;
+      }
+
+      if (realType === 'categorical') {
+        const allowed = new Set(
+          realValues
+            .filter(value => value !== null && value !== undefined && String(value).trim() !== '')
+            .map(value => String(value))
+        );
+
+        synthValues.forEach(value => {
+          if (value === null || value === undefined || String(value).trim() === '') return;
+          checkedCategoricalValues += 1;
+          if (!allowed.has(String(value))) {
+            invalidCategoryValues += 1;
+          }
+        });
+
+        const realObserved = realValues
+          .filter(value => value !== null && value !== undefined && String(value).trim() !== '')
+          .map(value => String(value));
+        const synthObserved = synthValues
+          .filter(value => value !== null && value !== undefined && String(value).trim() !== '')
+          .map(value => String(value));
+
+        if (realObserved.length && synthObserved.length) {
+          const realFreq = new Map();
+          const synthFreq = new Map();
+          realObserved.forEach(value => realFreq.set(value, (realFreq.get(value) || 0) + 1));
+          synthObserved.forEach(value => synthFreq.set(value, (synthFreq.get(value) || 0) + 1));
+          const categories = new Set([...realFreq.keys(), ...synthFreq.keys()]);
+
+          let tvDistance = 0;
+          categories.forEach(category => {
+            const pReal = (realFreq.get(category) || 0) / realObserved.length;
+            const pSynth = (synthFreq.get(category) || 0) / synthObserved.length;
+            tvDistance += Math.abs(pReal - pSynth);
+          });
+
+          const dCat = clamp01(0.5 * tvDistance);
+          if (dCat !== null) {
+            univariateDiscrepancySum += dCat;
+            univariateVariableCount += 1;
+            categoricalVariableCount += 1;
+          }
+        }
+      }
+
+      if (realType === 'numeric') {
+        const realNumeric = realValues
+          .map(value => toNumber(value))
+          .filter(value => value !== null);
+        const synthNumeric = synthValues
+          .map(value => toNumber(value))
+          .filter(value => value !== null);
+
+        if (!realNumeric.length || !synthNumeric.length) return;
+
+        const realMin = Math.min(...realNumeric);
+        const realMax = Math.max(...realNumeric);
+
+        synthNumeric.forEach(value => {
+          checkedNumericValues += 1;
+          if (value < realMin || value > realMax) {
+            outOfRangeValues += 1;
+          }
+        });
+
+        if (realNumeric.length >= 3 && synthNumeric.length >= 3) {
+          const ks = computeKSStatistic(realNumeric, synthNumeric);
+          const meanReal = computeMean(realNumeric);
+          const meanSynth = computeMean(synthNumeric);
+          const stdReal = computeStd(realNumeric);
+          const stdSynth = computeStd(synthNumeric);
+          const medianReal = computeQuantile(realNumeric, 0.5);
+          const medianSynth = computeQuantile(synthNumeric, 0.5);
+          const q1Real = computeQuantile(realNumeric, 0.25);
+          const q3Real = computeQuantile(realNumeric, 0.75);
+
+          const iqr = (q3Real !== null && q1Real !== null) ? (q3Real - q1Real) : 0;
+          const scale = Math.max(iqr, 1e-9);
+
+          const meanDiff = (meanReal !== null && meanSynth !== null)
+            ? clamp01(Math.abs(meanReal - meanSynth) / scale)
+            : null;
+          const stdDiff = (stdReal !== null && stdSynth !== null)
+            ? clamp01(Math.abs(stdReal - stdSynth) / scale)
+            : null;
+          const medianDiff = (medianReal !== null && medianSynth !== null)
+            ? clamp01(Math.abs(medianReal - medianSynth) / scale)
+            : null;
+
+          const dNumTerms = [ks, meanDiff, stdDiff, medianDiff].filter(Number.isFinite);
+          if (dNumTerms.length === 4) {
+            const dNum = clamp01(dNumTerms.reduce((acc, value) => acc + value, 0) / 4);
+            if (dNum !== null) {
+              univariateDiscrepancySum += dNum;
+              univariateVariableCount += 1;
+              numericVariableCount += 1;
+            }
+          }
+        }
+      }
+    });
+
+    const missingErr = realHeaderKeys.size ? missingColumns.length / realHeaderKeys.size : 0;
+    const extraErr = realHeaderKeys.size ? extraColumns.length / realHeaderKeys.size : 0;
+    const typeErr = sharedColumns.length ? typeMismatchCount / sharedColumns.length : 0;
+    const categoryErr = checkedCategoricalValues ? invalidCategoryValues / checkedCategoricalValues : 0;
+    const rangeErr = checkedNumericValues ? outOfRangeValues / checkedNumericValues : 0;
+
+    const structuralWeights = {
+      missing: 0.25,
+      extra: 0.20,
+      type: 0.25,
+      category: 0.15,
+      range: 0.15,
+    };
+
+    const dStruct = clamp01(
+      (structuralWeights.missing * missingErr) +
+      (structuralWeights.extra * extraErr) +
+      (structuralWeights.type * typeErr) +
+      (structuralWeights.category * categoryErr) +
+      (structuralWeights.range * rangeErr)
+    );
+
+    if (dStruct !== null) {
+      summary.structuralDiscrepancy = dStruct;
+      summary.structuralScore = 100 * (1 - dStruct);
+      summary.structuralChecks = {
+        missingColumns: missingColumns.length,
+        extraColumns: extraColumns.length,
+        sharedColumns: sharedColumns.length,
+        typeMismatches: typeMismatchCount,
+        invalidCategoryValues,
+        checkedCategoricalValues,
+        outOfRangeValues,
+        checkedNumericValues,
+      };
+    }
+
+    if (univariateVariableCount > 0) {
+      const dUni = clamp01(univariateDiscrepancySum / univariateVariableCount);
+      summary.univariateDiscrepancy = dUni;
+      summary.univariateScore = dUni === null ? null : 100 * (1 - dUni);
+      summary.univariateChecks = {
+        numericVariables: numericVariableCount,
+        categoricalVariables: categoricalVariableCount,
+      };
+    }
+
+    if (originalData?.data && originalData?.labels && originalData.headers?.length) {
+      const columnCount = originalData.headers.length;
+      const numericCols = [];
+
+      for (let col = 0; col < columnCount; col++) {
+        const realValid = realRows.reduce((acc, row) => (toNumber(row[col]) !== null ? acc + 1 : acc), 0);
+        const synthValid = synthRows.reduce((acc, row) => (toNumber(row[col]) !== null ? acc + 1 : acc), 0);
+        if (realValid >= 3 && synthValid >= 3) {
+          numericCols.push(col);
+        }
+      }
+
+      let pairCount = 0;
+      let diffSum = 0;
+
+      for (let i = 0; i < numericCols.length; i++) {
+        for (let j = i + 1; j < numericCols.length; j++) {
+          const colI = numericCols[i];
+          const colJ = numericCols[j];
+
+          const realX = [];
+          const realY = [];
+          realRows.forEach(row => {
+            const x = toNumber(row[colI]);
+            const y = toNumber(row[colJ]);
+            if (x !== null && y !== null) {
+              realX.push(x);
+              realY.push(y);
+            }
+          });
+
+          const synthX = [];
+          const synthY = [];
+          synthRows.forEach(row => {
+            const x = toNumber(row[colI]);
+            const y = toNumber(row[colJ]);
+            if (x !== null && y !== null) {
+              synthX.push(x);
+              synthY.push(y);
+            }
+          });
+
+          const corrReal = computePearson(realX, realY);
+          const corrSynth = computePearson(synthX, synthY);
+          if (corrReal === null || corrSynth === null) continue;
+
+          diffSum += Math.abs(corrReal - corrSynth);
+          pairCount += 1;
+        }
+      }
+
+      if (pairCount > 0) {
+        const dBi = clamp01(diffSum / pairCount);
+        summary.bivariateDiscrepancy = dBi;
+        summary.bivariateScore = dBi === null ? null : 100 * (1 - dBi);
+        summary.numericPairsEvaluated = pairCount;
+      }
+    }
+
+    const anomalyCells = Array.isArray(anomalyResults?.cell_anomalies)
+      ? anomalyResults.cell_anomalies.filter(cell => cell?.is_significant)
+      : [];
+
+    // When anomaly detection has completed and no significant cells are found,
+    // the burden discrepancy is zero and the score is 100 (not N/A).
+    if (anomalyResults && anomalyCells.length === 0) {
+      summary.anomalyDiscrepancy = 0;
+      summary.anomalyScore = 100;
+      summary.anomalyRegionsEvaluated = 0;
+    }
+
+    if (anomalyCells.length > 0) {
+      const regionMasses = anomalyCells.map(cell => {
+        const realCount = toNumber(cell?.real_count) || 0;
+        const synthCount = toNumber(cell?.synthetic_count) || 0;
+        return Math.max(0, realCount) + Math.max(0, synthCount);
+      });
+
+      // Use total analyzed samples from anomaly detection statistics so the
+      // burden is anchored to the full analysis space (not only anomaly cells).
+      const totalMassFromStats =
+        (toNumber(anomalyResults?.statistics?.total_real) || 0) +
+        (toNumber(anomalyResults?.statistics?.total_synthetic) || 0);
+      const totalMassFallback = regionMasses.reduce((acc, v) => acc + v, 0);
+      const totalMass = totalMassFromStats > 0 ? totalMassFromStats : totalMassFallback;
+
+      if (totalMass > 0) {
+        let dAnom = 0;
+        anomalyCells.forEach((cell, idx) => {
+          const realCount = Math.max(0, toNumber(cell?.real_count) || 0);
+          const synthCount = Math.max(0, toNumber(cell?.synthetic_count) || 0);
+          const mass = regionMasses[idx];
+          if (mass <= 0) return;
+
+          const omega = mass / totalMass;
+          const severity = Math.abs(realCount - synthCount) / mass;
+          dAnom += omega * severity;
+        });
+
+        dAnom = clamp01(dAnom);
+        summary.anomalyDiscrepancy = dAnom;
+        summary.anomalyScore = dAnom === null ? null : 100 * (1 - dAnom);
+        summary.anomalyRegionsEvaluated = anomalyCells.length;
+      }
+    }
+
+    const hasBivariate = Number.isFinite(summary.bivariateScore);
+    const hasAnomaly = Number.isFinite(summary.anomalyScore);
+    const hasStructural = Number.isFinite(summary.structuralScore);
+    const hasUnivariate = Number.isFinite(summary.univariateScore);
+
+    if (hasStructural && hasUnivariate && hasBivariate && hasAnomaly) {
+      // PDF definition: S_overall = w_struct*S_struct + w_uni*S_uni + w_bi*S_bi + w_anom*S_anom
+      summary.overallScore =
+        (summary.overallWeights.structural * summary.structuralScore) +
+        (summary.overallWeights.univariate * summary.univariateScore) +
+        (summary.overallWeights.bivariate * summary.bivariateScore) +
+        (summary.overallWeights.anomaly * summary.anomalyScore);
+    }
+
+    if (hasBivariate && hasAnomaly) {
+      // Derived from PDF default weights: w_bi = 0.30 and w_anom = 0.15.
+      summary.multiVariableScore = ((0.30 * summary.bivariateScore) + (0.15 * summary.anomalyScore)) / 0.45;
+    } else if (hasBivariate) {
+      summary.multiVariableScore = summary.bivariateScore;
+    } else if (hasAnomaly) {
+      summary.multiVariableScore = summary.anomalyScore;
+    }
+
+    return summary;
+  }, [getOriginalData, anomalyResults]);
+
+  useEffect(() => {
+    if (typeof onScoreSummaryChange === 'function') {
+      onScoreSummaryChange(scoreSummary);
+    }
+  }, [scoreSummary, onScoreSummaryChange]);
 
 
   // Simplified visibility - show all points by default
