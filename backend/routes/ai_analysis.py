@@ -33,6 +33,21 @@ class AIAnalysisResponse(BaseModel):
     service_available: bool
     message: str
 
+class AISimilarityScoreRequest(BaseModel):
+    """Request model for AI similarity scoring."""
+    computed_scores: Dict[str, Any] = Field(default_factory=dict)
+    context: Optional[Dict[str, Any]] = None
+
+class AISimilarityScoreResponse(BaseModel):
+    """Response model for AI similarity scoring."""
+    success: bool
+    scores: Dict[str, float]
+    confidence: Optional[str] = None
+    rationale: Optional[str] = None
+    service_available: bool
+    message: str
+    timestamp: str
+
 @router.post("/analyze", response_model=AIAnalysisResponse)
 async def analyze_validation_results(request: AIAnalysisRequest):
     """
@@ -122,3 +137,52 @@ async def get_ai_service_status():
             "model": "claude-3-5-sonnet-20241022",
             "message": f"Error checking service status: {str(e)}"
         } 
+
+@router.post("/similarity-scores", response_model=AISimilarityScoreResponse)
+async def generate_similarity_scores(request: AISimilarityScoreRequest):
+    """Generate AI-estimated similarity scores using computed metrics as evidence."""
+    try:
+        if not settings.enable_ai_analysis:
+            raise HTTPException(
+                status_code=503,
+                detail="AI analysis is disabled. Set ENABLE_AI_ANALYSIS=true to enable."
+            )
+
+        if not settings.anthropic_api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="Claude API key not configured. Set ANTHROPIC_API_KEY to enable AI analysis."
+            )
+
+        ai_agent = get_ai_agent()
+        if ai_agent is None:
+            ai_agent = initialize_ai_agent(settings.anthropic_api_key)
+
+        ai_result = ai_agent.score_similarity(
+            computed_scores=request.computed_scores,
+            context=request.context,
+        )
+
+        if ai_result.get("status") != "success":
+            raise HTTPException(
+                status_code=500,
+                detail=f"AI similarity scoring failed: {ai_result.get('error', 'Unknown error')}"
+            )
+
+        return AISimilarityScoreResponse(
+            success=True,
+            scores=ai_result.get("scores", {}),
+            confidence=ai_result.get("confidence"),
+            rationale=ai_result.get("rationale"),
+            service_available=True,
+            message="AI similarity scoring completed successfully.",
+            timestamp=ai_result.get("timestamp", datetime.now().isoformat()),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI similarity scoring failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI similarity scoring failed: {str(e)}"
+        )

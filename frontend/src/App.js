@@ -43,6 +43,7 @@ import { useDataUpload } from './hooks/useDataUpload';
 import { useEmbedding } from './hooks/useEmbedding';
 import { useValidation } from './hooks/useValidation';
 import { healthCheck } from './services/api';
+import aiAnalysisService from './services/aiAnalysisService';
 
 // Set up the app theme
 const theme = createTheme({
@@ -150,6 +151,7 @@ function AppContent() {
   const [filteredCorrelationColumns, setFilteredCorrelationColumns] = useState(null);
   const [similarityScoreSummary, setSimilarityScoreSummary] = useState(null);
   const [univariateSidebarSummary, setUnivariateSidebarSummary] = useState(null);
+  const [aiSimilarityScores, setAiSimilarityScores] = useState(null);
 
   const mergedSimilarityScoreSummary = useMemo(() => {
     const baseSummary = similarityScoreSummary || {};
@@ -186,6 +188,60 @@ function AppContent() {
 
     return merged;
   }, [similarityScoreSummary, univariateSidebarSummary]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const hasBaseScores = Number.isFinite(mergedSimilarityScoreSummary?.structuralScore)
+      || Number.isFinite(mergedSimilarityScoreSummary?.univariateScore)
+      || Number.isFinite(mergedSimilarityScoreSummary?.bivariateScore)
+      || Number.isFinite(mergedSimilarityScoreSummary?.anomalyScore)
+      || Number.isFinite(mergedSimilarityScoreSummary?.overallScore)
+      || Number.isFinite(mergedSimilarityScoreSummary?.multiVariableScore);
+
+    if (!hasBaseScores) {
+      setAiSimilarityScores(null);
+      return undefined;
+    }
+
+    const fetchAiScores = async () => {
+      try {
+        const response = await aiAnalysisService.generateSimilarityScores(
+          mergedSimilarityScoreSummary,
+          {
+            hasEmbedding: Boolean(embeddingData),
+            algorithm: currentAlgorithm,
+          }
+        );
+        if (isCancelled) return;
+        const scores = response?.scores;
+        setAiSimilarityScores(scores && typeof scores === 'object' ? scores : null);
+      } catch (err) {
+        if (isCancelled) return;
+        setAiSimilarityScores(null);
+      }
+    };
+
+    fetchAiScores();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [mergedSimilarityScoreSummary, embeddingData, currentAlgorithm]);
+
+  const displayedSimilarityScoreSummary = useMemo(() => {
+    const base = mergedSimilarityScoreSummary || {};
+    if (!aiSimilarityScores || typeof aiSimilarityScores !== 'object') return base;
+    return {
+      ...base,
+      overallScore: Number.isFinite(aiSimilarityScores.overallScore) ? aiSimilarityScores.overallScore : base.overallScore,
+      structuralScore: Number.isFinite(aiSimilarityScores.structuralScore) ? aiSimilarityScores.structuralScore : base.structuralScore,
+      univariateScore: Number.isFinite(aiSimilarityScores.univariateScore) ? aiSimilarityScores.univariateScore : base.univariateScore,
+      bivariateScore: Number.isFinite(aiSimilarityScores.bivariateScore) ? aiSimilarityScores.bivariateScore : base.bivariateScore,
+      anomalyScore: Number.isFinite(aiSimilarityScores.anomalyScore) ? aiSimilarityScores.anomalyScore : base.anomalyScore,
+      multiVariableScore: Number.isFinite(aiSimilarityScores.multiVariableScore) ? aiSimilarityScores.multiVariableScore : base.multiVariableScore,
+    };
+  }, [mergedSimilarityScoreSummary, aiSimilarityScores]);
 
   const setError = useCallback((error) => {
     setUploadError(error);
@@ -531,7 +587,7 @@ function AppContent() {
                       <Grid item xs={12} md={3.2} lg={3.2} sx={{ height: '100%' }}>
                         <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
                           <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                            <SimilarityScoreSummary summary={mergedSimilarityScoreSummary} />
+                            <SimilarityScoreSummary summary={displayedSimilarityScoreSummary} />
                           </Box>
                           <Box sx={{
                             flex: 1,

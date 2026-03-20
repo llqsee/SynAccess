@@ -55,6 +55,22 @@ export class AIAnalysisService {
   }
 
   /**
+   * Generate AI-estimated similarity scores based on computed score context
+   */
+  async generateSimilarityScores(computedScores, context = null) {
+    try {
+      const response = await apiClient.post(`${this.baseUrl}/similarity-scores`, {
+        computed_scores: computedScores,
+        context,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('AI similarity scoring failed:', error);
+      throw new Error(`AI similarity scoring failed: ${error.response?.data?.detail || error.message}`);
+    }
+  }
+
+  /**
    * Get cached analysis or perform new analysis
    */
   async getAnalysis(validationResults, datasetInfo = null, forceRefresh = false) {
