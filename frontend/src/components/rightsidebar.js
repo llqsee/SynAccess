@@ -226,6 +226,7 @@ export default function RightSidebar({
   metadata,
   selectedPoints,
   onVariableFilterChange = null,
+  onUnivariateSummaryChange = null,
 }) {
   const theme = useTheme();
   // Local sidebar states
@@ -855,6 +856,101 @@ export default function RightSidebar({
     });
     return { total: filteredColumnOptions.length, numeric, categorical, realAvailable, syntheticAvailable };
   }, [filteredColumnOptions, columnDifferenceLookup, originalData, realColumnIndex, syntheticColumnIndex]);
+
+  const univariateSummary = useMemo(() => {
+    if (!Array.isArray(filteredColumnOptions) || filteredColumnOptions.length === 0) {
+      return {
+        univariateScore: null,
+        univariateDiscrepancy: null,
+        univariateChecks: {
+          numericVariables: 0,
+          categoricalVariables: 0,
+        },
+      };
+    }
+
+    const normalizeMetric = (metricValue, methodKey, type) => {
+      if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) return null;
+      if (type === 'numeric') {
+        const domain = numericDifferenceDomains?.[methodKey];
+        const domainMax = Array.isArray(domain) ? domain[1] : null;
+        if (typeof domainMax === 'number' && Number.isFinite(domainMax) && domainMax > 0) {
+          return Math.max(0, Math.min(1, metricValue / domainMax));
+        }
+      }
+      if (type === 'categorical') {
+        const domain = categoricalDifferenceDomains?.[methodKey];
+        const domainMax = Array.isArray(domain) ? domain[1] : null;
+        if (typeof domainMax === 'number' && Number.isFinite(domainMax) && domainMax > 0) {
+          return Math.max(0, Math.min(1, metricValue / domainMax));
+        }
+      }
+      return Math.max(0, Math.min(1, metricValue));
+    };
+
+    let discrepancySum = 0;
+    let variableCount = 0;
+    let numericVariables = 0;
+    let categoricalVariables = 0;
+
+    filteredColumnOptions.forEach(({ index }) => {
+      const stat = columnDifferenceLookup.get(index);
+      if (!stat || !stat.metrics) return;
+
+      if (stat.type === 'numeric') {
+        const metricValue = stat.metrics?.[numericDifferenceMethod];
+        const normalized = normalizeMetric(metricValue, numericDifferenceMethod, 'numeric');
+        if (typeof normalized === 'number' && Number.isFinite(normalized)) {
+          discrepancySum += normalized;
+          variableCount += 1;
+          numericVariables += 1;
+        }
+      }
+
+      if (stat.type === 'categorical') {
+        const metricValue = stat.metrics?.[categoricalDifferenceMethod];
+        const normalized = normalizeMetric(metricValue, categoricalDifferenceMethod, 'categorical');
+        if (typeof normalized === 'number' && Number.isFinite(normalized)) {
+          discrepancySum += normalized;
+          variableCount += 1;
+          categoricalVariables += 1;
+        }
+      }
+    });
+
+    if (variableCount === 0) {
+      return {
+        univariateScore: null,
+        univariateDiscrepancy: null,
+        univariateChecks: {
+          numericVariables,
+          categoricalVariables,
+        },
+      };
+    }
+
+    const discrepancy = discrepancySum / variableCount;
+    return {
+      univariateScore: 100 * (1 - discrepancy),
+      univariateDiscrepancy: discrepancy,
+      univariateChecks: {
+        numericVariables,
+        categoricalVariables,
+      },
+    };
+  }, [
+    filteredColumnOptions,
+    columnDifferenceLookup,
+    numericDifferenceMethod,
+    categoricalDifferenceMethod,
+    numericDifferenceDomains,
+    categoricalDifferenceDomains,
+  ]);
+
+  useEffect(() => {
+    if (typeof onUnivariateSummaryChange !== 'function') return;
+    onUnivariateSummaryChange(univariateSummary);
+  }, [onUnivariateSummaryChange, univariateSummary]);
 
   const datasetVariableCounts = useMemo(() => {
     const countPresent = (indices, fallbackHeaders) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Box, 
   Container, 
@@ -149,6 +149,43 @@ function AppContent() {
   const [selectedEmbeddingPoints, setSelectedEmbeddingPoints] = useState([]);
   const [filteredCorrelationColumns, setFilteredCorrelationColumns] = useState(null);
   const [similarityScoreSummary, setSimilarityScoreSummary] = useState(null);
+  const [univariateSidebarSummary, setUnivariateSidebarSummary] = useState(null);
+
+  const mergedSimilarityScoreSummary = useMemo(() => {
+    const baseSummary = similarityScoreSummary || {};
+    const univariateScore = univariateSidebarSummary?.univariateScore;
+    const univariateDiscrepancy = univariateSidebarSummary?.univariateDiscrepancy;
+    const univariateChecks = univariateSidebarSummary?.univariateChecks;
+
+    const merged = {
+      ...baseSummary,
+      univariateScore: Number.isFinite(univariateScore) ? univariateScore : baseSummary.univariateScore,
+      univariateDiscrepancy: Number.isFinite(univariateDiscrepancy) ? univariateDiscrepancy : baseSummary.univariateDiscrepancy,
+      univariateChecks: univariateChecks || baseSummary.univariateChecks,
+    };
+
+    const weights = merged.overallWeights || {
+      structural: 0.25,
+      univariate: 0.30,
+      bivariate: 0.30,
+      anomaly: 0.15,
+    };
+
+    const hasStructural = Number.isFinite(merged.structuralScore);
+    const hasUnivariate = Number.isFinite(merged.univariateScore);
+    const hasBivariate = Number.isFinite(merged.bivariateScore);
+    const hasAnomaly = Number.isFinite(merged.anomalyScore);
+
+    if (hasStructural && hasUnivariate && hasBivariate && hasAnomaly) {
+      merged.overallScore =
+        (weights.structural * merged.structuralScore) +
+        (weights.univariate * merged.univariateScore) +
+        (weights.bivariate * merged.bivariateScore) +
+        (weights.anomaly * merged.anomalyScore);
+    }
+
+    return merged;
+  }, [similarityScoreSummary, univariateSidebarSummary]);
 
   const setError = useCallback((error) => {
     setUploadError(error);
@@ -494,7 +531,7 @@ function AppContent() {
                       <Grid item xs={12} md={3.2} lg={3.2} sx={{ height: '100%' }}>
                         <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
                           <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                            <SimilarityScoreSummary summary={similarityScoreSummary} />
+                            <SimilarityScoreSummary summary={mergedSimilarityScoreSummary} />
                           </Box>
                           <Box sx={{
                             flex: 1,
@@ -542,6 +579,7 @@ function AppContent() {
                             metadata={embeddingMetadata}
                             selectedPoints={selectedEmbeddingPoints}
                             onVariableFilterChange={handleVariableFilterChange}
+                            onUnivariateSummaryChange={setUnivariateSidebarSummary}
                           />
                         </Box>
                       </Grid>

@@ -20,9 +20,6 @@ const SimilarityScoreSummary = ({ summary }) => {
           <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {formatScore(resolvedSummary.overallScore)}
           </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            weighted combination
-          </Typography>
         </Box>
 
         <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'rgba(248, 250, 252, 0.7)' }}>
@@ -31,9 +28,6 @@ const SimilarityScoreSummary = ({ summary }) => {
           </Typography>
           <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {formatScore(resolvedSummary.multiVariableScore)}
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            0-100 scale
           </Typography>
         </Box>
 
@@ -44,9 +38,6 @@ const SimilarityScoreSummary = ({ summary }) => {
           <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {formatScore(resolvedSummary.anomalyScore)}
           </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Regions evaluated: {resolvedSummary.anomalyRegionsEvaluated || 0}
-          </Typography>
         </Box>
 
         <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'rgba(248, 250, 252, 0.7)' }}>
@@ -55,9 +46,6 @@ const SimilarityScoreSummary = ({ summary }) => {
           </Typography>
           <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {formatScore(resolvedSummary.bivariateScore)}
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Pairs evaluated: {resolvedSummary.numericPairsEvaluated || 0}
           </Typography>
         </Box>
 
@@ -88,9 +76,6 @@ const SimilarityScoreSummary = ({ summary }) => {
           </Typography>
           <Typography variant="body1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {formatScore(resolvedSummary.univariateScore)}
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Numeric: {resolvedSummary.univariateChecks?.numericVariables || 0} | Categorical: {resolvedSummary.univariateChecks?.categoricalVariables || 0}
           </Typography>
         </Box>
       </Box>
