@@ -51,7 +51,7 @@ __pycache__/
 .env.example
 
 # Large data files
-*.csv
+# *.csv
 *.xlsx
 *.xls
 *.parquet
