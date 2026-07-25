@@ -97,7 +97,7 @@ cd Scalable-Visualization-and-Explainability-of-Synthetic-Datasets
 
 # Create conda environment
 conda env create -f environment.yml
-conda activate mavis
+conda activate mavis_neto
 
 # Setup database
 python setup_database.py

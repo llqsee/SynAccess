@@ -20,6 +20,7 @@ from backend.routes.ai_analysis import router as ai_analysis_router
 from backend.routes.anomaly_detection import router as anomaly_detection_router
 from backend.routes.validation import router as validation_router
 from backend.routes.gpu import router as gpu_router
+from backend.database.connection import init_db
 from backend.services.task_queue import get_task_queue_manager
 from backend.services.ai_analysis_service import initialize_ai_agent
 from backend.config import settings
@@ -35,6 +36,10 @@ async def lifespan(app: FastAPI):
         # Setup logging (structured JSON for consistent logs)
         setup_logging(log_file="logs/mavis.log", log_level="INFO", enable_json=True)
         print("✓ Logging system initialized")
+
+        # Ensure required database tables exist before background services use them.
+        init_db()
+        print("✓ Database initialized")
         
         # Start background task queue
         task_queue = get_task_queue_manager()

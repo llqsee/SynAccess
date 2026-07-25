@@ -93,7 +93,9 @@ async def analyze_validation_results(request: AIAnalysisRequest):
             service_available=True,
             message="AI Statistician analysis completed successfully."
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"AI analysis failed: {e}")
         raise HTTPException(
@@ -115,7 +117,7 @@ async def get_ai_service_status():
             return {
                 "service_available": False,
                 "service_type": "ai_statistician",
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "claude-sonnet-4-6",
                 "message": "AI Statistician service not initialized"
             }
         
@@ -125,7 +127,7 @@ async def get_ai_service_status():
         return {
             "service_available": is_available,
             "service_type": "ai_statistician",
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-4-6",
             "message": "AI Statistician service is available" if is_available else "AI Statistician service is not available"
         }
         
@@ -134,7 +136,7 @@ async def get_ai_service_status():
         return {
             "service_available": False,
             "service_type": "ai_statistician",
-            "model": "claude-3-5-sonnet-20241022",
+            "model": "claude-sonnet-4-6",
             "message": f"Error checking service status: {str(e)}"
         } 
 

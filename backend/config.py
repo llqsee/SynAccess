@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # AI analysis settings
     anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     enable_ai_analysis: bool = Field(default=True, env="ENABLE_AI_ANALYSIS")
-    claude_model: str = Field(default="claude-3-5-sonnet-20241022", env="CLAUDE_MODEL")
+    claude_model: str = Field(default="claude-sonnet-4-6", env="CLAUDE_MODEL")
     ai_analysis_timeout: int = Field(default=60, env="AI_ANALYSIS_TIMEOUT")  # 60 seconds
     
     # Data processing limits
