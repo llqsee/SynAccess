@@ -1,0 +1,2250 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 729
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F2 24 Tf
+27.5999999999999979 TL
+0 g
+118.2377952755905426 728.5041732283464171 Td
+(AI Data Quality Analysis Report) Tj
+ET
+BT
+/F1 14 Tf
+16.0999999999999979 TL
+0 g
+169.327795275590546 685.9844881889763428 Td
+(Comprehensive Synthetic Data Validation) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 615.1183464566928478 Td
+(Dataset Information:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 586.7718897637794271 Td
+(Real Dataset: 10000 rows, 52 columns) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 535.748267716535338 Td
+(Synthetic Dataset: 10000 rows, 52 columns) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 484.7246456692913057 Td
+(Analysis Date: 06/01/2026) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 4266
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(Executive Summary) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 751.1813385826771992 Td
+(The comprehensive validation of synthetic data against real-world data reveals a nuanced landscape of data) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 734.1734645669291695 Td
+(generation performance. The dataset comprises 45 variables across 10,000 rows, with a focus on) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 717.1655905511811397 Td
+(comprehensive statistical and qualitative comparisons. The synthetic data generation process demonstrates) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 700.15771653543311 Td
+(remarkable statistical similarity, with 105 out of 210 total tests passing and zero critical failures.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 668.9766141732283131 Td
+(Key statistical indicators show perfect alignment across multiple dimensions:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 646.2994488188976447 Td
+(- Identical column structures \(52 columns\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 623.6222834645668627 Td
+(- Complete data completeness \(100% for both real and synthetic datasets\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 600.9451181102361943 Td
+(- Exact range matching for numeric variables) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 578.2679527559055259 Td
+(- Identical categorical domain representations) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 555.5907874015747439 Td
+(- Zero statistically significant differences in distribution tests) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 524.4096850393700606 Td
+(The validation process employed sophisticated techniques including:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 501.7325196850393354 Td
+(- Range validation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 479.0553543307086102 Td
+(- Distribution tests \(Kolmogorov-Smirnov and Chi-square\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 456.378188976377885 Td
+(- Correlation structure analysis) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 433.7010236220471597 Td
+(- Outlier detection) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 411.0238582677164914 Td
+(- Multivariate statistical assessments) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 379.8427559055117513 Td
+(Despite the apparent statistical similarity, the overall data quality is classified as "POOR", indicating potential) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 362.8348818897637216 Td
+(underlying methodological limitations in the synthetic data generation process. The synthetic data) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 345.8270078740156919 Td
+(demonstrates an exact match rate of 100%, which, paradoxically, raises concerns about potential overfitting) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 328.8191338582676053 Td
+(or lack of genuine statistical variability.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 297.6380314960629221 Td
+(The dataset spans diverse domains including demographic information, financial attributes, lifestyle) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 280.6301574803148924 Td
+(characteristics, and behavioral indicators, making the validation comprehensive and multi-dimensional.) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 249.4490551181102092 Td
+(Key Findings) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 215.4333070866141497 Td
+(The validation results unveil several critical insights into the synthetic data generation process:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 184.2522047244093528 Td
+(1. Structural Integrity) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 161.5750393700786844 Td
+(- 52 columns perfectly replicated between real and synthetic datasets) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 138.8978740157479024 Td
+(- 100% data completeness) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 116.220708661417234 Td
+(- Identical data types across all variables) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 93.5435433070865656 Td
+(- No structural deviations detected) Tj
+ET
+endstream
+endobj
+7 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 3821
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(2. Statistical Distribution) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 762.5199212598424765 Td
+(- Zero statistically significant differences in distribution tests) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 739.8427559055118081 Td
+(- Perfect alignment in mean and standard deviation across all variables) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 717.1655905511811397 Td
+(- Kolmogorov-Smirnov and Chi-square tests consistently returned p-values of 1.0, indicating exact statistical) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 700.15771653543311 Td
+(equivalence) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 668.9766141732283131 Td
+(3. Correlation Structure) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 646.2994488188976447 Td
+(- Correlation matrices between real and synthetic data show absolute similarity) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 623.6222834645668627 Td
+(- 1,128 total correlation comparisons with zero significant differences) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 600.9451181102361943 Td
+(- Suggests potential risk of over-preservation of original data characteristics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 569.7640157480313974 Td
+(4. Outlier Characteristics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 547.086850393700729 Td
+(- Consistent outlier patterns across real and synthetic datasets) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 524.4096850393700606 Td
+(- Notable outlier percentages in variables like:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 501.7325196850393354 Td
+(* HEIGHT: 1.83% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 479.0553543307086102 Td
+(* 2HOME: 23.11% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 456.378188976377885 Td
+(* 26COVID: 41% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 433.7010236220471597 Td
+(* 28CULTURE: 39.13% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 402.5199212598424765 Td
+(5. Privacy and Utility Metrics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 379.8427559055117513 Td
+(- Nearest Neighbor Distance Ratio \(NNDR\) extremely low \(median: 2.99e-08\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 357.1655905511810261 Td
+(- Exact match rate of 100%, which is a potential warning sign) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 334.4884251968503008 Td
+(- Medium overall risk assessment) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 303.3073228346455608 Td
+(6. Multivariate Test Limitations) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 280.6301574803148924 Td
+(- Energy test encountered processing errors) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 257.952992125984224 Td
+(- Total variation and KL divergence tests showed no significant differences) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 235.2758267716534419 Td
+(- Jennrich test for correlation matrix comparison returned acceptable results) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 204.0947244094487587 Td
+(These findings suggest a synthetic data generation approach that preserves statistical properties with high) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 187.086850393700729 Td
+(fidelity, yet potentially lacks the nuanced variability of authentic data generation.) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 155.9057480314959321 Td
+(Statistical Quality) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 121.8899999999998727 Td
+(The statistical quality assessment reveals a complex landscape of data generation performance:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 90.7088976377951894 Td
+(1. Distribution Tests) Tj
+ET
+endstream
+endobj
+9 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 10 0 R
+>>
+endobj
+10 0 obj
+<<
+/Length 4009
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(- All 4 distribution tests \(Kolmogorov-Smirnov and Chi-square\) returned p-values of 1.0) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 762.5199212598424765 Td
+(- Perfect alignment across categorical and numerical variables) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 739.8427559055118081 Td
+(- Suggests potential over-fitting or limitation in capturing natural data variability) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 708.6616535433070112 Td
+(2. Correlation Analysis) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 685.9844881889763428 Td
+(- 1,128 total correlation comparisons) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 663.3073228346456744 Td
+(- Zero statistically significant differences) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 640.6301574803148924 Td
+(- Correlation matrices between real and synthetic data are identical) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 617.952992125984224 Td
+(- Indicates potential risk of algorithmic bias in data generation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 586.7718897637794271 Td
+(3. Statistical Significance) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 564.0947244094487587 Td
+(- Welch's t-tests performed on all 48 numerical variables) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 541.4175590551180903 Td
+(- Zero significant differences detected) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 518.7403937007873083 Td
+(- Mean and standard deviation perfectly preserved across all variables) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 496.0632283464566399 Td
+(- p-values consistently at 1.0, indicating extreme statistical similarity) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 464.8821259842518998 Td
+(4. Multivariate Assessment) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 442.2049606299212314 Td
+(- Energy test encountered processing errors) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 419.5277952755905062 Td
+(- Total variation distance test: statistic of 0) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 396.850629921259781 Td
+(- Kullback-Leibler divergence test: statistic of 0) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 374.1734645669290558 Td
+(- Jennrich test for correlation matrix: no significant differences) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 342.9923622047243725 Td
+(5. Outlier Characteristics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 320.3151968503935905 Td
+(- Consistent outlier patterns across real and synthetic datasets) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 297.6380314960629221 Td
+(- Significant outlier percentages in specific variables:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 274.9608661417322537 Td
+(* 26COVID: 41% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 252.2837007874014716 Td
+(* 28CULTURE: 39.13% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 229.6065354330708033 Td
+(* 2HOME: 23.11% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 198.4254330708660063 Td
+(6. Limitations in Statistical Evaluation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 175.748267716535338 Td
+(- 100% exact match rate raises concerns about genuine statistical variability) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 153.0711023622046696 Td
+(- Potential algorithmic constraints in capturing natural data randomness) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 130.3939370078738875 Td
+(- Risk of deterministic rather than probabilistic data generation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 99.2128346456692043 Td
+(The statistical quality suggests a synthetic data generation approach that mathematically preserves original) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 82.2049606299211746 Td
+(data characteristics but may lack the inherent complexity and randomness of real-world datasets.) Tj
+ET
+endstream
+endobj
+11 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 12 0 R
+>>
+endobj
+12 0 obj
+<<
+/Length 3486
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(Practical Usefulness) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 751.1813385826771992 Td
+(The practical utility of the synthetic dataset presents a nuanced evaluation:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 720.0002362204724022 Td
+(1. Data Completeness and Consistency) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 697.3230708661417339 Td
+(- 100% data completeness across all 52 variables) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 674.6459055118109518 Td
+(- Perfect data type consistency) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 651.9687401574802834 Td
+(- Enables direct substitutability in analytical contexts) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 620.7876377952754865 Td
+(2. Dimensional Coverage) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 598.1104724409448181 Td
+(The dataset comprehensively covers multiple domains:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 575.4333070866141497 Td
+(- Demographic attributes) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 552.7561417322833677 Td
+(- Financial indicators) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 530.0789763779526993 Td
+(- Lifestyle characteristics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 507.4018110236219741 Td
+(- Behavioral metrics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 484.7246456692913057 Td
+(- Personal information dimensions) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 453.5435433070865656 Td
+(3. Privacy Preservation Metrics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 430.8663779527558404 Td
+(- Nearest Neighbor Distance Ratio extremely low \(median: 2.99e-08\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 408.1892125984251152 Td
+(- Suggests minimal risk of individual re-identification) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 385.5120472440944468 Td
+(- Maintains fundamental statistical properties of original data) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 354.3309448818897067 Td
+(4. Limitations in Practical Application) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 331.6537795275589815 Td
+(- 100% exact match rate indicates potential over-preservation of original data) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 308.9766141732283131 Td
+(- Reduced capacity to generate genuinely novel insights) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 286.2994488188975311 Td
+(- Risk of algorithmic bias and deterministic representation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 255.1183464566928478 Td
+(5. Recommended Use Cases) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 232.4411811023621794 Td
+(Potentially suitable for:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 209.7640157480313974 Td
+(- Preliminary statistical modeling) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 187.086850393700729 Td
+(- Educational and training purposes) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 164.4096850393699469 Td
+(- Exploratory data analysis) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 141.7325196850392786 Td
+(- Scenarios requiring anonymized data representation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 110.5514173228345953 Td
+(6. Constraints and Considerations) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 87.8742519685038133 Td
+(- Limited variability in data generation) Tj
+ET
+endstream
+endobj
+13 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 14 0 R
+>>
+endobj
+14 0 obj
+<<
+/Length 3770
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(- Potential lack of genuine statistical randomness) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 762.5199212598424765 Td
+(- Requires careful validation before critical applications) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 731.3388188976377933 Td
+(7. Utility Scoring) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 708.6616535433070112 Td
+(- Data Utility: Assessed but limited) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 685.9844881889763428 Td
+(- Privacy Preservation: Strong) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 663.3073228346456744 Td
+(- Synthetic Data Quality: Moderate) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 632.1262204724408775 Td
+(The practical usefulness is constrained by the synthetic data's near-perfect replication of original data) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 615.1183464566928478 Td
+(characteristics, suggesting a need for more sophisticated generation algorithms that can introduce controlled) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 598.1104724409448181 Td
+(variability while maintaining core statistical properties.) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 566.9293700787401349 Td
+(Critical Issues) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 532.9136220472440755 Td
+(No critical issues were explicitly identified in the validation results. However, several potential methodological) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 515.9057480314959321 Td
+(concerns warrant attention:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 484.7246456692913057 Td
+(1. Exact Match Rate Anomaly) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 462.0474803149605805 Td
+(- 100% exact match between synthetic and real data rows) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 439.3703149606298552 Td
+(- Suggests potential algorithmic limitations in generating truly probabilistic data) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 416.69314960629913 Td
+(- Risk of overfitting and loss of generative diversity) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 385.5120472440944468 Td
+(2. Multivariate Test Limitations) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 362.8348818897637216 Td
+(- Energy test encountered processing errors) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 340.1577165354329964 Td
+(- Indicates potential computational or methodological constraints in complex statistical assessments) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 308.9766141732283131 Td
+(3. Statistical Homogeneity) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 286.2994488188975311 Td
+(- Absolute similarity across all statistical tests) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 263.6222834645668627 Td
+(- p-values consistently at 1.0) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 240.9451181102361943 Td
+(- Potential indication of deterministic data generation process) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 209.7640157480313974 Td
+(4. Outlier Preservation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 187.086850393700729 Td
+(Certain variables show consistent high outlier percentages:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 164.4096850393699469 Td
+(- 26COVID: 41% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 141.7325196850392786 Td
+(- 28CULTURE: 39.13% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 119.0553543307086102 Td
+(- 2HOME: 23.11% outliers) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 87.8742519685038133 Td
+(These patterns might represent underlying data generation artifacts rather than genuine statistical) Tj
+ET
+endstream
+endobj
+15 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 16 0 R
+>>
+endobj
+16 0 obj
+<<
+/Length 3447
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(representations.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 754.0159842519684616 Td
+(While no critical failures were detected, these observations suggest a need for methodological refinement in) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 737.0081102362204319 Td
+(the synthetic data generation approach.) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 705.8270078740157487 Td
+(Variable Range and Type Checks) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 671.8112598425196893 Td
+(Based on the validation results, all variables maintain consistent data types and ranges between real and) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 654.8033858267716596 Td
+(synthetic datasets. No significant type mismatches or unreasonable value ranges were detected.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 623.6222834645668627 Td
+(Observations on Variable Ranges:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 592.4411811023621794 Td
+(Numeric Variables with Consistent Ranges:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 569.7640157480313974 Td
+(1. ID: 23 to 99,993) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 547.086850393700729 Td
+(2. AGE: 20.68 to 68.65) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 524.4096850393700606 Td
+(3. HEIGHT: 145.21 to 205.45) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 501.7325196850393354 Td
+(4. 1SIBLING: 0 to 4) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 479.0553543307086102 Td
+(5. 2HOME: 0 to 2) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 447.8742519685038701 Td
+(Categorical Variables with Consistent Domains:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 425.1970866141731449 Td
+(- INCOME_LEVEL: l0, l1) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 402.5199212598424765 Td
+(- SEX: female, male) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 379.8427559055117513 Td
+(- TOWN: Nagybajcs, Budakeszi, Nagykanizsa) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 357.1655905511810261 Td
+(- OCCUPATION: Lakatos, asztalos, Szakorvos) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 325.9844881889763428 Td
+(Binary Variables \(0-1 Range\):) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 303.3073228346455608 Td
+(- 4TRAVEL, 5CREDIT, 7CARD, 12CONSCIOUS, 15MOBILE, etc.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 272.1262204724408775 Td
+(Potential Flags:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 249.4490551181102092 Td
+(- 14SUM: Extremely wide range \(-149,405 to 19,690,532\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 226.7718897637794271 Td
+(- 32VALUABLES: Large value range \(-345.98 to 118,150.78\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 195.5907874015747439 Td
+(While no critical range issues were identified, the extreme variations in financial variables suggest careful) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 178.5829133858267141 Td
+(domain-specific validation might be beneficial.) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 147.4018110236219172 Td
+(Real Data Quality by Variable) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 113.3860629921258578 Td
+(Analyzing the real data variables for plausibility:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 82.2049606299211746 Td
+(Demographic Variables:) Tj
+ET
+endstream
+endobj
+17 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 18 0 R
+>>
+endobj
+18 0 obj
+<<
+/Length 3298
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(1. AGE: 20.68 to 68.65) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 762.5199212598424765 Td
+(- Reasonable working-age range) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 739.8427559055118081 Td
+(- No implausible values detected) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 708.6616535433070112 Td
+(2. HEIGHT: 145.21 to 205.45 cm) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 685.9844881889763428 Td
+(- Consistent with human height distributions) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 663.3073228346456744 Td
+(- Outliers at extreme ranges \(193-199 cm\) represent natural variation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 632.1262204724408775 Td
+(Financial Indicators:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 609.4490551181102092 Td
+(1. 14SUM: -149,405 to 19,690,532) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 586.7718897637794271 Td
+(- Extremely wide range) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 564.0947244094487587 Td
+(- Negative values require domain-specific explanation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 541.4175590551180903 Td
+(- Potential data collection or preprocessing anomalies) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 510.2364566929133503 Td
+(2. 32VALUABLES: -345.98 to 118,150.78) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 487.559291338582625 Td
+(- Large value range) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 464.8821259842518998 Td
+(- Negative values unusual for asset valuation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 442.2049606299212314 Td
+(- Requires financial domain expert validation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 411.0238582677164914 Td
+(Behavioral Variables:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 388.3466929133857661 Td
+(1. 26COVID: 0 to 3) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 365.6695275590550409 Td
+(- Likely representing COVID-related experience levels) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 342.9923622047243725 Td
+(- Range seems reasonable) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 311.8112598425195756 Td
+(2. 28CULTURE: 0 to 4) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 289.1340944881889072 Td
+(- Potentially representing cultural engagement levels) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 266.4569291338582389 Td
+(- Plausible range) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 235.2758267716534419 Td
+(Categorical Variables:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 212.5986614173227736 Td
+(- INCOME_LEVEL: Binary categorization \(l0, l1\)) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 189.9214960629919915 Td
+(- SEX: Standard binary representation) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 167.2443307086613231 Td
+(- TOWN: Limited to three specific locations) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 136.0632283464566399 Td
+(Potential Concerns:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 113.3860629921258578 Td
+(- Large variations in financial variables) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 90.7088976377951894 Td
+(- Negative values in some numeric columns) Tj
+ET
+endstream
+endobj
+19 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 20 0 R
+>>
+endobj
+20 0 obj
+<<
+/Length 4070
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(- Potential need for domain-specific data validation) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 754.0159842519684616 Td
+(Actionable Recommendations) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 720.0002362204724022 Td
+(1. Synthetic Data Generation Algorithm Enhancement) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 697.3230708661417339 Td
+(- Introduce controlled randomness to prevent exact replication) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 674.6459055118109518 Td
+(- Develop probabilistic generation techniques that maintain core statistical properties) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 651.9687401574802834 Td
+(- Implement adaptive variance mechanisms to capture natural data fluctuations) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 629.291574803149615 Td
+(- Validate against multiple statistical distributions, not just moment-matching) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 598.1104724409448181 Td
+(Justification: The 100% exact match rate and consistent p-values of 1.0 across all tests indicate a) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 581.1025984251967884 Td
+(deterministic generation process that fails to capture genuine data variability.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 549.9214960629921052 Td
+(2. Advanced Privacy-Preservation Techniques) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 527.2443307086614368 Td
+(- Implement differential privacy mechanisms) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 504.5671653543306547 Td
+(- Add controlled noise to maintain statistical fidelity) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 481.8899999999999295 Td
+(- Develop more sophisticated k-anonymity approaches) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 459.2128346456692611 Td
+(- Integrate privacy metrics directly into generation algorithm) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 428.0317322834645211 Td
+(Justification: While current privacy metrics show low re-identification risk, the exact replication suggests) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 411.0238582677164914 Td
+(insufficient anonymization.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 379.8427559055117513 Td
+(3. Domain-Specific Validation Frameworks) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 357.1655905511810261 Td
+(- Develop context-specific validation protocols) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 334.4884251968503008 Td
+(- Create domain expert review processes) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 311.8112598425195756 Td
+(- Implement multi-dimensional statistical checks) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 289.1340944881889072 Td
+(- Design variable-specific range and distribution constraints) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 257.952992125984224 Td
+(Justification: Extreme variations in financial variables \(14SUM, 32VALUABLES\) and high outlier percentages) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 240.9451181102361943 Td
+(in some columns suggest need for nuanced, domain-informed validation.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 209.7640157480313974 Td
+(4. Computational Method Refinement) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 187.086850393700729 Td
+(- Address multivariate test processing limitations) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 164.4096850393699469 Td
+(- Develop more robust statistical comparison techniques) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 141.7325196850392786 Td
+(- Enhance computational approaches for complex datasets) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 119.0553543307086102 Td
+(- Implement advanced machine learning validation metrics) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 87.8742519685038133 Td
+(Justification: Energy test processing errors and limitations in current multivariate assessments indicate need) Tj
+ET
+endstream
+endobj
+21 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 22 0 R
+>>
+endobj
+22 0 obj
+<<
+/Length 2421
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(for more sophisticated computational approaches.) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 754.0159842519684616 Td
+(5. Iterative Generation and Validation Cycle) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 731.3388188976377933 Td
+(- Establish continuous improvement framework) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 708.6616535433070112 Td
+(- Create feedback loop between generation and validation processes) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 685.9844881889763428 Td
+(- Develop adaptive synthetic data generation algorithms) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 663.3073228346456744 Td
+(- Implement progressive refinement mechanisms) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 632.1262204724408775 Td
+(Justification: Current approach shows systematic limitations that require ongoing, iterative enhancement of) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 615.1183464566928478 Td
+(synthetic data generation methodology.) Tj
+ET
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 583.9372440944881646 Td
+(Risk Level) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 549.9214960629921052 Td
+(Risk Level: MEDIUM) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 518.7403937007873083 Td
+(Justification:) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 496.0632283464566399 Td
+(- 100% data completeness and structural integrity) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 473.3860629921259147 Td
+(- Zero critical failures detected) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 450.7088976377952463 Td
+(- Potential limitations in data variability and generation methodology) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 428.0317322834645211 Td
+(- High statistical similarity with potential algorithmic constraints) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 405.3545669291337958 Td
+(- Need for methodological refinement in synthetic data generation approach) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 374.1734645669290558 Td
+(The medium risk classification reflects both the dataset's strong foundational qualities and the identified) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 357.1655905511810261 Td
+(methodological limitations that require careful consideration and iterative improvement.) Tj
+ET
+endstream
+endobj
+23 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 24 0 R
+>>
+endobj
+24 0 obj
+<<
+/Length 505
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F2 16 Tf
+18.3999999999999986 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(Report Metadata) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 751.1813385826771992 Td
+(AI Analysis Timestamp: 2026-01-06T18:18:14.734724) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 711.4962992125983874 Td
+(Validation Timestamp: 2026-01-06T18:16:56.160345) Tj
+ET
+BT
+/F1 10 Tf
+11.5 TL
+0 g
+56.6929133858267775 671.8112598425196893 Td
+(Report Generated: 2026-01-06T18:18:34.970Z) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R 7 0 R 9 0 R 11 0 R 13 0 R 15 0 R 17 0 R 19 0 R 21 0 R 23 0 R ]
+/Count 11
+>>
+endobj
+25 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+26 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+27 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+28 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+29 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+30 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+31 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+32 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+33 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+34 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+35 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+36 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+37 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+38 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 25 0 R
+/F2 26 0 R
+/F3 27 0 R
+/F4 28 0 R
+/F5 29 0 R
+/F6 30 0 R
+/F7 31 0 R
+/F8 32 0 R
+/F9 33 0 R
+/F10 34 0 R
+/F11 35 0 R
+/F12 36 0 R
+/F13 37 0 R
+/F14 38 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+39 0 obj
+<<
+/Producer (jsPDF 3.0.1)
+/CreationDate (D:20260106181834-00'00')
+>>
+endobj
+40 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 41
+0000000000 65535 f 
+0000035937 00000 n 
+0000037827 00000 n 
+0000000015 00000 n 
+0000000152 00000 n 
+0000000932 00000 n 
+0000001069 00000 n 
+0000005387 00000 n 
+0000005524 00000 n 
+0000009397 00000 n 
+0000009535 00000 n 
+0000013597 00000 n 
+0000013736 00000 n 
+0000017275 00000 n 
+0000017414 00000 n 
+0000021237 00000 n 
+0000021376 00000 n 
+0000024876 00000 n 
+0000025015 00000 n 
+0000028366 00000 n 
+0000028505 00000 n 
+0000032628 00000 n 
+0000032767 00000 n 
+0000035241 00000 n 
+0000035380 00000 n 
+0000036062 00000 n 
+0000036188 00000 n 
+0000036319 00000 n 
+0000036453 00000 n 
+0000036591 00000 n 
+0000036715 00000 n 
+0000036844 00000 n 
+0000036976 00000 n 
+0000037112 00000 n 
+0000037240 00000 n 
+0000037367 00000 n 
+0000037496 00000 n 
+0000037629 00000 n 
+0000037731 00000 n 
+0000038080 00000 n 
+0000038166 00000 n 
+trailer
+<<
+/Size 41
+/Root 40 0 R
+/Info 39 0 R
+/ID [ <A3129CAE23B8FCF117DFA8C51FA6F037> <A3129CAE23B8FCF117DFA8C51FA6F037> ]
+>>
+startxref
+38270
+%%EOF
